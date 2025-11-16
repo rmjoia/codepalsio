@@ -16,7 +16,7 @@ Foster meaningful mentorship, coaching, and community connections—grounded in 
 - **[Privacy Policy](./PRIVACY.md)** - Data collection, usage, and user rights
 
 ### Product & Planning
-- **[MVP Specification](./specs/001-codepals-mvp/spec.md)** - Complete feature specification for Phase 1-4 (landing page, core platform, community engagement, analytics)
+- **[MVP Specification](./.specify/spec/codepals-mvp.md)** - Complete feature specification for Phase 1-4 (landing page, core platform, community engagement, analytics)
 - **Brand Identity Guide** (coming after spec finalization) - Logo, color palette, typography, Discord strategy, social media assets
 
 ### Development Documentation
@@ -93,7 +93,7 @@ A trusted global developer community where people support people—creating oppo
 ### Phase 4: Transparency & Analytics (Weeks 9-10)
 - Public KPI dashboard & transparency metrics
 
-**See [MVP Spec](./specs/001-codepals-mvp/spec.md) for detailed user stories, requirements, and success criteria.**
+**See [MVP Spec](./.specify/spec/codepals-mvp.md) for detailed user stories, requirements, and success criteria.**
 
 ---
 
@@ -110,7 +110,7 @@ CodePals.io is architected for global accessibility from the outset.
 - 🇪🇸 Spanish (Spain) - `es-ES` (potential)
 - RTL language support (e.g., Arabic, Hebrew)
 
-**See [MVP Spec - Internationalization Requirements](./specs/001-codepals-mvp/spec.md#internationalization-i18n--localization) (FR-1.21-1.36) for architecture details.**
+**See [MVP Spec - Internationalization Requirements](./.specify/spec/codepals-mvp.md#internationalization-i18n--localization) (FR-1.21-1.36) for architecture details.**
 
 ---
 
@@ -165,7 +165,7 @@ CodePals.io is architected for global accessibility from the outset.
 **For First-Time Visitors:**
 1. Start with this README for overview
 2. Read [Constitution](/.specify/memory/constitution.md) for principles & mission
-3. Review [MVP Spec](./specs/001-codepals-mvp/spec.md) for what's being built
+3. Review [MVP Spec](./.specify/spec/codepals-mvp.md) for what's being built
 
 **For Contributors:**
 1. Review [Code of Conduct](./CODE_OF_CONDUCT.md) and [GOVERNANCE](./GOVERNANCE.md)
@@ -175,16 +175,16 @@ CodePals.io is architected for global accessibility from the outset.
 
 **For Designers:**
 1. Review [Brand Identity Guide](/.specify/memory/brand-identity.md) for color, typography, logo direction
-2. Check [MVP Spec - Brand Requirements](./specs/001-codepals-mvp/spec.md#brand-identity--design) (FR-1.6-1.10)
+2. Check [MVP Spec - Brand Requirements](./.specify/spec/codepals-mvp.md#brand-identity--design) (FR-1.6-1.10)
 
 **For Product Managers:**
-1. Read [MVP Spec](./specs/001-codepals-mvp/spec.md) for complete feature breakdown
+1. Read [MVP Spec](./.specify/spec/codepals-mvp.md) for complete feature breakdown
 2. Review [Constitution - Non-Negotiables](/.specify/memory/constitution.md#non-negotiables--technology-stack)
 3. Check [Governance Metrics](/.specify/memory/constitution.md#governance-metrics-constitution-scoped)
 
 **For DevOps/Infrastructure:**
 1. Review [Technology Stack](#-technology-stack) section above
-2. Check [MVP Spec - Infrastructure Requirements](./specs/001-codepals-mvp/spec.md#phase-1-foundation--landing) (FR-1.1-1.39)
+2. Check [MVP Spec - Infrastructure Requirements](./.specify/spec/codepals-mvp.md#phase-1-foundation--landing) (FR-1.1-1.39)
 3. See [Security Policy](./SECURITY.md)
 
 ---
@@ -201,7 +201,7 @@ CodePals.io welcomes contributions aligned with our mission and principles.
 
 **Translation Contributions:**
 - Community translations are welcome!
-- See [MVP Spec - Translation Workflow](./specs/001-codepals-mvp/spec.md) (FR-1.31)
+- See [MVP Spec - Translation Workflow](./.specify/spec/codepals-mvp.md) (FR-1.31)
 - [Contributing guide for translations](https://github.com/rmjoia/codepalsio/wiki) (coming soon)
 
 ---
@@ -215,7 +215,7 @@ CodePals.io welcomes contributions aligned with our mission and principles.
 - Platform costs & sustainability status
 - Code of Conduct enforcement (removals, blocks)
 
-**See [MVP Spec - Phase 4](./specs/001-codepals-mvp/spec.md#phase-4-transparency--analytics) for public dashboard spec.**
+**See [MVP Spec - Phase 4](./.specify/spec/codepals-mvp.md#phase-4-transparency--analytics) for public dashboard spec.**
 
 ### Roadmap & Updates
 - Follow [Governance](./GOVERNANCE.md) for how decisions are made
