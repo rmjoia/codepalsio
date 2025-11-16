@@ -1,9 +1,4 @@
-# GitHub funding configuration (placeholder)
-# Populate active platforms when accounts created.
+# GitHub funding configuration
 # Reference: https://docs.github.com/en/sponsors/getting-started-with-github-sponsors
 
-github: []            # e.g., ["codepalsio"] when sponsor enabled
-open_collective: codepalsio   # Placeholder (create if chosen)
-patreon: codepalsio           # Placeholder
-ko_fi: codepalsio             # Placeholder
-custom: ["https://codepals.io/donate"]
+github: [rmjoia]
