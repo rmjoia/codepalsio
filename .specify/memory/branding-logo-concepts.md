@@ -156,9 +156,104 @@ Works at small sizes and across platforms.
 
 ---
 
+## AI Models & Tools Required
+
+### Image Generation (Required)
+**Option 1: DALL-E 3** (OpenAI)
+- Access: OpenAI API or ChatGPT Plus
+- Cost: $0.04-0.10 per image (varies by size)
+- Strengths: Clean, modern, versatile; excellent at following detailed prompts
+- Recommended: YES — use for all 5 concepts
+
+**Option 2: Midjourney**
+- Access: Discord bot + subscription ($10-96/month)
+- Cost: Per-subscription model
+- Strengths: Artistic control, unique aesthetic, batch generation
+- Recommended: ALTERNATIVE if you have Midjourney access
+
+**Option 3: Adobe Express / Canva**
+- Access: Web-based (free tier available)
+- Cost: Free to $15+/month
+- Strengths: Quick iterations, templates, easy edits
+- Recommended: For rapid prototyping only
+
+### Recommended Approach
+1. Use **DALL-E 3** to generate all 5 concept prompts
+2. Generate 3-4 variations of top 2-3 concepts
+3. Use **Figma** (free tier) or **Adobe XD** to refine selected logo to production SVG
+
+---
+
+## AI Generation Workflow
+
+### Step 1: Generate Base Concepts
+Use DALL-E 3 with each prompt template above. Example full prompt:
+
+```
+A modern, minimalist logo featuring two stylized hands connecting in the center, 
+forming a subtle bridge or infinity symbol. One hand holds a small glowing code bracket 
+or quill pen. Warm gradient from teal to gold. Clean lines, 2-3 colors max. 
+Professional yet approachable. Tech + human connection. 
+Style: geometric, flat design with depth.
+
+Context: This is for CodePals.io, a global developer community platform. 
+The brand represents "code penpals" — developers supporting developers across distance.
+```
+
+### Step 2: Evaluate Outputs
+- Screenshot/download all 5 concept outputs
+- Rate each against Success Criteria (see below)
+- Document your preference notes
+
+### Step 3: Refinement Prompts
+Pick top 2-3 concepts. Request variations:
+- "Generate 3 variations with bolder lines"
+- "Generate with color palette: teal (#00BCD4), gold (#FFB700), coral (#FF7B54)"
+- "Generate in monochrome (black & white) to test clarity"
+
+### Step 4: Production Export
+- Selected concept → Download PNG (transparent background, 2000px+)
+- Convert to SVG using Adobe Illustrator, Figma, or free tool (Vectorize online)
+- Test at sizes: 16px (favicon), 64px (profile), 256px (hero), 1024px (print)
+
+---
+
+## MCP Integration (Optional but Recommended)
+
+If you want to streamline logo generation, consider these MCPs:
+
+### MCP 1: Image Generation MCP
+**Purpose**: Direct image generation from prompts without leaving your development environment
+**Models Supported**: DALL-E, Stable Diffusion, local models
+**Installation**: 
+```bash
+# Example (check MCP registry for latest)
+npm install @modelcontextprotocol/server-image-generation
+```
+**Benefit**: Generate and iterate on logos directly in VS Code or terminal
+
+### MCP 2: Design System MCP
+**Purpose**: Convert generated images to design specs (colors, typography, spacing)
+**Benefit**: Auto-extract color codes, font recommendations from logo
+
+### MCP 3: File Management MCP
+**Purpose**: Organize generated logos, track versions, manage exports
+**Benefit**: Keep branding assets organized with metadata
+
+**Should I install MCPs?** Only if:
+- ✅ You want to generate logos repeatedly without manual ChatGPT/DALL-E access
+- ✅ You want to automate design system extraction
+- ✅ Your development workflow stays in terminal/VS Code
+
+**Skip MCPs if:**
+- ✅ You prefer manual DALL-E/Midjourney exploration (often faster for first-time)
+- ✅ You want human design iteration (not just prompts)
+
+---
+
 ## Next Steps
 
-1. **Generate Concepts**: Use DALL-E, Midjourney, or Adobe Express with prompts above
+1. **Generate Concepts**: Use DALL-E 3 with prompts above (5-10 mins)
 2. **Evaluate Against Vision**: Does each concept convey "code penpals," connection, opportunity?
 3. **Test Versatility**: 
    - Works at small sizes? (favicon, profile pic)
