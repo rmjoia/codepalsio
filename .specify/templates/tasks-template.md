@@ -10,6 +10,8 @@ description: "Task list template for feature implementation"
 
 **Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
 
+**Constitution Compliance**: Each task MUST uphold principles (Transparency, Code Quality, Security, Performance, Privacy, Community). Security/privacy/performance sensitive tasks MUST annotate considerations (e.g., validation added, data minimized, expected latency impact).
+
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
 ## Format: `[ID] [P?] [Story] Description`

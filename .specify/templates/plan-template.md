@@ -31,7 +31,18 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+The following MUST be explicitly confirmed (link to Constitution where relevant):
+
+1. Transparency: No secrets, credentials, or sensitive data introduced (scan plan changes).
+2. Code Quality: Planned modules have clear ownership, testability, and documentation notes.
+3. Security: Input validation, output encoding, authZ/authN impacts enumerated; least privilege maintained.
+4. Performance: Expected resource impact (CPU/memory/latency) noted for non-trivial operations.
+5. Privacy: Data elements listed with justification; no unnecessary collection or retention.
+6. Community & Governance: Contribution workflow unchanged or amendments proposed if process shifts.
+7. Definition of Done Alignment: All required DoD items feasible within scope (tests, docs, review, deployment verification).
+8. Dependency Vetting: New dependencies listed with security/licensing assessment plan.
+9. Quality Gates: Secret scanning, lint/static analysis, and test coverage strategy documented.
+10. Risk Register (if high-risk feature): Security/performance/privacy risks enumerated with mitigations.
 
 ## Project Structure
 

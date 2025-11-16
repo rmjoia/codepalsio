@@ -1,0 +1,18 @@
+# CODEOWNERS for CodePals.io
+# Only @rmjoia is authorized for core governance & policy areas at this stage.
+
+# Governance & Constitution
+.specify/memory/constitution.md @rmjoia
+GOVERNANCE.md @rmjoia
+SECURITY.md @rmjoia
+PRIVACY.md @rmjoia
+CODE_OF_CONDUCT.md @rmjoia
+
+# Issue / Amendment Templates
+.github/ISSUE_TEMPLATE/* @rmjoia
+
+# Funding config
+.github/FUNDING.yml @rmjoia
+
+# Speckit / Spec-Kit related templates
+.specify/templates/* @rmjoia
