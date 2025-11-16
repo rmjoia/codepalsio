@@ -194,10 +194,10 @@ All 5 concept prompts are documented below for reference or future regeneration 
 **Visual Result**: Two stylized dark hands with an orange/gold lightning bolt or energy symbol between them on teal background
 
 **Generated Assets**:
-- Main: [`Codepals01.png`](./assets/Codepals01.png) / [`concept1.jpg`](./assets/concept1.jpg)
-- Alternate: [`CodePals01.png`](./assets/CodePals01.png)
+- Main: [`CodePals01.png`](./branding/assets/CodePals01.png) / [`concept1.jpg`](./branding/assets/concept1.jpg)
+- Alternate: [`CodePals01.png`](./branding/assets/CodePals01.png)
 
-![Concept 1 Generated](./assets/Codepals01.png)
+<img src="./branding/assets/CodePals01.png" alt="Concept 1: Connected Hands & Code" width="300" />
 
 **Strengths**:
 - Clear human connection symbolism (hands = partnership, support)
@@ -220,9 +220,9 @@ All 5 concept prompts are documented below for reference or future regeneration 
 **Visual Result**: Calligraphy pen nib transitioning to code brackets (< >) with minimal styling
 
 **Generated Assets**:
-- Main: [`CodePals02.png`](./assets/CodePals02.png) / [`Concept2.jpg`](./assets/Concept2.jpg)
+- Main: [`CodePals02.png`](./branding/assets/CodePals02.png) / [`Concept2.jpg`](./branding/assets/Concept2.jpg)
 
-![Concept 2 Generated](./assets/CodePals02.png)
+<img src="./branding/assets/CodePals02.png" alt="Concept 2: Pen Meets Code" width="300" />
 
 **Strengths**:
 - Unique and distinctive (doesn't look generic)
@@ -240,10 +240,10 @@ All 5 concept prompts are documented below for reference or future regeneration 
 **Visual Result**: Golden/orange lattice network forming a globe with glowing connection points on deep teal background
 
 **Generated Assets**:
-- Main: [`Codepals03.png`](./assets/Codepals03.png) / [`concept03.jpg`](./assets/concept03.jpg)
-- Alternate: [`03.png`](./assets/03.png)
+- Main: [`Codepals03.png`](./branding/assets/Codepals03.png) / [`concept03.jpg`](./branding/assets/concept03.jpg)
+- Alternate: [`03.png`](./branding/assets/03.png)
 
-![Concept 3 Generated](./assets/Codepals03.png)
+<img src="./branding/assets/Codepals03.png" alt="Concept 3: Globe with Code Lattice" width="300" />
 
 **Strengths**:
 - Perfectly conveys "global developer community"
@@ -261,9 +261,9 @@ All 5 concept prompts are documented below for reference or future regeneration 
 **Visual Result**: Ascending staircase/ladder with connection arcs forming upward progression
 
 **Generated Assets**:
-- Main: [`Codepals04.png`](./assets/Codepals04.png) / [`concept04.jpg`](./assets/concept04.jpg)
+- Main: [`Codepals04.png`](./branding/assets/Codepals04.png) / [`concept04.jpg`](./branding/assets/concept04.jpg)
 
-![Concept 4 Generated](./assets/Codepals04.png)
+<img src="./branding/assets/Codepals04.png" alt="Concept 4: Ascending Stairs" width="300" />
 
 **Strengths**:
 - Emphasizes growth, opportunity, mutual support
@@ -280,9 +280,9 @@ All 5 concept prompts are documented below for reference or future regeneration 
 **Visual Result**: Stylized capital "C" with glowing connection node at opening
 
 **Generated Assets**:
-- Main: [`Codepals05.png`](./assets/Codepals05.png) / [`concept05.jpg`](./assets/concept05.jpg)
+- Main: [`Codepals05.png`](./branding/assets/Codepals05.png) / [`concept05.jpg`](./branding/assets/concept05.jpg)
 
-![Concept 5 Generated](./assets/Codepals05.png)
+<img src="./branding/assets/Codepals05.png" alt="Concept 5: Stylized C" width="300" />
 
 **Strengths**:
 - Simple, iconic, memorable
@@ -298,9 +298,9 @@ All 5 concept prompts are documented below for reference or future regeneration 
 **Output Quality**: Unique Direction  
 
 **Generated Assets**:
-- [`CodePals00.png`](./assets/CodePals00.png)
+- [`CodePals00.png`](./branding/assets/CodePals00.png)
 
-![Concept 00 Generated](./assets/CodePals00.png)
+<img src="./branding/assets/CodePals00.png" alt="Concept 00: Alternative Palette" width="300" />
 
 **Notes**: Different color palette and design direction; archived for reference
 
