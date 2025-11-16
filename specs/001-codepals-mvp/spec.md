@@ -57,7 +57,7 @@
 
 ### Testing Strategy
 
-**Unit Testing**:
+**Unit Testing (Jasmine/Karma)**:
 - All new business logic MUST have unit test coverage
 - Meaningful assertions for normal and edge cases
 - Negative test cases for error paths
