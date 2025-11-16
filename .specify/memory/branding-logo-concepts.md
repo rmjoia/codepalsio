@@ -218,36 +218,30 @@ Pick top 2-3 concepts. Request variations:
 
 ---
 
-## MCP Integration (Optional but Recommended)
+## MCP Integration (Using Hugging Face MCP)
 
-If you want to streamline logo generation, consider these MCPs:
+**You've installed**: Hugging Face MCP Server in VS Code
 
-### MCP 1: Image Generation MCP
-**Purpose**: Direct image generation from prompts without leaving your development environment
-**Models Supported**: DALL-E, Stable Diffusion, local models
-**Installation**: 
-```bash
-# Example (check MCP registry for latest)
-npm install @modelcontextprotocol/server-image-generation
-```
-**Benefit**: Generate and iterate on logos directly in VS Code or terminal
+### How to Use It
 
-### MCP 2: Design System MCP
-**Purpose**: Convert generated images to design specs (colors, typography, spacing)
-**Benefit**: Auto-extract color codes, font recommendations from logo
+1. **Access in VS Code**: Open the MCP interface or use VS Code's MCP tools
+2. **Select a model**: Choose from free Hugging Face image generation models
+   - `stabilityai/stable-diffusion-2`
+   - `runwayml/stable-diffusion-v1-5`
+   - Community models available on Hugging Face
+3. **Input your prompts**: Use the 5 logo concept prompts from this document
+4. **Generate images**: Run the inference (may take 30-60 seconds per image locally)
+5. **Download outputs**: Save generated images for evaluation
 
-### MCP 3: File Management MCP
-**Purpose**: Organize generated logos, track versions, manage exports
-**Benefit**: Keep branding assets organized with metadata
+### Supported Models on Hugging Face (Free)
+- Stable Diffusion v1.5
+- Stable Diffusion v2
+- Other community image generation models
+- No API key required
+- No signin required
 
-**Should I install MCPs?** Only if:
-- ✅ You want to generate logos repeatedly without manual ChatGPT/DALL-E access
-- ✅ You want to automate design system extraction
-- ✅ Your development workflow stays in terminal/VS Code
-
-**Skip MCPs if:**
-- ✅ You prefer manual DALL-E/Midjourney exploration (often faster for first-time)
-- ✅ You want human design iteration (not just prompts)
+### Next: Generate the 5 Logo Concepts
+Use these prompts with your Hugging Face MCP:
 
 ---
 
