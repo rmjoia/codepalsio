@@ -1,0 +1,22 @@
+# Image processing utilities and build scripts
+# These tools are NOT committed to the repository
+# Final optimized assets go in public/ only
+
+# Image processing
+*.psd
+*.xcf
+*.sketch
+
+# Node scripts
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build artifacts
+dist/
+build/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
