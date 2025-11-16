@@ -1,6 +1,6 @@
 # Security Policy
 
-**Project**: CodePals.io | **Constitution Version**: 1.1.0
+**Project**: CodePals.io | **Constitution Version**: 1.2.0
 
 ## Reporting a Vulnerability
 Please email: security@codepals.io (placeholder – update when active). Include:
