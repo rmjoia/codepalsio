@@ -26,7 +26,7 @@ Deferred Items: None (all principles complete and actionable)
 All code, documentation, and architectural decisions MUST be publicly accessible and contribution-friendly. No secrets, credentials, or sensitive data may be committed or exposed (including in history, logs, or config). All contributions MUST follow documented guidelines and adhere to project values of openness, clarity, and traceability. Rationale: Transparency accelerates learning, trust, and community stewardship while reducing hidden risk.
 
 ### 2. Code Quality
-Code MUST be clean, readable, maintainable, and aligned with established style guides. Mandatory peer review is REQUIRED for every change prior to merge. Each feature or change MUST include accompanying documentation (inline where necessary plus higher-level docs when behavior materially changes). Rationale: Consistent quality reduces defects, onboarding friction, and long-term maintenance overhead.
+Code MUST be clean, readable, maintainable, and aligned with established style guides. Mandatory peer review is REQUIRED for every change prior to merge. Each feature or change MUST include accompanying documentation (inline where necessary plus higher-level docs when behavior materially changes). Unit tests (Jasmine/Karma) MUST cover new logic with meaningful assertions; integration and end-to-end tests (Playwright) MUST cover critical user journeys. Rationale: Consistent quality reduces defects, onboarding friction, long-term maintenance overhead, and regression risk.
 
 ### 3. Security (NON-NEGOTIABLE)
 Designs and implementations MUST apply industry best practices (e.g., OWASP). All inputs MUST be validated; all outputs sanitized where applicable. Secrets MUST be stored only in approved secure channels (never source-controlled). Least privilege MUST be enforced across code, infrastructure, and automation. Security considerations MUST be explicitly addressed in design reviews and PR descriptions. Rationale: Proactive security protects users, reputation, and sustainability.
@@ -86,7 +86,9 @@ Architecture MUST support internationalization (i18n) from the outset to enable 
 **Quality Gates**:
 - Secret scanning MUST pass.
 - Static analysis and linting MUST have zero high-severity findings.
-- Tests MUST cover new logic with meaningful assertions; high-risk paths REQUIRE negative cases.
+- Unit tests MUST cover new logic with meaningful assertions; high-risk paths REQUIRE negative cases.
+- Integration/end-to-end tests (Playwright) MUST cover critical user journeys and acceptance scenarios.
+- Tests MUST pass before merge; test coverage reports required for review.
 - Performance-sensitive changes MUST note expected impact and provide measurement plan.
 - Security-sensitive changes MUST enumerate mitigations (validation, encoding, access control).
 - Brand assets MUST pass visual consistency review (color, typography, logo usage).

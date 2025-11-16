@@ -53,6 +53,45 @@
 
 ---
 
+## Development Standards & Testing (NON-NEGOTIABLE)
+
+### Testing Strategy
+
+**Unit Testing (Jasmine/Karma)**:
+- All new business logic MUST have unit test coverage
+- Meaningful assertions for normal and edge cases
+- Negative test cases for error paths
+- Target: ≥80% code coverage for core modules
+
+**Integration Testing**:
+- API endpoints tested with realistic data flows
+- Database interactions validated
+- External service integrations (SendGrid, GitHub OAuth) mocked/stubbed
+
+**End-to-End Testing (Playwright)**:
+- All critical user journeys MUST have E2E tests
+- Examples: user signup → profile creation → approval → discovery → connection; help board → voting → Karma; admin workflows
+- Authentication flows (GitHub OAuth)
+- Multilingual flows (locale switching, translated content)
+- Cross-browser testing: Chrome, Firefox, Safari
+
+**Accessibility Testing**:
+- Automated WCAG 2.1 AA checks (axe, pa11y)
+- Manual screen reader testing for critical paths
+- Keyboard navigation validation
+
+### Technology Stack
+
+**Frontend & Static Site**: Statiq, Azure Static Web Apps  
+**Backend**: Node.js serverless, Cosmos DB  
+**Testing**: Jest/Vitest (unit), Playwright (E2E)  
+**CI/CD**: GitHub Actions  
+**Monitoring**: Azure Application Insights  
+**Email**: SendGrid API  
+**Auth**: GitHub OAuth
+
+---
+
 ## User Scenarios & Testing *(mandatory)*
 
 ---
