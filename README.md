@@ -58,7 +58,7 @@ codepalsio/
 Foster a respectful, values-driven developer growth network where people learn by building relationships, receiving mentorship and coaching, and sharing their development journey—grounded in transparency, security, privacy, and community support. CodePals.io enables context-rich help requests and meaningful connections rather than transactional Q&A.
 
 ### Vision
-Become the trusted global platform for developer growth and equitable skill advancement—distinguishing purposeful collaboration from anonymous troubleshooting, elevating mentorship and coaching, and sustainably enabling scholarships for all.
+A trusted global developer community where people support people—creating opportunities for those who need them most, fostering genuine connections, and using technology and mentorship as means to improve lives and enable better futures.
 
 ### Core Principles (v1.3.0)
 

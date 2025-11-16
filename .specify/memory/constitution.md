@@ -50,7 +50,7 @@ Architecture MUST support internationalization (i18n) from the outset to enable 
 
 **Mission**: Foster a respectful, values‑driven developer growth network where people learn by building relationships, receiving mentorship and coaching, and sharing their development journey—grounded in transparency, security, privacy, and community support. CodePals.io enables context‑rich help requests (clearly marked as work, school, or self‑development) and meaningful connections rather than transactional Q&A.
 
-**Vision**: Become the trusted global platform for developer growth and equitable skill advancement—distinguishing purposeful collaboration from anonymous troubleshooting, elevating mentorship and coaching, ensuring every help request carries its intent, and sustainably enabling scholarships that expand access to formal education for those who lack it.
+**Vision**: A trusted global developer community where people support people—creating opportunities for those who need them most, fostering genuine connections, and using technology and mentorship as means to improve lives and enable better futures.
 
 ## Non-Negotiables & Technology Stack
 
