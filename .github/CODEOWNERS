@@ -1,5 +1,8 @@
 # CODEOWNERS for CodePals.io
-# Only @rmjoia is authorized for core governance & policy areas at this stage.
+# @rmjoia must approve all PRs unless they are the creator
+
+# Default owner for everything in the repo
+* @rmjoia
 
 # Governance & Constitution
 .specify/memory/constitution.md @rmjoia
@@ -16,3 +19,7 @@ CODE_OF_CONDUCT.md @rmjoia
 
 # Speckit / Spec-Kit related templates
 .specify/templates/* @rmjoia
+
+# Infrastructure and Deployment
+/infra/ @rmjoia
+/.github/workflows/ @rmjoia

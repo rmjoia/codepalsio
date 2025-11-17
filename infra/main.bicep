@@ -1,12 +1,13 @@
 param location string = 'eastus'
 param environment string = 'dev'
 param githubRepo string = 'rmjoia/codepalsio'
+param currentUserObjectId string = ''
 
 var project = 'codepals'
-var resourceGroupName = '${project}-${environment}-rg'
 var staticWebAppName = '${project}-${environment}'
 var keyVaultName = '${project}-${environment}-kv'
 var managedIdentityName = '${project}-${environment}-mi'
+var domain = environment == 'dev' ? 'dev.codepals.io' : 'codepals.io'
 var tags = {
   project: project
   environment: environment
@@ -42,10 +43,25 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
           ]
         }
       }
+      {
+        tenantId: subscription().tenantId
+        objectId: currentUserObjectId
+        permissions: {
+          secrets: [
+            'backup'
+            'delete'
+            'get'
+            'list'
+            'purge'
+            'recover'
+            'restore'
+            'set'
+          ]
+        }
+      }
     ]
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
-    enablePurgeProtection: false
     publicNetworkAccess: 'Enabled'
   }
 }
@@ -75,3 +91,4 @@ output staticWebAppId string = staticWebApp.id
 output keyVaultUri string = keyVault.properties.vaultUri
 output managedIdentityClientId string = managedIdentity.properties.clientId
 output managedIdentityPrincipalId string = managedIdentity.properties.principalId
+output domain string = domain
