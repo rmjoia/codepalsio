@@ -1,7 +1,0 @@
-# Image processing utilities and build scripts - NOT committed
-# Place your image generation tools here (generate-assets.js, etc)
-# Only commit final optimized assets to public/ root
-
-# All files in this directory are ignored
-*
-!.gitignore
