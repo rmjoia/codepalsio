@@ -1,0 +1,50 @@
+---
+// Header/Navigation component
+---
+
+<header class="sticky top-0 z-50 w-full transition-all duration-300">
+	<nav class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+		<!-- Logo -->
+		<div class="flex items-center gap-2">
+			<img src="/codepals00.jpg" alt="CodePals Logo" class="w-10 h-10 rounded-lg" />
+			<span class="text-xl font-bold text-slate-900">CodePals</span>
+		</div>
+
+		<!-- Navigation Links -->
+		<div class="hidden md:flex items-center gap-8">
+			<a href="#features" class="text-slate-600 hover:text-primary-500 transition-colors"
+				>Features</a
+			>
+			<a href="#how-it-works" class="text-slate-600 hover:text-primary-500 transition-colors"
+				>How It Works</a
+			>
+			<a href="#mission" class="text-slate-600 hover:text-primary-500 transition-colors">Mission</a>
+		</div>
+		<!-- CTA Button -->
+		<div class="flex items-center gap-4">
+			<button
+				disabled
+				class="btn-primary opacity-50 cursor-not-allowed relative group"
+				title="Coming Soon"
+			>
+				Sign In with GitHub
+				<span
+					class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-3 py-1 bg-slate-900 text-white text-sm rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none"
+				>
+					Coming Soon
+				</span>
+			</button>
+		</div>
+
+		<!-- Mobile Menu Button -->
+		<button class="md:hidden p-2" aria-label="Toggle menu">
+			<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="2"
+					d="M4 6h16M4 12h16M4 18h16"></path>
+			</svg>
+		</button>
+	</nav>
+</header>
