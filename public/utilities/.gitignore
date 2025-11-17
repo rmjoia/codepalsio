@@ -1,22 +1,7 @@
-# Image processing utilities and build scripts
-# These tools are NOT committed to the repository
-# Final optimized assets go in public/ only
+# Image processing utilities and build scripts - NOT committed
+# Place your image generation tools here (generate-assets.js, etc)
+# Only commit final optimized assets to public/ root
 
-# Image processing
-*.psd
-*.xcf
-*.sketch
-
-# Node scripts
-node_modules/
-package-lock.json
-yarn.lock
-
-# Build artifacts
-dist/
-build/
-*.log
-
-# OS files
-.DS_Store
-Thumbs.db
+# All files in this directory are ignored
+*
+!.gitignore

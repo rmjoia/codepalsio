@@ -60,15 +60,28 @@
 				<h4 class="text-white font-semibold mb-4">Legal</h4>
 				<ul class="space-y-2 text-sm">
 					<li>
-						<a href="/privacy" class="hover:text-primary-400 transition-colors">Privacy Policy</a>
-					</li>
-					<li>
-						<a href="/terms" class="hover:text-primary-400 transition-colors">Terms of Service</a>
-					</li>
-					<li>
-						<a href="/code-of-conduct" class="hover:text-primary-400 transition-colors"
-							>Code of Conduct</a
+						<button
+							class="hover:text-primary-400 transition-colors text-left"
+							onclick="toggleModal('privacy-modal')"
 						>
+							Privacy Policy
+						</button>
+					</li>
+					<li>
+						<button
+							class="hover:text-primary-400 transition-colors text-left"
+							onclick="toggleModal('terms-modal')"
+						>
+							Terms of Service
+						</button>
+					</li>
+					<li>
+						<button
+							class="hover:text-primary-400 transition-colors text-left"
+							onclick="toggleModal('coc-modal')"
+						>
+							Code of Conduct
+						</button>
 					</li>
 				</ul>
 			</div>
