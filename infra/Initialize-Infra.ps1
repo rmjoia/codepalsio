@@ -88,12 +88,15 @@ function Initialize-Infra {
     Write-Host "→ Deploying infrastructure via Bicep..."
     
     # Resolve bicep file path - works when imported as module or called directly
-    $BicepFile = if ($MyInvocation.MyCommand.Path) {
-        Join-Path (Split-Path $MyInvocation.MyCommand.Path) "main.bicep"
+    $ScriptDir = if ($PSScriptRoot) {
+        $PSScriptRoot
+    } elseif ($MyInvocation.MyCommand.Path) {
+        Split-Path $MyInvocation.MyCommand.Path
     } else {
-        Join-Path (Get-Location) "main.bicep"
+        Get-Location
     }
     
+    $BicepFile = Join-Path $ScriptDir "main.bicep"
     $BicepFile = Resolve-Path $BicepFile -ErrorAction Stop
 
     # Get current user's object ID for Key Vault access policy

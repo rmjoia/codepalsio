@@ -85,8 +85,8 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {
   }
 }
 
-// Custom domain configuration
-resource customDomain 'Microsoft.Web/staticSites/customDomains@2023-01-01' = {
+// Custom domain configuration (only for dev - prod requires manual TXT validation)
+resource customDomain 'Microsoft.Web/staticSites/customDomains@2023-01-01' = if (environment == 'dev') {
   parent: staticWebApp
   name: domain
   properties: {}
