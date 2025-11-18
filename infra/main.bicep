@@ -85,6 +85,13 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {
   }
 }
 
+// Custom domain configuration
+resource customDomain 'Microsoft.Web/staticSites/customDomains@2023-01-01' = {
+  parent: staticWebApp
+  name: domain
+  properties: {}
+}
+
 // Outputs
 output staticWebAppDefaultHostname string = staticWebApp.properties.defaultHostname
 output staticWebAppId string = staticWebApp.id
