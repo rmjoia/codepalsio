@@ -157,7 +157,7 @@ function Initialize-Infra {
 
     $federatedCredentialParams = @{
         ResourceGroupName = $ResourceGroupName
-        UserAssignedIdentityName = $ManagedIdentityName
+        IdentityName = $ManagedIdentityName
         Name = $FederatedCredentialName
         Issuer = "https://token.actions.githubusercontent.com"
         Subject = "repo:$($GitHubRepo):ref:refs/heads/main"
@@ -169,6 +169,21 @@ function Initialize-Infra {
     $dnsScript = Join-Path (Split-Path $BicepFile) "Initialize-DNS.ps1"
     . $dnsScript
     Initialize-DNS -Environment $Environment -StaticWebAppDomain $SWAUrl -SubscriptionId $SubscriptionId -ErrorAction SilentlyContinue
+
+    # 8. Validate custom domain configuration
+    Write-Host "→ Validating custom domain setup..."
+    Write-Host "   Waiting for DNS propagation (this may take a few minutes)..."
+    Start-Sleep -Seconds 30
+    
+    $customDomains = Get-AzStaticWebAppCustomDomain -ResourceGroupName $ResourceGroupName -Name $StaticWebAppName
+    $domainConfigured = $customDomains | Where-Object { $_.Name -eq $Domain }
+    
+    if ($domainConfigured) {
+        Write-Host "   ✓ Custom domain configured: $Domain" -ForegroundColor Green
+    } else {
+        Write-Host "   ⚠ Custom domain may need additional time to validate" -ForegroundColor Yellow
+        Write-Host "   Check Azure Portal if domain doesn't appear ready within 10 minutes"
+    }
 
     Write-Host "`n✅ Infrastructure initialized!" -ForegroundColor Green
 
