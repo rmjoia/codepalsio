@@ -1,0 +1,182 @@
+---
+import '../styles/global.css';
+import TermsModal from '../components/TermsModal.astro';
+import PrivacyModal from '../components/PrivacyModal.astro';
+import CodeOfConductModal from '../components/CodeOfConductModal.astro';
+
+const user = Astro.url.searchParams.get('user') || 'there';
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Welcome to CodePals - Let's Get Started</title>
+		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+	</head>
+	<body class="bg-gradient-to-br from-primary-50 to-accent-50 min-h-screen flex items-center justify-center p-4">
+		<div class="max-w-3xl mx-auto">
+			<!-- Welcome Card -->
+			<div class="bg-white rounded-2xl shadow-2xl p-8 md:p-12">
+				<!-- Header -->
+				<div class="text-center mb-8">
+					<div class="text-6xl mb-4">🎉</div>
+					<h1 class="text-4xl md:text-5xl font-bold text-slate-900 mb-3">
+						Welcome to CodePals, @{user}!
+					</h1>
+					<p class="text-xl text-slate-600">
+						We're thrilled to have a new CodePal join our community!
+					</p>
+				</div>
+
+				<!-- Terms & Agreements -->
+				<div class="bg-slate-50 border-2 border-slate-200 rounded-xl p-6 mb-8">
+					<h2 class="text-2xl font-semibold text-slate-900 mb-4">Before you start...</h2>
+					<p class="text-slate-700 mb-4">
+						To create a safe and welcoming community, please review and accept our community guidelines:
+					</p>
+					
+					<div class="space-y-3 mb-6">
+						<label class="flex items-start gap-3 cursor-pointer group">
+							<input 
+								type="checkbox" 
+								id="accept-terms" 
+								class="mt-1 w-5 h-5 text-primary-500 rounded focus:ring-2 focus:ring-primary-500"
+								required
+							/>
+							<span class="text-slate-700 group-hover:text-slate-900">
+								I have read and agree to the 
+								<button 
+									onclick="toggleModal('terms-modal')"
+									class="text-primary-500 hover:text-primary-600 font-semibold underline"
+								>
+									Terms of Service
+								</button>
+							</span>
+						</label>
+
+						<label class="flex items-start gap-3 cursor-pointer group">
+							<input 
+								type="checkbox" 
+								id="accept-privacy" 
+								class="mt-1 w-5 h-5 text-primary-500 rounded focus:ring-2 focus:ring-primary-500"
+								required
+							/>
+							<span class="text-slate-700 group-hover:text-slate-900">
+								I have read and agree to the 
+								<button 
+									onclick="toggleModal('privacy-modal')"
+									class="text-primary-500 hover:text-primary-600 font-semibold underline"
+								>
+									Privacy Policy
+								</button>
+							</span>
+						</label>
+
+						<label class="flex items-start gap-3 cursor-pointer group">
+							<input 
+								type="checkbox" 
+								id="accept-coc" 
+								class="mt-1 w-5 h-5 text-primary-500 rounded focus:ring-2 focus:ring-primary-500"
+								required
+							/>
+							<span class="text-slate-700 group-hover:text-slate-900">
+								I agree to follow the 
+								<button 
+									onclick="toggleModal('coc-modal')"
+									class="text-primary-500 hover:text-primary-600 font-semibold underline"
+								>
+									Code of Conduct
+								</button>
+							</span>
+						</label>
+					</div>
+
+					<button
+						id="continue-btn"
+						disabled
+						class="w-full btn-primary opacity-50 cursor-not-allowed transition-all"
+						onclick="acceptTerms()"
+					>
+						Continue to Profile Setup
+					</button>
+				</div>
+
+				<!-- What's Next -->
+				<div class="border-t border-slate-200 pt-6">
+					<h3 class="text-lg font-semibold text-slate-900 mb-3">What happens next?</h3>
+					<div class="grid md:grid-cols-3 gap-4 text-sm">
+						<div class="text-center">
+							<div class="text-3xl mb-2">👤</div>
+							<p class="font-semibold text-slate-900">Create Your Profile</p>
+							<p class="text-slate-600">Tell us about yourself</p>
+						</div>
+						<div class="text-center">
+							<div class="text-3xl mb-2">🔍</div>
+							<p class="font-semibold text-slate-900">Find CodePals</p>
+							<p class="text-slate-600">Connect with developers</p>
+						</div>
+						<div class="text-center">
+							<div class="text-3xl mb-2">🚀</div>
+							<p class="font-semibold text-slate-900">Start Collaborating</p>
+							<p class="text-slate-600">Grow together</p>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Include modals from components (we'll need to import these) -->
+		<script is:inline>
+			// Modal toggle function
+			function toggleModal(modalId) {
+				const modal = document.getElementById(modalId);
+				if (modal) {
+					modal.classList.toggle('hidden');
+				}
+			}
+
+			// Check if all checkboxes are checked
+			function updateContinueButton() {
+				const terms = document.getElementById('accept-terms');
+				const privacy = document.getElementById('accept-privacy');
+				const coc = document.getElementById('accept-coc');
+				const continueBtn = document.getElementById('continue-btn');
+
+				if (terms.checked && privacy.checked && coc.checked) {
+					continueBtn.disabled = false;
+					continueBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+					continueBtn.classList.add('hover:bg-primary-600');
+				} else {
+					continueBtn.disabled = true;
+					continueBtn.classList.add('opacity-50', 'cursor-not-allowed');
+					continueBtn.classList.remove('hover:bg-primary-600');
+				}
+			}
+
+			// Accept terms and continue
+			async function acceptTerms() {
+				// TODO: Call API to save terms acceptance with timestamps
+				// For now, redirect to profile setup
+				window.location.href = '/profile/setup';
+			}
+
+			// Add event listeners
+			document.addEventListener('DOMContentLoaded', () => {
+				const checkboxes = ['accept-terms', 'accept-privacy', 'accept-coc'];
+				checkboxes.forEach(id => {
+					const checkbox = document.getElementById(id);
+					if (checkbox) {
+						checkbox.addEventListener('change', updateContinueButton);
+					}
+				});
+			});
+		</script>
+
+		<!-- Modals -->
+		<TermsModal />
+		<PrivacyModal />
+		<CodeOfConductModal />
+	</body>
+</html>
