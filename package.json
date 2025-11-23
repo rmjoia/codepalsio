@@ -32,6 +32,7 @@
   "devDependencies": {
     "@astrojs/node": "^9.5.1",
     "@astrojs/tailwind": "^6.0.2",
+    "@azure/static-web-apps-cli": "^2.0.7",
     "@eslint/js": "^9.39.1",
     "@testing-library/dom": "^10.4.1",
     "@types/jsonwebtoken": "^9.0.10",
