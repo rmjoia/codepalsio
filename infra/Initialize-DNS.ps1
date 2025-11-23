@@ -66,11 +66,29 @@ function Initialize-DNS {
         $dnsZone = Get-AzDnsZone -ResourceGroupName $PlatformResourceGroup -Name $DnsZoneName -ErrorAction Stop
         Write-Host "   DNS zone found: $($dnsZone.Name)"
 
-        # Create or update CNAME record
-        Write-Host "→ Creating CNAME record @ → $StaticWebAppDomain"
-        $cname = New-AzDnsRecordConfig -Cname $StaticWebAppDomain
-        New-AzDnsRecordSet -ResourceGroupName $PlatformResourceGroup -ZoneName $DnsZoneName `
-            -Name '@' -RecordType CNAME -Ttl 3600 -DnsRecords $cname -Overwrite | Out-Null
+        # Check if CNAME record already exists
+        $existingRecord = Get-AzDnsRecordSet -ResourceGroupName $PlatformResourceGroup -ZoneName $DnsZoneName `
+            -Name '@' -RecordType CNAME -ErrorAction SilentlyContinue
+
+        if ($existingRecord) {
+            $existingCname = $existingRecord.Records[0].Cname
+            if ($existingCname -eq $StaticWebAppDomain) {
+                Write-Host "→ CNAME record @ already exists with correct value: $StaticWebAppDomain" -ForegroundColor Green
+                Write-Host "   Skipping DNS update (already configured)"
+            } else {
+                Write-Host "→ Updating CNAME record @ from $existingCname → $StaticWebAppDomain"
+                $cname = New-AzDnsRecordConfig -Cname $StaticWebAppDomain
+                Set-AzDnsRecordSet -RecordSet $existingRecord -Overwrite `
+                    -DnsRecords $cname | Out-Null
+                Write-Host "   ✓ CNAME record updated" -ForegroundColor Green
+            }
+        } else {
+            Write-Host "→ Creating CNAME record @ → $StaticWebAppDomain"
+            $cname = New-AzDnsRecordConfig -Cname $StaticWebAppDomain
+            New-AzDnsRecordSet -ResourceGroupName $PlatformResourceGroup -ZoneName $DnsZoneName `
+                -Name '@' -RecordType CNAME -Ttl 3600 -DnsRecords $cname | Out-Null
+            Write-Host "   ✓ CNAME record created" -ForegroundColor Green
+        }
 
         Write-Host "`n✅ DNS configured successfully!"
         Write-Host "`n📋 DNS Configuration:"
@@ -81,6 +99,6 @@ function Initialize-DNS {
     }
     catch {
         Write-Host "❌ DNS configuration failed: $_" -ForegroundColor Red
-        exit 1
+        Write-Host "   Error: $($_.Exception.Message)" -ForegroundColor Red
     }
 }

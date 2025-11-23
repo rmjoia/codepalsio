@@ -46,7 +46,7 @@ function Initialize-Infra {
 
     # Load required modules
     Write-Host "→ Loading required Azure modules..."
-    $requiredModules = @('Az.Resources', 'Az.KeyVault', 'Az.ManagedServiceIdentity', 'Az.Websites', 'Az.Dns')
+    $requiredModules = @('Az.Resources', 'Az.KeyVault', 'Az.ManagedServiceIdentity', 'Az.Websites', 'Az.Dns', 'Az.CosmosDB')
     foreach ($module in $requiredModules) {
         if (-not (Get-Module -Name $module -ListAvailable)) {
             Write-Host "   Installing $module..." -ForegroundColor Yellow
@@ -61,23 +61,28 @@ function Initialize-Infra {
     $StaticWebAppName = "$Project-$Environment"
     $KeyVaultName = "$Project-$Environment-kv"
     $ManagedIdentityName = "$Project-$Environment-mi"
+    $CosmosDbAccountName = "$Project-$Environment-cosmos"
 
     Write-Host "🚀 Initializing CodePals infrastructure" -ForegroundColor Cyan
     Write-Host "Environment: $Environment | Location: $Location" -ForegroundColor Green
 
-    # 1. Set subscription
-    Write-Host "`n→ Setting subscription..."
+    # 1. Check Azure authentication and set subscription
+    Write-Host "`n→ Checking Azure authentication..."
+    $context = Get-AzContext
+    if (-not $context) {
+        Write-Host "   Not authenticated to Azure. Please authenticate first:" -ForegroundColor Yellow
+        Write-Host "   Connect-AzAccount -Subscription '<subscription-name-or-id>'" -ForegroundColor Cyan
+        return
+    }
+    
+    Write-Host "→ Setting subscription..."
     if ($SubscriptionId) {
         Set-AzContext -SubscriptionId $SubscriptionId | Out-Null
         Write-Host "   Using subscription: $SubscriptionId"
     } else {
-        $context = Get-AzContext
-        if (-not $context) {
-            Write-Host "   No Azure context. Run: Connect-AzAccount" -ForegroundColor Red
-            return
-        }
         $SubscriptionId = $context.Subscription.Id
-        Write-Host "   Using current subscription: $SubscriptionId"
+        $SubscriptionName = $context.Subscription.Name
+        Write-Host "   Using current subscription: $SubscriptionName ($SubscriptionId)"
     }
 
     # 2. Create resource group
@@ -114,6 +119,9 @@ function Initialize-Infra {
     $MIClientId = $Deployment.Outputs['managedIdentityClientId'].Value
     $MIPrincipalId = $Deployment.Outputs['managedIdentityPrincipalId'].Value
     $Domain = $Deployment.Outputs['domain'].Value
+    $CosmosDbEndpoint = $Deployment.Outputs['cosmosDbEndpoint'].Value
+    $CosmosDbAccountName = $Deployment.Outputs['cosmosDbAccountName'].Value
+    $CosmosDbDatabaseName = $Deployment.Outputs['cosmosDbDatabaseName'].Value
 
     # Wait for Key Vault to be accessible
     Write-Host "→ Waiting for Key Vault access..."
@@ -158,14 +166,43 @@ function Initialize-Infra {
     $GitHubRepo = "rmjoia/codepalsio"
     $FederatedCredentialName = "github-actions-$Environment"
 
-    $federatedCredentialParams = @{
-        ResourceGroupName = $ResourceGroupName
-        IdentityName = $ManagedIdentityName
-        Name = $FederatedCredentialName
-        Issuer = "https://token.actions.githubusercontent.com"
-        Subject = "repo:$($GitHubRepo):ref:refs/heads/main"
+    # Check if federated credential already exists
+    $existingFedCred = Get-AzFederatedIdentityCredential -ResourceGroupName $ResourceGroupName `
+        -IdentityName $ManagedIdentityName -Name $FederatedCredentialName -ErrorAction SilentlyContinue
+
+    if ($existingFedCred) {
+        Write-Host "   Federated credential '$FederatedCredentialName' already exists" -ForegroundColor Green
+        
+        # Check if configuration matches
+        $expectedSubject = "repo:$($GitHubRepo):ref:refs/heads/main"
+        if ($existingFedCred.Subject -eq $expectedSubject) {
+            Write-Host "   Configuration is correct, skipping update"
+        } else {
+            Write-Host "   Updating federated credential configuration..."
+            Remove-AzFederatedIdentityCredential -ResourceGroupName $ResourceGroupName `
+                -IdentityName $ManagedIdentityName -Name $FederatedCredentialName -Force | Out-Null
+            
+            $federatedCredentialParams = @{
+                ResourceGroupName = $ResourceGroupName
+                IdentityName = $ManagedIdentityName
+                Name = $FederatedCredentialName
+                Issuer = "https://token.actions.githubusercontent.com"
+                Subject = $expectedSubject
+            }
+            New-AzFederatedIdentityCredential @federatedCredentialParams -Verbose:$false | Out-Null
+            Write-Host "   ✓ Federated credential updated" -ForegroundColor Green
+        }
+    } else {
+        $federatedCredentialParams = @{
+            ResourceGroupName = $ResourceGroupName
+            IdentityName = $ManagedIdentityName
+            Name = $FederatedCredentialName
+            Issuer = "https://token.actions.githubusercontent.com"
+            Subject = "repo:$($GitHubRepo):ref:refs/heads/main"
+        }
+        New-AzFederatedIdentityCredential @federatedCredentialParams -Verbose:$false | Out-Null
+        Write-Host "   ✓ Federated credential created" -ForegroundColor Green
     }
-    New-AzFederatedIdentityCredential @federatedCredentialParams -Verbose:$false | Out-Null
 
     # 7. Configure DNS records
     Write-Host "`n→ Configuring DNS records..."
@@ -197,10 +234,16 @@ function Initialize-Infra {
     Write-Host "   Custom Domain: https://$Domain (CNAME configured)"
     Write-Host "   Managed Identity: $ManagedIdentityName"
     Write-Host "   Key Vault: $KeyVaultName"
+    Write-Host "   Cosmos DB Account: $CosmosDbAccountName"
+    Write-Host "   Cosmos DB Database: $CosmosDbDatabaseName"
+    Write-Host "   Cosmos DB Endpoint: $CosmosDbEndpoint"
 
     Write-Host "`n🔑 Secrets stored in Key Vault ($KeyVaultName):"
     Write-Host "   - MANAGED-IDENTITY-CLIENT-ID"
     Write-Host "   - AZURE-STATIC-WEB-APPS-TOKEN"
+    Write-Host "   - COSMOS-DB-CONNECTION-STRING"
+    Write-Host "   - COSMOS-DB-ENDPOINT"
+    Write-Host "   - COSMOS-DB-DATABASE-NAME"
 
     Write-Host "`n🔐 GitHub Actions Authentication:"
     Write-Host "   - Federated Identity: github-actions-$Environment"
@@ -210,6 +253,13 @@ function Initialize-Infra {
     Write-Host "`n🌐 DNS Configuration:"
     Write-Host "   - Domain: $Domain"
     Write-Host "   - CNAME: $Domain → $SWAUrl"
+    
+    Write-Host "`n🔗 Static Web App Environment Variables:"
+    Write-Host "   - COSMOS_DB_ENDPOINT: $CosmosDbEndpoint"
+    Write-Host "   - COSMOS_DB_DATABASE_NAME: $CosmosDbDatabaseName"
+    Write-Host "   - KEY_VAULT_URI: (configured)"
+    Write-Host "   - MANAGED_IDENTITY_CLIENT_ID: (configured)"
+    Write-Host "   - ENVIRONMENT: $Environment"
 
     Write-Host "`n📝 GitHub Secrets Setup:"
     Write-Host "   Name: AZURE_STATIC_WEB_APPS_TOKEN"
