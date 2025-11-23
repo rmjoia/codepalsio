@@ -28,6 +28,7 @@ function Initialize-Infra {
     Azure region. Default: northeurope
     #>
     
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
     param(
         [Parameter(Mandatory = $true)]
         [ValidateSet('dev', 'prod')]
@@ -87,7 +88,9 @@ function Initialize-Infra {
 
     # 2. Create resource group
     Write-Host "→ Creating resource group: $ResourceGroupName"
-    New-AzResourceGroup -Name $ResourceGroupName -Location $Location -Tag @{ project=$Project; environment=$Environment } -Force | Out-Null
+    if ($PSCmdlet.ShouldProcess($ResourceGroupName, "Create resource group")) {
+        New-AzResourceGroup -Name $ResourceGroupName -Location $Location -Tag @{ project=$Project; environment=$Environment } -Force | Out-Null
+    }
 
     # 3. Deploy Bicep template
     Write-Host "→ Deploying infrastructure via Bicep..."
@@ -107,6 +110,11 @@ function Initialize-Infra {
     # Get current user's object ID for Key Vault access policy
     $currentUser = Get-AzADUser -UserPrincipalName (Get-AzContext).Account.Id -ErrorAction SilentlyContinue
     $currentUserObjectId = if ($currentUser) { $currentUser.Id } else { '' }
+
+    if (-not $PSCmdlet.ShouldProcess($ResourceGroupName, "Deploy Bicep template (Static Web App, Key Vault, Cosmos DB)")) {
+        Write-Host "   [WhatIf] Would deploy: Static Web App, Key Vault, Managed Identity, Cosmos DB" -ForegroundColor Yellow
+        return
+    }
 
     $Deployment = New-AzResourceGroupDeployment `
         -ResourceGroupName $ResourceGroupName `
@@ -144,8 +152,10 @@ function Initialize-Infra {
 
     # 4. Store managed identity credentials in Key Vault
     Write-Host "→ Storing managed identity credentials in Key Vault"
-    $kvSecret = ConvertTo-SecureString -String $MIClientId -AsPlainText -Force
-    Set-AzKeyVaultSecret -VaultName $KeyVaultName -Name "MANAGED-IDENTITY-CLIENT-ID" -SecretValue $kvSecret -Verbose:$false | Out-Null
+    if ($PSCmdlet.ShouldProcess($KeyVaultName, "Store managed identity credentials")) {
+        $kvSecret = ConvertTo-SecureString -String $MIClientId -AsPlainText -Force
+        Set-AzKeyVaultSecret -VaultName $KeyVaultName -Name "MANAGED-IDENTITY-CLIENT-ID" -SecretValue $kvSecret -Verbose:$false | Out-Null
+    }
 
     # 5. Get Static Web App and deployment token
     Write-Host "→ Getting deployment token..."
@@ -156,7 +166,7 @@ function Initialize-Infra {
     $Token = $secrets.properties.apiKey
 
     # Store token in Key Vault
-    if ($Token) {
+    if ($Token -and $PSCmdlet.ShouldProcess($KeyVaultName, "Store Static Web App deployment token")) {
         $tokenSecret = ConvertTo-SecureString -String $Token -AsPlainText -Force
         Set-AzKeyVaultSecret -VaultName $KeyVaultName -Name "AZURE-STATIC-WEB-APPS-TOKEN" -SecretValue $tokenSecret -Verbose:$false | Out-Null
     }
@@ -178,30 +188,34 @@ function Initialize-Infra {
         if ($existingFedCred.Subject -eq $expectedSubject) {
             Write-Host "   Configuration is correct, skipping update"
         } else {
-            Write-Host "   Updating federated credential configuration..."
-            Remove-AzFederatedIdentityCredential -ResourceGroupName $ResourceGroupName `
-                -IdentityName $ManagedIdentityName -Name $FederatedCredentialName -Force | Out-Null
-            
+            if ($PSCmdlet.ShouldProcess($FederatedCredentialName, "Update federated credential")) {
+                Write-Host "   Updating federated credential configuration..."
+                Remove-AzFederatedIdentityCredential -ResourceGroupName $ResourceGroupName `
+                    -IdentityName $ManagedIdentityName -Name $FederatedCredentialName -Force | Out-Null
+                
+                $federatedCredentialParams = @{
+                    ResourceGroupName = $ResourceGroupName
+                    IdentityName = $ManagedIdentityName
+                    Name = $FederatedCredentialName
+                    Issuer = "https://token.actions.githubusercontent.com"
+                    Subject = $expectedSubject
+                }
+                New-AzFederatedIdentityCredential @federatedCredentialParams -Verbose:$false | Out-Null
+                Write-Host "   ✓ Federated credential updated" -ForegroundColor Green
+            }
+        }
+    } else {
+        if ($PSCmdlet.ShouldProcess($ManagedIdentityName, "Create federated credential for GitHub Actions")) {
             $federatedCredentialParams = @{
                 ResourceGroupName = $ResourceGroupName
                 IdentityName = $ManagedIdentityName
                 Name = $FederatedCredentialName
                 Issuer = "https://token.actions.githubusercontent.com"
-                Subject = $expectedSubject
+                Subject = "repo:$($GitHubRepo):ref:refs/heads/main"
             }
             New-AzFederatedIdentityCredential @federatedCredentialParams -Verbose:$false | Out-Null
-            Write-Host "   ✓ Federated credential updated" -ForegroundColor Green
+            Write-Host "   ✓ Federated credential created" -ForegroundColor Green
         }
-    } else {
-        $federatedCredentialParams = @{
-            ResourceGroupName = $ResourceGroupName
-            IdentityName = $ManagedIdentityName
-            Name = $FederatedCredentialName
-            Issuer = "https://token.actions.githubusercontent.com"
-            Subject = "repo:$($GitHubRepo):ref:refs/heads/main"
-        }
-        New-AzFederatedIdentityCredential @federatedCredentialParams -Verbose:$false | Out-Null
-        Write-Host "   ✓ Federated credential created" -ForegroundColor Green
     }
 
     # 7. Configure DNS records

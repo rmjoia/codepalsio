@@ -31,6 +31,7 @@ function Initialize-DNS {
     Azure subscription ID (GUID). If not provided, uses current logged-in subscription.
     #>
     
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
     param(
         [Parameter(Mandatory = $true)]
         [ValidateSet('dev', 'prod')]
@@ -76,18 +77,22 @@ function Initialize-DNS {
                 Write-Host "→ CNAME record @ already exists with correct value: $StaticWebAppDomain" -ForegroundColor Green
                 Write-Host "   Skipping DNS update (already configured)"
             } else {
-                Write-Host "→ Updating CNAME record @ from $existingCname → $StaticWebAppDomain"
-                $cname = New-AzDnsRecordConfig -Cname $StaticWebAppDomain
-                Set-AzDnsRecordSet -RecordSet $existingRecord -Overwrite `
-                    -DnsRecords $cname | Out-Null
-                Write-Host "   ✓ CNAME record updated" -ForegroundColor Green
+                if ($PSCmdlet.ShouldProcess("$DnsZoneName (@)", "Update CNAME from $existingCname to $StaticWebAppDomain")) {
+                    Write-Host "→ Updating CNAME record @ from $existingCname → $StaticWebAppDomain"
+                    $cname = New-AzDnsRecordConfig -Cname $StaticWebAppDomain
+                    Set-AzDnsRecordSet -RecordSet $existingRecord -Overwrite `
+                        -DnsRecords $cname | Out-Null
+                    Write-Host "   ✓ CNAME record updated" -ForegroundColor Green
+                }
             }
         } else {
-            Write-Host "→ Creating CNAME record @ → $StaticWebAppDomain"
-            $cname = New-AzDnsRecordConfig -Cname $StaticWebAppDomain
-            New-AzDnsRecordSet -ResourceGroupName $PlatformResourceGroup -ZoneName $DnsZoneName `
-                -Name '@' -RecordType CNAME -Ttl 3600 -DnsRecords $cname | Out-Null
-            Write-Host "   ✓ CNAME record created" -ForegroundColor Green
+            if ($PSCmdlet.ShouldProcess("$DnsZoneName (@)", "Create CNAME pointing to $StaticWebAppDomain")) {
+                Write-Host "→ Creating CNAME record @ → $StaticWebAppDomain"
+                $cname = New-AzDnsRecordConfig -Cname $StaticWebAppDomain
+                New-AzDnsRecordSet -ResourceGroupName $PlatformResourceGroup -ZoneName $DnsZoneName `
+                    -Name '@' -RecordType CNAME -Ttl 3600 -DnsRecords $cname | Out-Null
+                Write-Host "   ✓ CNAME record created" -ForegroundColor Green
+            }
         }
 
         Write-Host "`n✅ DNS configured successfully!"
