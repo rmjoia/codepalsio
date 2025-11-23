@@ -22,3 +22,8 @@ yarn-error.log*
 
 # Build
 .cache/
+
+# Windows
+*.Zone.Identifier
+Thumbs.db
+
