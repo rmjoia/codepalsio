@@ -49,20 +49,17 @@ export const GET: APIRoute = async ({ request, redirect, cookies }) => {
 			path: '/',
 		});
 
-		// Check if user already exists (returning user) or is new
-		const existingUser = await userRepository.findByGithubId(user.githubId);
+		// Check if this is the user's first login by comparing registration and last login dates
+		// If they're the same (within a second), it's their first time
+		const isFirstLogin =
+			Math.abs(user.registrationDate.getTime() - user.lastLogin.getTime()) < 1000;
 
-		// If user exists and this is not their first login, redirect to profile/dashboard
-		// Otherwise, redirect to welcome/onboarding
-		if (
-			existingUser &&
-			existingUser.registrationDate.getTime() !== existingUser.lastLogin.getTime()
-		) {
-			// Returning user - skip welcome page, go to profile or dashboard
-			return redirect('/profile', 302);
-		} else {
+		if (isFirstLogin) {
 			// New user - show welcome and onboarding
 			return redirect(`/welcome?user=${encodeURIComponent(user.githubUsername)}`, 302);
+		} else {
+			// Returning user - skip welcome page, go to profile
+			return redirect('/profile', 302);
 		}
 	} catch (err) {
 		console.error('OAuth callback error:', err);

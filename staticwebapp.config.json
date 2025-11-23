@@ -1,0 +1,28 @@
+{
+	"platform": {
+		"apiRuntime": "node:20"
+	},
+	"navigationFallback": {
+		"rewrite": "/api/render"
+	},
+	"routes": [
+		{
+			"route": "/_astro/*",
+			"allowedRoles": ["anonymous"]
+		},
+		{
+			"route": "/api/*",
+			"allowedRoles": ["anonymous"]
+		},
+		{
+			"route": "/*",
+			"rewrite": "/api/render",
+			"allowedRoles": ["anonymous"]
+		}
+	],
+	"responseOverrides": {
+		"404": {
+			"rewrite": "/api/render"
+		}
+	}
+}

@@ -2,8 +2,9 @@ import { defineConfig } from 'astro/config';
 import tailwind from '@astrojs/tailwind';
 import node from '@astrojs/node';
 
-// For Azure Static Web Apps - keep server mode for now
-// Will work on Standard tier ($9/month) or we can convert to static + Azure Functions
+// Server mode for Azure Static Web Apps
+// dist/client -> static assets
+// dist/server -> Node.js server for SSR
 export default defineConfig({
 	integrations: [tailwind()],
 	site: 'https://codepals.io',
