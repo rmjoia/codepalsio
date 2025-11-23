@@ -4,6 +4,8 @@
 
 Foster meaningful mentorship, coaching, and community connections—grounded in transparency, security, privacy, and shared values.
 
+**🌐 Live:** [codepals.io](https://codepals.io) | [dev.codepals.io](https://dev.codepals.io)
+
 ---
 
 ## 🚀 Quick Links
@@ -99,6 +101,66 @@ A trusted global developer community where people support people—creating oppo
 - Public KPI dashboard & transparency metrics
 
 **See [MVP Spec](./.specify/spec/codepals-mvp.md) for detailed user stories, requirements, and success criteria.**
+
+---
+
+## 💻 Technology Stack
+
+### Frontend
+- **Framework**: [Astro](https://astro.build) 5.15+ with TypeScript
+- **Styling**: Tailwind CSS 3.3+
+- **Components**: Astro components (`.astro` files)
+- **Build**: Static site generation (SSG)
+
+### Infrastructure & Deployment
+- **Hosting**: Azure Static Web Apps (Free tier)
+- **IaC**: PowerShell + Bicep templates
+- **DNS**: Azure DNS Zones (dev.codepals.io, codepals.io)
+- **CI/CD**: GitHub Actions + PowerShell modules (in progress)
+- **Environments**:
+  - **Production**: https://codepals.io
+  - **Development**: https://dev.codepals.io
+
+### Planned (Phase 2+)
+- **Backend**: Node.js serverless (Azure Functions)
+- **Database**: Cosmos DB (free tier, 400 RU/s)
+- **Auth**: GitHub OAuth
+- **Email**: SendGrid (100 emails/day free tier)
+- **Monitoring**: Azure Application Insights
+- **Testing**: Vitest (unit), Playwright (E2E)
+
+### Development Tools
+- **Linting**: ESLint with Astro plugin
+- **Formatting**: Prettier with Astro plugin
+- **Security**: Snyk for dependency scanning
+- **Package Manager**: npm
+
+---
+
+## 🧑‍💻 Current Status
+
+### ✅ Completed (Phase 1 - Week 2)
+- **Landing Page**: Live at codepals.io and dev.codepals.io
+  - Hero section with animated background
+  - Features showcase
+  - How It Works section
+  - Call-to-Action components
+  - Footer with Discord integration
+- **Brand Implementation**: Logo, colors (Teal #00BCD4 + Gold #FFB700), typography
+- **Policy Pages**: Code of Conduct, Privacy Policy, Terms of Service (pages + modals)
+- **Responsive Design**: Mobile-first with animations
+- **Infrastructure**: PowerShell + Bicep provisioning (dev + prod)
+- **DNS Configuration**: Custom domains configured and live
+
+### ⏳ In Progress (Phase 1 - Week 1)
+- **CI/CD Pipeline**: GitHub Actions workflow (PR #11)
+- **Infrastructure Automation**: Full automation via PowerShell modules (PR #11)
+- **TypeScript Migration**: Convert components to strict TypeScript (planned)
+
+### 📋 Planned
+- **Phase 2**: User profiles, GitHub OAuth, profile discovery (Weeks 3-5)
+- **Phase 3**: Community events, help board, Karma system (Weeks 6-8)
+- **Phase 4**: Public metrics dashboard (Weeks 9-10)
 
 ---
 

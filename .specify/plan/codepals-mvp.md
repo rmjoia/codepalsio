@@ -26,7 +26,7 @@ This implementation plan translates the CodePals.io MVP specification (617 lines
 All 8 principles from Constitution v1.3.0 are embedded in this plan:
 
 ✅ **Principle 1: Open Source & Transparency** - Public repo, no secrets in code, governance transparent  
-✅ **Principle 2: Code Quality** - Jasmine/Karma unit tests (≥80%), Playwright E2E, peer review mandatory  
+✅ **Principle 2: Code Quality** - Vitest unit tests (≥80%), Playwright E2E, peer review mandatory  
 ✅ **Principle 3: Security** - OWASP best practices, input validation, env-var secrets, HTTPS enforced  
 ✅ **Principle 4: Performance** - <3sec landing page load, API latency <1sec, monitoring active  
 ✅ **Principle 5: Privacy** - Minimal data collection, location visibility toggle, encrypted sensitive fields  
@@ -54,15 +54,16 @@ All 8 principles from Constitution v1.3.0 are embedded in this plan:
 
 | Layer | Choice | Rationale | MVP Fit |
 |-------|--------|-----------|---------|
-| **Frontend** | Statiq | Static site gen, simple, fast, no client-side complexity | ✅ Landing + admin UI + events |
+| **Frontend** | Astro + TypeScript | Modern static site gen, component-based, TypeScript support, excellent DX | ✅ Landing + admin UI + events |
 | **Hosting** | Azure Static Web Apps | Free tier, scales, built-in CI/CD, HTTPS | ✅ Phase 1 launch target |
+| **Infrastructure** | PowerShell + Bicep | Automated provisioning, Infrastructure as Code, GitHub Actions orchestration | ✅ Dev + Prod environments |
 | **Backend** | Node.js Serverless | Fast startup, Azure Functions integration, cost-effective | ✅ API endpoints, workflows |
 | **Database** | Cosmos DB (free tier) | NoSQL, 400 RU/s sufficient for MVP, scales easily | ✅ Document-oriented schema |
 | **Auth** | GitHub OAuth | Free, familiar to dev audience, zero passwords to manage | ✅ Profile creation flow |
 | **Email** | SendGrid | 100 emails/day free tier, reliable, templates | ✅ Notifications, approvals |
 | **Monitoring** | Azure App Insights | Free tier, error logging, performance monitoring | ✅ SLA tracking, troubleshooting |
-| **CI/CD** | GitHub Actions | Native to repo, free, reliable | ✅ Automated testing + deploy |
-| **Testing (Unit)** | Jasmine/Karma | User's known stack, familiar, mature | ✅ Per Constitution Principle 2 |
+| **CI/CD** | GitHub Actions + PowerShell | GitHub Actions orchestrates PowerShell modules for infrastructure | ✅ Automated testing + deploy |
+| **Testing (Unit)** | Vitest | Modern, fast, TypeScript-first testing framework | ✅ Per Constitution Principle 2 |
 | **Testing (E2E)** | Playwright | Cross-browser, fast, maintainable | ✅ Critical user journey validation |
 
 ### Data Model Overview

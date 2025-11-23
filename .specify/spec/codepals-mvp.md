@@ -57,11 +57,12 @@
 
 ### Testing Strategy
 
-**Unit Testing (Jasmine/Karma)**:
+**Unit Testing (Vitest)**:
 - All new business logic MUST have unit test coverage
 - Meaningful assertions for normal and edge cases
 - Negative test cases for error paths
 - Target: ≥80% code coverage for core modules
+- TypeScript-first testing framework with excellent DX
 
 **Integration Testing**:
 - API endpoints tested with realistic data flows
@@ -82,10 +83,11 @@
 
 ### Technology Stack
 
-**Frontend & Static Site**: Statiq, Azure Static Web Apps  
+**Frontend & Static Site**: Astro + TypeScript, Azure Static Web Apps  
+**Infrastructure**: PowerShell + Bicep (Infrastructure as Code)  
 **Backend**: Node.js serverless, Cosmos DB  
-**Testing**: Jest/Vitest (unit), Playwright (E2E)  
-**CI/CD**: GitHub Actions  
+**Testing**: Vitest (unit), Playwright (E2E)  
+**CI/CD**: GitHub Actions + PowerShell modules  
 **Monitoring**: Azure Application Insights  
 **Email**: SendGrid API  
 **Auth**: GitHub OAuth
@@ -108,7 +110,7 @@
 
 **Acceptance Scenarios**:
 
-1. **Given** deployment pipeline configured, **When** code is committed to main, **Then** static site builds via Statiq and deploys to Azure Static Web Apps.
+1. **Given** deployment pipeline configured, **When** code is committed to main, **Then** static site builds via Astro and deploys to Azure Static Web Apps.
 2. **Given** backend API configured, **When** Node.js serverless function deployed, **Then** API endpoints respond (health check: `/api/health` returns 200 OK).
 3. **Given** Cosmos DB free tier provisioned, **When** connection string configured, **Then** database queries execute successfully.
 4. **Given** GitHub OAuth app created, **When** authentication flow tested, **Then** OAuth returns valid user ID and username.
