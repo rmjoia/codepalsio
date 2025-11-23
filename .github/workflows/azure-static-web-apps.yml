@@ -26,6 +26,12 @@ jobs:
           submodules: true
           lfs: false
       
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
@@ -36,7 +42,7 @@ jobs:
           app_location: "/"
           api_location: "api"
           output_location: "dist"
-          app_build_command: "npm run build"
+          app_build_command: "npm install && npm run build"
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
