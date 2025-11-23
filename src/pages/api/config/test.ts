@@ -20,14 +20,19 @@ export const GET: APIRoute = async () => {
 			githubClientId: secrets.githubClientId.substring(0, 10) + '...',
 			githubClientSecret: '***' + secrets.githubClientSecret.slice(-4),
 			jwtSecret: '***' + secrets.jwtSecret.slice(-6),
-			cosmosDbConnectionString: secrets.cosmosDbConnectionString.includes('AccountEndpoint') ? 'Connection string set' : 'Not set',
+			cosmosDbConnectionString: secrets.cosmosDbConnectionString.includes('AccountEndpoint')
+				? 'Connection string set'
+				: 'Not set',
 			cosmosDbDatabaseName: secrets.cosmosDbDatabaseName,
 			sendgridApiKey: '***' + secrets.sendgridApiKey.slice(-6),
 		};
 
 		const configInfo = {
 			status: 'success',
-			source: process.env.AZURE_KEYVAULT_URL || process.env.KEY_VAULT_URI ? 'Azure Key Vault' : 'Environment Variables',
+			source:
+				process.env.AZURE_KEYVAULT_URL || process.env.KEY_VAULT_URI
+					? 'Azure Key Vault'
+					: 'Environment Variables',
 			keyVaultUrl: process.env.AZURE_KEYVAULT_URL || process.env.KEY_VAULT_URI || 'Not configured',
 			environment: process.env.ENVIRONMENT,
 			secrets: maskedSecrets,
@@ -41,11 +46,18 @@ export const GET: APIRoute = async () => {
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 		return new Response(
-			JSON.stringify({
-				status: 'error',
-				error: errorMessage,
-				source: process.env.AZURE_KEYVAULT_URL || process.env.KEY_VAULT_URI ? 'Azure Key Vault (failed)' : 'Environment Variables',
-			}, null, 2),
+			JSON.stringify(
+				{
+					status: 'error',
+					error: errorMessage,
+					source:
+						process.env.AZURE_KEYVAULT_URL || process.env.KEY_VAULT_URI
+							? 'Azure Key Vault (failed)'
+							: 'Environment Variables',
+				},
+				null,
+				2
+			),
 			{
 				status: 500,
 				headers,

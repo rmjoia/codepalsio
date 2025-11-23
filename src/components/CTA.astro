@@ -30,21 +30,23 @@ const isSignedIn = !!sessionCookie?.value;
 
 		<!-- CTA Buttons -->
 		<div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-			{!isSignedIn ? (
-				<a
-					href="/#how-it-works"
-					class="px-8 py-4 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors"
-				>
-					Start for Free
-				</a>
-			) : (
-				<a
-					href="/profile"
-					class="px-8 py-4 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors"
-				>
-					Go to Profile
-				</a>
-			)}
+			{
+				!isSignedIn ? (
+					<a
+						href="/#how-it-works"
+						class="px-8 py-4 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors"
+					>
+						Start for Free
+					</a>
+				) : (
+					<a
+						href="/profile"
+						class="px-8 py-4 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors"
+					>
+						Go to Profile
+					</a>
+				)
+			}
 			<a
 				href="https://github.com/rmjoia/codepalsio"
 				target="_blank"

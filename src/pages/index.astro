@@ -77,7 +77,7 @@ import SponsorshipModal from '../components/SponsorshipModal.astro';
 					const href = this.getAttribute('href');
 					const hash = href.startsWith('/#') ? href.substring(1) : href;
 					const target = document.querySelector(hash);
-					
+
 					if (target) {
 						e.preventDefault();
 						target.scrollIntoView({ behavior: 'smooth' });

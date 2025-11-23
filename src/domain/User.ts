@@ -72,7 +72,9 @@ export class User {
 	/**
 	 * Reconstruct User from database/JSON
 	 */
-	static fromJSON(data: UserProps & { id: string; registrationDate: string | Date; lastLogin: string | Date }): User {
+	static fromJSON(
+		data: UserProps & { id: string; registrationDate: string | Date; lastLogin: string | Date }
+	): User {
 		return new User(
 			data.id,
 			data.githubId,

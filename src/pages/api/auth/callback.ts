@@ -51,10 +51,13 @@ export const GET: APIRoute = async ({ request, redirect, cookies }) => {
 
 		// Check if user already exists (returning user) or is new
 		const existingUser = await userRepository.findByGithubId(user.githubId);
-		
+
 		// If user exists and this is not their first login, redirect to profile/dashboard
 		// Otherwise, redirect to welcome/onboarding
-		if (existingUser && existingUser.registrationDate.getTime() !== existingUser.lastLogin.getTime()) {
+		if (
+			existingUser &&
+			existingUser.registrationDate.getTime() !== existingUser.lastLogin.getTime()
+		) {
 			// Returning user - skip welcome page, go to profile or dashboard
 			return redirect('/profile', 302);
 		} else {

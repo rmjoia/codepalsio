@@ -80,12 +80,9 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 	} catch (error) {
 		console.error('Profile save error:', error);
 		const errorMessage = error instanceof Error ? error.message : 'Failed to save profile';
-		return new Response(
-			JSON.stringify({ error: errorMessage }),
-			{
-				status: 500,
-				headers,
-			}
-		);
+		return new Response(JSON.stringify({ error: errorMessage }), {
+			status: 500,
+			headers,
+		});
 	}
 };

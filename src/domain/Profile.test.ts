@@ -334,18 +334,18 @@ describe('Profile Domain Model', () => {
 
 			expect(incompleteProfile.isComplete()).toBe(false);
 
-		const completeProfile = Profile.create({
-			userId: 'user-123',
-			displayName: 'John Doe',
-			bio: 'Full-stack developer with 5 years experience building scalable web applications. Passionate about clean code and mentoring.',
-			skills: ['TypeScript', 'React', 'Node.js'],
-			interests: ['Open Source', 'Mentoring'],
-			availability: 'available',
-			location: 'San Francisco',
-			timezone: 'America/Los_Angeles',
-		});
+			const completeProfile = Profile.create({
+				userId: 'user-123',
+				displayName: 'John Doe',
+				bio: 'Full-stack developer with 5 years experience building scalable web applications. Passionate about clean code and mentoring.',
+				skills: ['TypeScript', 'React', 'Node.js'],
+				interests: ['Open Source', 'Mentoring'],
+				availability: 'available',
+				location: 'San Francisco',
+				timezone: 'America/Los_Angeles',
+			});
 
-		expect(completeProfile.isComplete()).toBe(true);
+			expect(completeProfile.isComplete()).toBe(true);
 		});
 	});
 

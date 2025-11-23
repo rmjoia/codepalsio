@@ -78,7 +78,9 @@ export class ConfigService {
 		}
 
 		if (!value) {
-			throw new Error(`Configuration error: Secret '${name}' not found in ${this.useKeyVault ? 'Key Vault' : 'environment variables'}`);
+			throw new Error(
+				`Configuration error: Secret '${name}' not found in ${this.useKeyVault ? 'Key Vault' : 'environment variables'}`
+			);
 		}
 
 		// Cache the value
