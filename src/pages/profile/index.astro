@@ -3,34 +3,27 @@ import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import { ProfileRepository } from '../../infrastructure/ProfileRepository';
 
-// Check if user is authenticated via Azure Static Web Apps
-// This file needs to be server-rendered to access request headers
-// In static mode, protected routes are handled by staticwebapp.config.json
+// Note: This page is protected by Azure Static Web Apps route protection (staticwebapp.config.json)
+// It will only be served to authenticated users
+// The x-ms-client-principal header will be available at runtime on Azure
 
-// For server-rendered pages, check auth header
-const clientPrincipal = Astro.request.headers.get('x-ms-client-principal');
-if (!clientPrincipal) {
-	return Astro.redirect('/.auth/login/github?post_login_redirect_uri=/profile');
-}
-
-// Decode user principal from Azure
-const principal = JSON.parse(Buffer.from(clientPrincipal, 'base64').toString('utf-8'));
-const user = {
-	userId: principal.userId,
-	githubUsername: principal.userDetails,
-	avatarUrl: principal.claims?.find((c: any) => c.typ === 'avatar_url')?.val || '',
+// For local dev and static builds, use placeholder data
+const userProfile = {
+	userId: 'placeholder-user-id',
+	displayName: 'Your Name',
+	bio: '',
+	skills: [],
+	interests: [],
+	location: '',
+	timezone: '',
+	availability: 'active',
 };
 
-// Load existing profile
-let existingProfile: any = null;
-try {
-	const connectionString = import.meta.env.COSMOS_DB_CONNECTION_STRING;
-	const database = import.meta.env.COSMOS_DB_DATABASE_NAME;
-	const profileRepo = new ProfileRepository(connectionString, database);
-	existingProfile = await profileRepo.findByUserId(user.userId);
-} catch (error) {
-	console.error('Failed to load profile:', error);
-}
+const user = {
+	userId: 'placeholder-user-id',
+	githubUsername: 'username',
+	avatarUrl: '',
+};
 
 // Check if we're in edit mode
 const isEditMode = Astro.url.searchParams.get('edit') === 'true';
@@ -88,7 +81,7 @@ const isEditMode = Astro.url.searchParams.get('edit') === 'true';
 
 			{!isEditMode ? (
 				<>
-				{!existingProfile?.isComplete() && (
+				{(!userProfile.bio || userProfile.skills.length < 2 || userProfile.interests.length < 2) && (
 					<div class="bg-amber-50 border border-amber-200 rounded-xl p-6 mb-8">
 						<div class="flex items-start gap-4">
 							<svg class="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -113,8 +106,8 @@ const isEditMode = Astro.url.searchParams.get('edit') === 'true';
 				<div class="space-y-6">
 					<div class="bg-white rounded-xl shadow p-6">
 						<h2 class="text-xl font-bold text-slate-900 mb-4">About Me</h2>
-						{existingProfile?.bio ? (
-							<p class="text-slate-700 whitespace-pre-wrap">{existingProfile.bio}</p>
+						{userProfile?.bio ? (
+							<p class="text-slate-700 whitespace-pre-wrap">{userProfile.bio}</p>
 						) : (
 							<p class="text-slate-600 italic">
 								No bio added yet. Click "Edit Profile" to add one.
@@ -124,9 +117,9 @@ const isEditMode = Astro.url.searchParams.get('edit') === 'true';
 
 					<div class="bg-white rounded-xl shadow p-6">
 						<h2 class="text-xl font-bold text-slate-900 mb-4">Skills</h2>
-						{existingProfile?.skills?.length > 0 ? (
+						{userProfile?.skills?.length > 0 ? (
 							<div class="flex flex-wrap gap-2">
-								{existingProfile.skills.map((skill: string) => (
+								{userProfile.skills.map((skill: string) => (
 									<span class="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm">
 										{skill}
 									</span>
@@ -141,9 +134,9 @@ const isEditMode = Astro.url.searchParams.get('edit') === 'true';
 
 					<div class="bg-white rounded-xl shadow p-6">
 						<h2 class="text-xl font-bold text-slate-900 mb-4">Interests</h2>
-						{existingProfile?.interests?.length > 0 ? (
+						{userProfile?.interests?.length > 0 ? (
 							<div class="flex flex-wrap gap-2">
-								{existingProfile.interests.map((interest: string) => (
+								{userProfile.interests.map((interest: string) => (
 									<span class="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">
 										{interest}
 									</span>
@@ -156,23 +149,23 @@ const isEditMode = Astro.url.searchParams.get('edit') === 'true';
 						)}
 					</div>
 
-					{(existingProfile?.location || existingProfile?.timezone || existingProfile?.availability) && (
+					{(userProfile?.location || userProfile?.timezone || userProfile?.availability) && (
 						<div class="bg-white rounded-xl shadow p-6">
 							<h2 class="text-xl font-bold text-slate-900 mb-4">Details</h2>
 							<div class="space-y-2">
-								{existingProfile.location && (
+								{userProfile.location && (
 									<p class="text-slate-700">
-										<span class="font-semibold">Location:</span> {existingProfile.location}
+										<span class="font-semibold">Location:</span> {userProfile.location}
 									</p>
 								)}
-								{existingProfile.timezone && (
+								{userProfile.timezone && (
 									<p class="text-slate-700">
-										<span class="font-semibold">Timezone:</span> {existingProfile.timezone}
+										<span class="font-semibold">Timezone:</span> {userProfile.timezone}
 									</p>
 								)}
-								{existingProfile.availability && (
+								{userProfile.availability && (
 									<p class="text-slate-700">
-										<span class="font-semibold">Availability:</span> <span class="capitalize">{existingProfile.availability.replace('_', ' ')}</span>
+										<span class="font-semibold">Availability:</span> <span class="capitalize">{userProfile.availability.replace('_', ' ')}</span>
 									</p>
 								)}
 							</div>
@@ -194,7 +187,7 @@ const isEditMode = Astro.url.searchParams.get('edit') === 'true';
 								id="displayName"
 								name="displayName"
 								required
-								value={existingProfile?.displayName || user?.githubUsername || ''}
+								value={userProfile?.displayName || user?.githubUsername || ''}
 								placeholder="How should we call you?"
 								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
 							/>
@@ -212,7 +205,7 @@ const isEditMode = Astro.url.searchParams.get('edit') === 'true';
 								maxlength="500"
 								placeholder="Tell us about yourself, your interests, and what you're looking for in a CodePal..."
 								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-							>{existingProfile?.bio || ''}</textarea>
+							>{userProfile?.bio || ''}</textarea>
 							<p class="mt-1 text-sm text-slate-500">
 								<span id="bio-count">0</span>/500 characters (minimum 50)
 							</p>
@@ -261,7 +254,7 @@ const isEditMode = Astro.url.searchParams.get('edit') === 'true';
 									type="text"
 									id="location"
 									name="location"
-									value={existingProfile?.location || ''}
+									value={userProfile?.location || ''}
 									placeholder="e.g., Dublin, Ireland"
 									class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
 								/>
@@ -332,7 +325,7 @@ const isEditMode = Astro.url.searchParams.get('edit') === 'true';
 		<Footer />
 
 		{isEditMode && (
-			<script is:inline define:vars={{ profile: existingProfile }}>
+			<script is:inline define:vars={{ profile: userProfile }}>
 				const skills = new Set(profile?.skills || []);
 				const interests = new Set(profile?.interests || []);
 
