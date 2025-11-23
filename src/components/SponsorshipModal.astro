@@ -1,0 +1,210 @@
+---
+// Sponsorship Modal component - Displays sponsorship information and donation options
+---
+
+<div
+	id="sponsorship-modal"
+	class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+>
+	<div
+		class="bg-white rounded-2xl shadow-2xl max-w-4xl max-h-[90vh] overflow-y-auto w-full relative"
+	>
+		<!-- Close Button -->
+		<button
+			onclick="toggleModal('sponsorship-modal')"
+			class="absolute top-4 right-4 p-2 hover:bg-slate-100 rounded-lg transition-colors"
+			aria-label="Close"
+		>
+			<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="2"
+					d="M6 18L18 6M6 6l12 12"></path>
+			</svg>
+		</button>
+
+		<!-- Header -->
+		<div class="p-8 border-b border-slate-200 bg-gradient-to-br from-primary-50 to-accent-50">
+			<h2 class="text-3xl font-bold text-slate-900 mb-2">💖 Support CodePals</h2>
+			<p class="text-lg text-slate-600">
+				Help us keep the community thriving and growing
+			</p>
+		</div>
+
+		<!-- Content -->
+		<div class="p-8 space-y-6">
+			<!-- Mission Statement -->
+			<section>
+				<h3 class="text-xl font-semibold text-slate-900 mb-3">Our Mission</h3>
+				<p class="text-slate-600 leading-relaxed">
+					CodePals is a community-driven platform connecting developers worldwide. We believe in
+					fostering meaningful connections, collaborative learning, and mutual growth. Your support
+					helps us maintain infrastructure, develop new features, and keep the community accessible
+					to everyone.
+				</p>
+			</section>
+
+			<!-- What We Need -->
+			<section>
+				<h3 class="text-xl font-semibold text-slate-900 mb-3">What Your Support Covers</h3>
+				<div class="grid md:grid-cols-2 gap-4">
+					<div class="card border-l-4 border-primary-500">
+						<h4 class="font-semibold text-slate-900 mb-2">🌐 Infrastructure Costs</h4>
+						<p class="text-sm text-slate-600">
+							Domain registration, hosting, databases, and cloud services to keep the platform
+							running smoothly.
+						</p>
+					</div>
+					<div class="card border-l-4 border-accent-500">
+						<h4 class="font-semibold text-slate-900 mb-2">⚡ Feature Development</h4>
+						<p class="text-sm text-slate-600">
+							Building new features, improving user experience, and implementing community-requested
+							enhancements.
+						</p>
+					</div>
+					<div class="card border-l-4 border-pink-500">
+						<h4 class="font-semibold text-slate-900 mb-2">🛡️ Security & Maintenance</h4>
+						<p class="text-sm text-slate-600">
+							Regular security updates, bug fixes, and platform maintenance to ensure reliability
+							and safety.
+						</p>
+					</div>
+					<div class="card border-l-4 border-purple-500">
+						<h4 class="font-semibold text-slate-900 mb-2">🎓 Community Support</h4>
+						<p class="text-sm text-slate-600">
+							Organizing events, creating resources, and supporting community initiatives.
+						</p>
+					</div>
+				</div>
+			</section>
+
+			<!-- How to Support -->
+			<section>
+				<h3 class="text-xl font-semibold text-slate-900 mb-3">How to Support</h3>
+				
+				<!-- Donation Options -->
+				<div class="space-y-4">
+					<div class="card bg-gradient-to-r from-primary-50 to-accent-50 border-2 border-primary-200">
+						<div class="flex items-start gap-4">
+							<div class="text-3xl">🌟</div>
+							<div class="flex-1">
+								<h4 class="font-semibold text-slate-900 mb-2">Become a Patron</h4>
+								<p class="text-sm text-slate-600 mb-4">
+									Support us with a recurring monthly contribution via GitHub Sponsors or Patreon.
+								</p>
+								<div class="flex flex-wrap gap-3">
+									<a
+										href="https://github.com/sponsors/rmjoia"
+										target="_blank"
+										rel="noopener noreferrer"
+										class="btn-primary text-sm flex items-center gap-2"
+									>
+										<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+											<path
+												d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
+											></path>
+										</svg>
+										GitHub Sponsors
+									</a>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div class="card border-2 border-slate-200">
+						<div class="flex items-start gap-4">
+							<div class="text-3xl">💝</div>
+							<div class="flex-1">
+								<h4 class="font-semibold text-slate-900 mb-2">One-Time Donation</h4>
+								<p class="text-sm text-slate-600 mb-4">
+									Make a one-time contribution to support the platform.
+								</p>
+								<div class="flex flex-wrap gap-3">
+									<a
+										href="mailto:codepals@codepals.io?subject=One-time%20Donation&body=Hi%20CodePals%20Team%2C%0A%0AI%27d%20like%20to%20make%20a%20one-time%20donation%20to%20support%20the%20platform.%0A%0APlease%20let%20me%20know%20the%20payment%20options%20available.%0A%0AThank%20you!"
+										class="btn-secondary text-sm"
+									>
+										Contact Us for Donation
+									</a>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div class="card border-2 border-slate-200">
+						<div class="flex items-start gap-4">
+							<div class="text-3xl">🤝</div>
+							<div class="flex-1">
+								<h4 class="font-semibold text-slate-900 mb-2">Partnership Opportunities</h4>
+								<p class="text-sm text-slate-600 mb-4">
+									Are you an e-learning platform, tech company, or educational institution interested
+									in partnering with us? Let's collaborate to empower developers worldwide.
+								</p>
+								<a
+									href="mailto:partnerships@codepals.io?subject=Partnership%20Inquiry&body=Hi%20CodePals%20Team%2C%0A%0AI%27m%20interested%20in%20exploring%20partnership%20opportunities%20with%20CodePals.%0A%0AOrganization%3A%20%0AWebsite%3A%20%0AProposal%3A%20%0A%0ALooking%20forward%20to%20hearing%20from%20you!"
+									class="btn-secondary text-sm"
+								>
+									Explore Partnerships
+								</a>
+							</div>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<!-- Other Ways to Help -->
+			<section>
+				<h3 class="text-xl font-semibold text-slate-900 mb-3">Other Ways to Help</h3>
+				<div class="grid md:grid-cols-3 gap-4">
+					<div class="text-center p-4">
+						<div class="text-3xl mb-2">⭐</div>
+						<h4 class="font-semibold text-slate-900 mb-1">Star on GitHub</h4>
+						<p class="text-sm text-slate-600">
+							Show your support by starring our repository
+						</p>
+					</div>
+					<div class="text-center p-4">
+						<div class="text-3xl mb-2">📢</div>
+						<h4 class="font-semibold text-slate-900 mb-1">Spread the Word</h4>
+						<p class="text-sm text-slate-600">
+							Share CodePals with your developer friends
+						</p>
+					</div>
+					<div class="text-center p-4">
+						<div class="text-3xl mb-2">🐛</div>
+						<h4 class="font-semibold text-slate-900 mb-1">Contribute</h4>
+						<p class="text-sm text-slate-600">
+							Report bugs, suggest features, or contribute code
+						</p>
+					</div>
+				</div>
+			</section>
+
+			<!-- Thank You -->
+			<section class="text-center p-6 bg-gradient-to-r from-primary-50 to-accent-50 rounded-xl">
+				<p class="text-lg font-semibold text-slate-900 mb-2">
+					Every contribution, big or small, makes a difference! 🙏
+				</p>
+				<p class="text-slate-600">
+					Thank you for being part of the CodePals community and helping us grow.
+				</p>
+			</section>
+		</div>
+	</div>
+</div>
+
+<style>
+	#sponsorship-modal:not(.hidden) {
+		animation: fadeIn 0.2s ease-in-out;
+	}
+
+	@keyframes fadeIn {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+</style>

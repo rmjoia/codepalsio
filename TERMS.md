@@ -97,7 +97,7 @@ If any provision of these Terms is found invalid or unenforceable, the remaining
 ## 15. Contact & Support
 
 Questions about these Terms? Reach out:
-- **GitHub:** [github.com/codepalsio/codepalsio](https://github.com/codepalsio/codepalsio)
+- **GitHub:** [github.com/rmjoia/codepalsio](https://github.com/rmjoia/codepalsio)
 - **Discord:** [discord.gg/codepals](https://discord.gg/codepals)
 
 ---

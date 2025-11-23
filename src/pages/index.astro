@@ -9,6 +9,7 @@ import Footer from '../components/Footer.astro';
 import PrivacyModal from '../components/PrivacyModal.astro';
 import TermsModal from '../components/TermsModal.astro';
 import CodeOfConductModal from '../components/CodeOfConductModal.astro';
+import SponsorshipModal from '../components/SponsorshipModal.astro';
 ---
 
 <!doctype html>
@@ -33,7 +34,9 @@ import CodeOfConductModal from '../components/CodeOfConductModal.astro';
 		/>
 
 		<title>CodePals.io - Connect with Code 'Penpals'</title>
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+		<link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+		<link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png" />
 
 		<!-- Open Graph / Social Media -->
 		<meta property="og:type" content="website" />
@@ -65,26 +68,46 @@ import CodeOfConductModal from '../components/CodeOfConductModal.astro';
 		<PrivacyModal />
 		<TermsModal />
 		<CodeOfConductModal />
+		<SponsorshipModal />
 
 		<script is:inline>
-			// Smooth scroll for anchor links
-			document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
+			// Smooth scroll for anchor links (both #section and /#section)
+			document.querySelectorAll('a[href^="#"], a[href^="/#"]').forEach((anchor) => {
 				anchor.addEventListener('click', function (e) {
-					e.preventDefault();
-					const target = document.querySelector(this.getAttribute('href'));
+					const href = this.getAttribute('href');
+					const hash = href.startsWith('/#') ? href.substring(1) : href;
+					const target = document.querySelector(hash);
+					
 					if (target) {
+						e.preventDefault();
 						target.scrollIntoView({ behavior: 'smooth' });
+						// Update URL hash without jumping
+						history.pushState(null, null, hash);
 					}
 				});
 			});
 
-			// Navbar shadow on scroll
+			// Scroll to hash on page load
+			window.addEventListener('load', () => {
+				if (window.location.hash) {
+					const target = document.querySelector(window.location.hash);
+					if (target) {
+						setTimeout(() => {
+							target.scrollIntoView({ behavior: 'smooth' });
+						}, 100);
+					}
+				}
+			});
+
+			// Navbar shadow enhancement on scroll
 			window.addEventListener('scroll', () => {
-				const nav = document.querySelector('nav');
+				const header = document.querySelector('header');
 				if (window.scrollY > 10) {
-					nav?.classList.add('shadow-md', 'bg-white/95', 'backdrop-blur');
+					header?.classList.add('shadow-lg');
+					header?.classList.remove('shadow-sm');
 				} else {
-					nav?.classList.remove('shadow-md', 'bg-white/95', 'backdrop-blur');
+					header?.classList.remove('shadow-lg');
+					header?.classList.add('shadow-sm');
 				}
 			});
 		</script>

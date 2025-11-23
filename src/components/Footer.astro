@@ -18,12 +18,19 @@
 			<div>
 				<h4 class="text-white font-semibold mb-4">Product</h4>
 				<ul class="space-y-2 text-sm">
-					<li><a href="#features" class="hover:text-primary-400 transition-colors">Features</a></li>
+					<li><a href="/#features" class="hover:text-primary-400 transition-colors">Features</a></li>
 					<li>
-						<a href="#how-it-works" class="hover:text-primary-400 transition-colors">How It Works</a
+						<a href="/#how-it-works" class="hover:text-primary-400 transition-colors">How It Works</a
 						>
 					</li>
-					<li><span class="opacity-50 cursor-not-allowed">Pricing (Coming Soon)</span></li>
+					<li>
+						<button
+							class="hover:text-primary-400 transition-colors text-left"
+							onclick="toggleModal('sponsorship-modal')"
+						>
+							Support Us
+						</button>
+					</li>
 					<li><span class="opacity-50 cursor-not-allowed">Blog (Coming Soon)</span></li>
 				</ul>
 			</div>
@@ -34,7 +41,7 @@
 				<ul class="space-y-2 text-sm">
 					<li>
 						<a
-							href="https://github.com/codepalsio/codepalsio"
+							href="https://github.com/rmjoia/codepalsio"
 							target="_blank"
 							rel="noopener noreferrer"
 							class="hover:text-primary-400 transition-colors"
@@ -126,3 +133,12 @@
 		</div>
 	</div>
 </footer>
+
+<script is:inline>
+	function toggleModal(modalId) {
+		const modal = document.getElementById(modalId);
+		if (modal) {
+			modal.classList.toggle('hidden');
+		}
+	}
+</script>

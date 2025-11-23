@@ -1,5 +1,9 @@
 ---
 // Call to Action section
+import jwt from 'jsonwebtoken';
+
+const sessionCookie = Astro.cookies.get('session');
+const isSignedIn = !!sessionCookie?.value;
 ---
 
 <section
@@ -26,20 +30,23 @@
 
 		<!-- CTA Buttons -->
 		<div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-			<button
-				disabled
-				class="px-8 py-4 bg-accent-500 text-white rounded-lg font-semibold opacity-50 cursor-not-allowed relative group"
-				title="Coming Soon"
-			>
-				Start for Free
-				<span
-					class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-slate-900 text-white text-sm rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none"
+			{!isSignedIn ? (
+				<a
+					href="/#how-it-works"
+					class="px-8 py-4 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors"
 				>
-					Coming Soon
-				</span>
-			</button>
+					Start for Free
+				</a>
+			) : (
+				<a
+					href="/profile"
+					class="px-8 py-4 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors"
+				>
+					Go to Profile
+				</a>
+			)}
 			<a
-				href="https://github.com/codepalsio/codepalsio"
+				href="https://github.com/rmjoia/codepalsio"
 				target="_blank"
 				rel="noopener noreferrer"
 				class="px-8 py-4 bg-white/10 text-white border border-white/20 rounded-lg font-semibold hover:bg-white/20 transition-colors backdrop-blur"
