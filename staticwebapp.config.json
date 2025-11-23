@@ -2,27 +2,47 @@
 	"platform": {
 		"apiRuntime": "node:20"
 	},
-	"navigationFallback": {
-		"rewrite": "/api/render"
-	},
 	"routes": [
 		{
-			"route": "/_astro/*",
-			"allowedRoles": ["anonymous"]
+			"route": "/login",
+			"redirect": "/.auth/login/github"
 		},
 		{
-			"route": "/api/*",
-			"allowedRoles": ["anonymous"]
+			"route": "/logout",
+			"redirect": "/.auth/logout"
 		},
 		{
-			"route": "/*",
-			"rewrite": "/api/render",
-			"allowedRoles": ["anonymous"]
+			"route": "/api/profile-save",
+			"allowedRoles": ["authenticated"]
+		},
+		{
+			"route": "/api/account-delete",
+			"allowedRoles": ["authenticated"]
+		},
+		{
+			"route": "/profile/*",
+			"allowedRoles": ["authenticated"]
+		},
+		{
+			"route": "/welcome",
+			"allowedRoles": ["authenticated"]
 		}
 	],
 	"responseOverrides": {
-		"404": {
-			"rewrite": "/api/render"
+		"401": {
+			"redirect": "/.auth/login/github?post_login_redirect_uri=.referrer",
+			"statusCode": 302
 		}
+	},
+	"navigationFallback": {
+		"rewrite": "/404.html",
+		"exclude": ["/_astro/*", "/images/*.{png,jpg,gif,ico}", "/favicon.ico", "/.auth/*", "/api/*"]
+	},
+	"globalHeaders": {
+		"X-Content-Type-Options": "nosniff",
+		"X-Frame-Options": "DENY",
+		"X-XSS-Protection": "1; mode=block",
+		"Referrer-Policy": "strict-origin-when-cross-origin",
+		"Permissions-Policy": "geolocation=(), microphone=(), camera=()"
 	}
 }

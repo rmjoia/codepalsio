@@ -29,7 +29,7 @@ jobs:
           action: "upload"
           app_location: "/"
           api_location: "api"
-          output_location: "dist/client"
+          output_location: "dist"
           app_build_command: "npm run build"
 
   close_pull_request_job:

@@ -1,29 +1,25 @@
 ---
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
-import jwt from 'jsonwebtoken';
 import { ProfileRepository } from '../../infrastructure/ProfileRepository';
 
-// Check if user is authenticated
-const sessionCookie = Astro.cookies.get('session');
-if (!sessionCookie?.value) {
-	return Astro.redirect('/api/auth/login');
+// Check if user is authenticated via Azure Static Web Apps
+// This file needs to be server-rendered to access request headers
+// In static mode, protected routes are handled by staticwebapp.config.json
+
+// For server-rendered pages, check auth header
+const clientPrincipal = Astro.request.headers.get('x-ms-client-principal');
+if (!clientPrincipal) {
+	return Astro.redirect('/.auth/login/github?post_login_redirect_uri=/profile');
 }
 
-// Decode JWT to get user info
-let user: { githubUsername: string; avatarUrl: string; userId: string } | null = null;
-try {
-	const jwtSecret = import.meta.env.JWT_SECRET;
-	const payload = jwt.verify(sessionCookie.value, jwtSecret) as {
-		githubUsername: string;
-		avatarUrl: string;
-		userId: string;
-	};
-	user = payload;
-} catch (error) {
-	console.error('Failed to decode session token:', error);
-	return Astro.redirect('/api/auth/login');
-}
+// Decode user principal from Azure
+const principal = JSON.parse(Buffer.from(clientPrincipal, 'base64').toString('utf-8'));
+const user = {
+	userId: principal.userId,
+	githubUsername: principal.userDetails,
+	avatarUrl: principal.claims?.find((c: any) => c.typ === 'avatar_url')?.val || '',
+};
 
 // Load existing profile
 let existingProfile: any = null;

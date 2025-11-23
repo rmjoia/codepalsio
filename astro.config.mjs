@@ -1,13 +1,10 @@
 import { defineConfig } from 'astro/config';
 import tailwind from '@astrojs/tailwind';
-import node from '@astrojs/node';
 
-// Server mode for Azure Static Web Apps (Standard tier required)
+// Static mode for Azure Static Web Apps
+// API routes handled by Azure Functions in /api directory
 export default defineConfig({
 	integrations: [tailwind()],
 	site: 'https://codepals.io',
-	output: 'server',
-	adapter: node({
-		mode: 'standalone',
-	}),
+	output: 'static',
 });
