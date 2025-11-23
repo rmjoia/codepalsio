@@ -8,6 +8,10 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write src/**/*.{js,jsx,ts,tsx,astro,css,md}",
@@ -16,7 +20,7 @@
     "audit:report": "npm audit --json > audit-report.json && echo 'Audit report saved to audit-report.json'",
     "snyk:check": "snyk test --severity-threshold=high 2>/dev/null || echo 'Snyk check skipped (requires auth in CI/CD)'",
     "security": "npm run audit",
-    "validate": "npm run format:check && npm run lint && npm run audit && npm run build"
+    "validate": "npm run format:check && npm run lint && npm run test:run && npm run audit && npm run build"
   },
   "dependencies": {
     "astro": "^5.15.8"
@@ -24,16 +28,23 @@
   "devDependencies": {
     "@astrojs/tailwind": "^6.0.2",
     "@eslint/js": "^9.39.1",
-    "@typescript-eslint/eslint-plugin": "^8.46.4",
-    "@typescript-eslint/parser": "^8.46.4",
+    "@testing-library/dom": "^10.4.1",
+    "@types/node": "^24.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
+    "@vitest/ui": "^4.0.13",
     "astro-eslint-parser": "^1.2.2",
     "eslint": "^9.39.1",
     "eslint-plugin-astro": "^1.5.0",
+    "happy-dom": "^20.0.10",
+    "jsdom": "^27.2.0",
     "postcss": "^8.4.0",
     "prettier": "^3.6.2",
     "prettier-plugin-astro": "^0.14.1",
     "sharp": "^0.34.5",
     "snyk": "^1.1300.2",
-    "tailwindcss": "^3.3.0"
+    "tailwindcss": "^3.3.0",
+    "typescript-eslint": "^8.47.0",
+    "vitest": "^4.0.13"
   }
 }

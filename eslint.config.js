@@ -1,4 +1,5 @@
 import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
 
 export default [
 	{
@@ -11,10 +12,11 @@ export default [
 			'.env*',
 			'package-lock.json',
 			'src/**/*.astro',
+			'src/env.d.ts',
 		],
 	},
 	{
-		files: ['src/**/*.{js,jsx,ts,tsx}', '*.config.{js,mjs,cjs}'],
+		files: ['src/**/*.{js,jsx}', '*.config.{js,mjs,cjs}'],
 		languageOptions: {
 			ecmaVersion: 'latest',
 			sourceType: 'module',
@@ -23,4 +25,8 @@ export default [
 			...js.configs.recommended.rules,
 		},
 	},
+	...tseslint.configs.recommended.map(config => ({
+		...config,
+		files: ['src/**/*.{ts,tsx}'],
+	})),
 ];
