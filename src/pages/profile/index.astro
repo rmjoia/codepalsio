@@ -56,8 +56,9 @@ const username = userData.userDetails; // GitHub username
 const avatarUrl = `https://avatars.githubusercontent.com/${username}?v=4`; // Use username for avatar
 
 // Store/update user in Cosmos DB via API
+let userResponse;
 try {
-await fetch('/api/auth/user', {
+userResponse = await fetch('/api/auth/user', {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
 body: JSON.stringify({
@@ -69,6 +70,15 @@ avatarUrl: avatarUrl,
 } catch (e) {
 // If user storage fails, continue - it's not critical for profile display
 console.warn('User storage failed:', e);
+}
+
+// Check if user has accepted terms - if not, redirect to welcome
+if (userResponse?.ok) {
+const userRecord = await userResponse.json();
+if (!userRecord.termsAccepted) {
+window.location.href = '/welcome';
+return;
+}
 }
 
 // Try to load existing profile from Cosmos DB

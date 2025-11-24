@@ -5,10 +5,25 @@
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
-    "dev": "func start"
+    "dev": "func start",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "security:audit": "npm audit --audit-level=moderate",
+    "validate": "npm run lint && npm run test && npm run security:audit"
   },
   "dependencies": {
     "@azure/functions": "^4.5.0",
     "@azure/cosmos": "^4.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "eslint": "^9.39.1",
+    "jest": "^29.7.0",
+    "jest-mock-extended": "^3.0.5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

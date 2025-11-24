@@ -177,19 +177,47 @@ const user = Astro.url.searchParams.get('user') || 'there';
 
 		// Accept terms and continue
 		async function acceptTerms() {
-			// Redirect directly to profile in setup/edit mode
-			window.location.href = '/profile?setup=true';
-		}			// Add event listeners
-			document.addEventListener('DOMContentLoaded', () => {
-				loadUsername();
-				const checkboxes = ['accept-terms', 'accept-privacy', 'accept-coc'];
-				checkboxes.forEach((id) => {
-					const checkbox = document.getElementById(id);
-					if (checkbox) {
-						checkbox.addEventListener('change', updateContinueButton);
-					}
+			try {
+				// Get user ID from auth context
+				const authResponse = await fetch('/.auth/me');
+				const authData = await authResponse.json();
+				const userId = authData.clientPrincipal?.userId;
+
+				if (!userId) {
+					alert('Unable to identify user. Please try again.');
+					return;
+				}
+
+				// Mark terms as accepted in database
+				const response = await fetch('/api/account/accept-terms', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ userId }),
 				});
+
+				if (!response.ok) {
+					throw new Error('Failed to save terms acceptance');
+				}
+
+				// Redirect to profile setup
+				window.location.href = '/profile?setup=true';
+			} catch (error) {
+				console.error('Error accepting terms:', error);
+				alert('Failed to accept terms. Please try again.');
+			}
+		}
+
+		// Add event listeners
+		document.addEventListener('DOMContentLoaded', () => {
+			loadUsername();
+			const checkboxes = ['accept-terms', 'accept-privacy', 'accept-coc'];
+			checkboxes.forEach((id) => {
+				const checkbox = document.getElementById(id);
+				if (checkbox) {
+					checkbox.addEventListener('change', updateContinueButton);
+				}
 			});
+		});
 		</script>
 
 		<!-- Modals -->

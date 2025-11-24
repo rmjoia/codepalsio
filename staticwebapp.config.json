@@ -21,7 +21,7 @@
 		},
 		{
 			"route": "/welcome",
-			"redirect": "/profile?setup=true"
+			"allowedRoles": ["authenticated"]
 		}
 	],
 	"responseOverrides": {
