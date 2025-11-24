@@ -496,16 +496,35 @@ Commit 3c2c082-3c2d080: User registration flow & API implementation
 
 ---
 
+## Security Roadmap (NEW - November 24, 2025)
+
+**Status**: Updated to integrate security tasks into development phases (prevent launch blockers).
+
+**Key Changes**:
+- **Phase 2 (Week 3-5)**: Add 6 security tasks (encryption at rest, security headers, error hardening, validation middleware, privacy filters, parental consent enforcement)
+- **Phase 3 (Weeks 6-8)**: Add 3 security tasks (SAST tooling, audit logging, request signing)
+- **Phase 4 (Weeks 9-10)**: Add 3 compliance tasks (GDPR audit, OWASP assessment, monitoring/alerts)
+
+**Impact**: +14 developer days (~7% timeline increase) → Achieves production-ready security by Phase 4 Week 10.
+
+**See also**: `.specify/SECURITY_INTEGRATED_PLAN.md` (comprehensive security roadmap with task details)
+
+---
+
 ## Conclusion
 
-**Status**: Phase 1 Week 2 landing page deployment complete ✅. Infrastructure automation in final review (PR #11) ⏳. Admin dashboard, email templates, and i18n deferred to Phase 2.
+**Status**: Phase 1 Week 2 landing page deployment complete ✅. Infrastructure automation in final review (PR #11) ⏳. Security roadmap integrated into Phase 2-4 (NEW) ⏳.
 
 **Live Sites**:
 - **Production**: https://codepals.io
 - **Development**: https://dev.codepals.io
 
-**Next Milestone**: Complete PR #11 (CI/CD automation), then proceed with TypeScript migration and Vitest setup before Phase 2.
+**Next Milestone**: 
+1. Complete PR #11 (CI/CD automation)
+2. Fix terms acceptance persistence bug (commit 2def167 pushed) ✅
+3. Proceed with TypeScript migration and Vitest setup before Phase 2
+4. Review and approve security-integrated task breakdown
 
-**Timeline**: Phase 1 landing page complete (November 18, 2025). Infrastructure automation expected completion: November 2025. Phase 2 start: December 2025 (estimated).
+**Timeline**: Phase 1 landing page complete (November 18, 2025). Bug fixes committed (November 24, 2025). Infrastructure automation expected completion: November 2025. Phase 2 start: December 2025 (estimated).
 
-**Quality Commitment**: All phases gated by quality gates covering security, testing (≥80% coverage with Vitest), performance (<3sec), accessibility (WCAG 2.1 AA), i18n (≥95% translation), brand consistency, and governance compliance.
+**Quality Commitment**: All phases gated by quality gates covering security (NEW), testing (≥80% coverage with Vitest), performance (<3sec), accessibility (WCAG 2.1 AA), i18n (≥95% translation), brand consistency, and governance compliance.
