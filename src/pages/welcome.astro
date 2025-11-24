@@ -132,6 +132,23 @@ const user = Astro.url.searchParams.get('user') || 'there';
 
 		<!-- Include modals from components (we'll need to import these) -->
 		<script is:inline>
+			// Fetch username from /.auth/me
+			async function loadUsername() {
+				try {
+					const response = await fetch('/.auth/me');
+					const data = await response.json();
+					if (data.clientPrincipal && data.clientPrincipal.userDetails) {
+						const username = data.clientPrincipal.userDetails;
+						const heading = document.querySelector('h1');
+						if (heading) {
+							heading.textContent = `Welcome to CodePals, @${username}!`;
+						}
+					}
+				} catch (e) {
+					console.error('Failed to load username:', e);
+				}
+			}
+
 			// Modal toggle function
 			function toggleModal(modalId) {
 				const modal = document.getElementById(modalId);
@@ -158,15 +175,13 @@ const user = Astro.url.searchParams.get('user') || 'there';
 				}
 			}
 
-			// Accept terms and continue
-			async function acceptTerms() {
-				// TODO: Call API to save terms acceptance with timestamps
-				// For now, redirect to profile setup
-				window.location.href = '/profile/setup';
-			}
-
-			// Add event listeners
+		// Accept terms and continue
+		async function acceptTerms() {
+			// Redirect directly to profile in setup/edit mode
+			window.location.href = '/profile?setup=true';
+		}			// Add event listeners
 			document.addEventListener('DOMContentLoaded', () => {
+				loadUsername();
 				const checkboxes = ['accept-terms', 'accept-privacy', 'accept-coc'];
 				checkboxes.forEach((id) => {
 					const checkbox = document.getElementById(id);
