@@ -1,6 +1,6 @@
 {
 	"platform": {
-		"apiRuntime": "node:22"
+		"apiRuntime": "node:20"
 	},
 	"routes": [
 		{
@@ -12,11 +12,7 @@
 			"redirect": "/.auth/logout"
 		},
 		{
-			"route": "/api/profile-save",
-			"allowedRoles": ["authenticated"]
-		},
-		{
-			"route": "/api/account-delete",
+			"route": "/api/*",
 			"allowedRoles": ["authenticated"]
 		},
 		{
@@ -25,12 +21,12 @@
 		},
 		{
 			"route": "/welcome",
-			"allowedRoles": ["authenticated"]
+			"redirect": "/profile?setup=true"
 		}
 	],
 	"responseOverrides": {
 		"401": {
-			"redirect": "/.auth/login/github?post_login_redirect_uri=.referrer",
+			"redirect": "/.auth/login/github?post_login_redirect_uri=/welcome",
 			"statusCode": 302
 		}
 	},
