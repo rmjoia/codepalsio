@@ -1,494 +1,453 @@
 ---
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
-import { ProfileRepository } from '../../infrastructure/ProfileRepository';
-
-// Note: This page is protected by Azure Static Web Apps route protection (staticwebapp.config.json)
-// It will only be served to authenticated users
-// The x-ms-client-principal header will be available at runtime on Azure
-
-// For local dev and static builds, use placeholder data
-const userProfile = {
-	userId: 'placeholder-user-id',
-	displayName: 'Your Name',
-	bio: '',
-	skills: [],
-	interests: [],
-	location: '',
-	timezone: '',
-	availability: 'active',
-};
-
-const user = {
-	userId: 'placeholder-user-id',
-	githubUsername: 'username',
-	avatarUrl: '',
-};
-
-// Check if we're in edit mode
-const isEditMode = Astro.url.searchParams.get('edit') === 'true';
 ---
 
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>{isEditMode ? 'Edit Profile' : 'My Profile'} - CodePals</title>
-	</head>
-	<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
-		<Header />
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My Profile - CodePals</title>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
+<Header />
 
-		<main class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12">
-			<div class="bg-white rounded-2xl shadow-lg p-8 mb-8">
-				<div class="flex items-start justify-between gap-6">
-					<div class="flex items-start gap-6">
-						<img
-							src={user?.avatarUrl}
-							alt={user?.githubUsername}
-							class="w-24 h-24 rounded-full border-4 border-primary-100"
-						/>
-						<div class="flex-1">
-							<h1 class="text-3xl font-bold text-slate-900 mb-2">
-								@{user?.githubUsername}
-							</h1>
-							<p class="text-slate-600 mb-4">
-								CodePals Member
-							</p>
-						</div>
-					</div>
-					
-					{!isEditMode ? (
-						<button
-							onclick="window.location.href='/profile?edit=true'"
-							class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center gap-2"
-						>
-							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-							</svg>
-							Edit Profile
-						</button>
-					) : (
-						<button
-							onclick="window.location.href='/profile'"
-							class="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
-						>
-							Cancel
-						</button>
-					)}
-				</div>
-			</div>
+<main class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12">
+<!-- Loading state -->
+<div id="loading-state" class="bg-white rounded-2xl shadow-lg p-8 text-center">
+<svg class="w-8 h-8 animate-spin mx-auto mb-4 text-primary-500" fill="none" viewBox="0 0 24 24">
+<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+</svg>
+<p class="text-slate-600">Loading your profile...</p>
+</div>
 
-			{!isEditMode ? (
-				<>
-				{(!userProfile.bio || userProfile.skills.length < 2 || userProfile.interests.length < 2) && (
-					<div class="bg-amber-50 border border-amber-200 rounded-xl p-6 mb-8">
-						<div class="flex items-start gap-4">
-							<svg class="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-							</svg>
-							<div>
-								<h3 class="font-semibold text-amber-900 mb-1">Complete your profile</h3>
-								<p class="text-amber-800 text-sm mb-3">
-									Add your bio, skills, and interests to help other CodePals find and connect with you.
-								</p>
-								<button 
-									onclick="window.location.href='/profile?edit=true'"
-									class="text-sm font-medium text-amber-700 hover:text-amber-800 underline"
-								>
-									Complete your profile →
-								</button>
-							</div>
-						</div>
-					</div>
-				)}
+<!-- Error state -->
+<div id="error-state" class="hidden bg-red-50 border border-red-200 rounded-2xl shadow-lg p-8 text-center">
+<p class="text-red-700 font-semibold mb-4">Unable to load your profile</p>
+<p id="error-message" class="text-red-600 mb-4"></p>
+<a href="/" class="text-red-700 hover:underline">Return to home</a>
+</div>
 
-				<div class="space-y-6">
-					<div class="bg-white rounded-xl shadow p-6">
-						<h2 class="text-xl font-bold text-slate-900 mb-4">About Me</h2>
-						{userProfile?.bio ? (
-							<p class="text-slate-700 whitespace-pre-wrap">{userProfile.bio}</p>
-						) : (
-							<p class="text-slate-600 italic">
-								No bio added yet. Click "Edit Profile" to add one.
-							</p>
-						)}
-					</div>
+<!-- Profile content -->
+<div id="profile-content" class="hidden"></div>
+</main>
 
-					<div class="bg-white rounded-xl shadow p-6">
-						<h2 class="text-xl font-bold text-slate-900 mb-4">Skills</h2>
-						{userProfile?.skills?.length > 0 ? (
-							<div class="flex flex-wrap gap-2">
-								{userProfile.skills.map((skill: string) => (
-									<span class="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm">
-										{skill}
-									</span>
-								))}
-							</div>
-						) : (
-							<p class="text-slate-600 italic">
-								No skills added yet. Click "Edit Profile" to add some.
-							</p>
-						)}
-					</div>
+<Footer />
 
-					<div class="bg-white rounded-xl shadow p-6">
-						<h2 class="text-xl font-bold text-slate-900 mb-4">Interests</h2>
-						{userProfile?.interests?.length > 0 ? (
-							<div class="flex flex-wrap gap-2">
-								{userProfile.interests.map((interest: string) => (
-									<span class="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">
-										{interest}
-									</span>
-								))}
-							</div>
-						) : (
-							<p class="text-slate-600 italic">
-								No interests added yet. Click "Edit Profile" to add some.
-							</p>
-						)}
-					</div>
+<script is:inline>
+let currentProfile = null;
+let skills = new Set();
+let interests = new Set();
 
-					{(userProfile?.location || userProfile?.timezone || userProfile?.availability) && (
-						<div class="bg-white rounded-xl shadow p-6">
-							<h2 class="text-xl font-bold text-slate-900 mb-4">Details</h2>
-							<div class="space-y-2">
-								{userProfile.location && (
-									<p class="text-slate-700">
-										<span class="font-semibold">Location:</span> {userProfile.location}
-									</p>
-								)}
-								{userProfile.timezone && (
-									<p class="text-slate-700">
-										<span class="font-semibold">Timezone:</span> {userProfile.timezone}
-									</p>
-								)}
-								{userProfile.availability && (
-									<p class="text-slate-700">
-										<span class="font-semibold">Availability:</span> <span class="capitalize">{userProfile.availability.replace('_', ' ')}</span>
-									</p>
-								)}
-							</div>
-						</div>
-					)}
-				</div>
-				</>
-			) : (
-				<div class="bg-white rounded-2xl shadow-lg p-8">
-					<h2 class="text-2xl font-bold text-slate-900 mb-6">Edit Your Profile</h2>
-					
-				<form id="profile-form" class="space-y-6">
-					<div>
-							<label for="displayName" class="block text-sm font-semibold text-slate-900 mb-2">
-								Display Name *
-							</label>
-							<input
-								type="text"
-								id="displayName"
-								name="displayName"
-								required
-								value={userProfile?.displayName || user?.githubUsername || ''}
-								placeholder="How should we call you?"
-								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-							/>
-						</div>
+async function loadProfile() {
+try {
+// Get user info from /.auth/me (built-in Azure SWA endpoint)
+const authResponse = await fetch('/.auth/me');
+const authData = await authResponse.json();
 
-						<div>
-							<label for="bio" class="block text-sm font-semibold text-slate-900 mb-2">
-								Bio *
-							</label>
-							<textarea
-								id="bio"
-								name="bio"
-								required
-								rows="4"
-								maxlength="500"
-								placeholder="Tell us about yourself, your interests, and what you're looking for in a CodePal..."
-								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-							>{userProfile?.bio || ''}</textarea>
-							<p class="mt-1 text-sm text-slate-500">
-								<span id="bio-count">0</span>/500 characters (minimum 50)
-							</p>
-						</div>
+if (!authData.clientPrincipal) {
+throw new Error('Not authenticated');
+}
 
-						<div>
-							<label class="block text-sm font-semibold text-slate-900 mb-2">
-								Skills * (at least 2)
-							</label>
-							<input
-								type="text"
-								id="skills-input"
-								placeholder="Type a skill and press Enter to add (e.g., C#, JavaScript, Python)"
-								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-							/>
-							<p class="mt-1 text-sm text-slate-500">
-								💡 Type each skill and press <kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">Enter</kbd> or <kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">comma</kbd> to add it
-							</p>
-							<div id="skills-container" class="flex flex-wrap gap-2 mt-3 min-h-[40px]">
-							</div>
-						</div>
+const userData = authData.clientPrincipal;
+const username = userData.userDetails; // GitHub username
+const avatarUrl = `https://avatars.githubusercontent.com/${username}?v=4`; // Use username for avatar
 
-						<div>
-							<label class="block text-sm font-semibold text-slate-900 mb-2">
-								Interests * (at least 2)
-							</label>
-							<input
-								type="text"
-								id="interests-input"
-								placeholder="Type an interest and press Enter to add (e.g., Web Development, AI)"
-								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-							/>
-							<p class="mt-1 text-sm text-slate-500">
-								💡 Type each interest and press <kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">Enter</kbd> or <kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">comma</kbd> to add it
-							</p>
-							<div id="interests-container" class="flex flex-wrap gap-2 mt-3 min-h-[40px]">
-							</div>
-					</div>
+// Store/update user in Cosmos DB via API
+try {
+await fetch('/api/auth/user', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({
+userId: userData.userId,
+username: username,
+avatarUrl: avatarUrl,
+}),
+});
+} catch (e) {
+// If user storage fails, continue - it's not critical for profile display
+console.warn('User storage failed:', e);
+}
 
-					<div class="grid md:grid-cols-2 gap-6">
-							<div>
-								<label for="location" class="block text-sm font-semibold text-slate-900 mb-2">
-									Location
-								</label>
-								<input
-									type="text"
-									id="location"
-									name="location"
-									value={userProfile?.location || ''}
-									placeholder="e.g., Dublin, Ireland"
-									class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-								/>
-							</div>
+// Try to load existing profile from Cosmos DB
+let profileResponse;
+try {
+profileResponse = await fetch(`/api/profile/get?userId=${encodeURIComponent(userData.userId)}`);
+if (profileResponse.ok) {
+currentProfile = await profileResponse.json();
+}
+} catch (e) {
+// Profile might not exist yet, that's ok
+}
 
-							<div>
-								<label for="timezone" class="block text-sm font-semibold text-slate-900 mb-2">
-									Timezone
-								</label>
-								<select
-									id="timezone"
-									name="timezone"
-									class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-								>
-									<option value="">Select timezone</option>
-									<option value="UTC">UTC</option>
-									<option value="Europe/Dublin">Europe/Dublin (GMT)</option>
-									<option value="Europe/London">Europe/London (GMT)</option>
-									<option value="America/New_York">America/New York (EST)</option>
-									<option value="America/Los_Angeles">America/Los Angeles (PST)</option>
-									<option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
-									<option value="Australia/Sydney">Australia/Sydney (AEDT)</option>
-								</select>
-							</div>
-						</div>
+// If no profile from API, create empty one
+if (!currentProfile) {
+currentProfile = {
+displayName: username,
+bio: '',
+skills: [],
+interests: [],
+location: '',
+timezone: '',
+availability: 'active'
+};
+}
 
-						<div>
-							<label class="block text-sm font-semibold text-slate-900 mb-2">
-								Availability
-							</label>
-							<div class="space-y-2">
-								<label class="flex items-center gap-2">
-									<input type="radio" name="availability" value="active" class="text-primary-500" checked />
-									<span class="text-slate-700">Active - Looking for a CodePal</span>
-								</label>
-								<label class="flex items-center gap-2">
-									<input type="radio" name="availability" value="casual" class="text-primary-500" />
-									<span class="text-slate-700">Casual - Open to occasional connections</span>
-								</label>
-								<label class="flex items-center gap-2">
-									<input type="radio" name="availability" value="unavailable" class="text-primary-500" />
-									<span class="text-slate-700">Not available right now</span>
-								</label>
-							</div>
-					</div>
+// Populate skills and interests sets
+skills = new Set(currentProfile.skills || []);
+interests = new Set(currentProfile.interests || []);
 
-					<div class="flex gap-4 pt-4">
-							<button
-								type="button"
-								onclick="window.location.href='/profile'"
-								class="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
-							>
-								Cancel
-							</button>
-							<button
-								type="submit"
-								id="submit-btn"
-								class="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex-1"
-							>
-								Save Profile
-							</button>
-						</div>
-					</form>
-				</div>
-			)}
-		</main>
+// Update UI
+document.getElementById('loading-state').classList.add('hidden');
+document.getElementById('profile-content').classList.remove('hidden');
 
-		<Footer />
+// Render content
+renderProfile(username, avatarUrl);
 
-		{isEditMode && (
-			<script is:inline define:vars={{ profile: userProfile }}>
-				const skills = new Set(profile?.skills || []);
-				const interests = new Set(profile?.interests || []);
+// Setup form
+setupForm();
 
-				// Bio character count
-				const bioTextarea = document.getElementById('bio');
-				const bioCount = document.getElementById('bio-count');
-				bioTextarea?.addEventListener('input', () => {
-					if (bioCount) {
-						bioCount.textContent = bioTextarea.value.length.toString();
-					}
-				});
+// Check for edit mode in URL (either from ?edit=true or ?setup=true from welcome redirect)
+const urlParams = new URLSearchParams(window.location.search);
+const isEditMode = urlParams.get('edit') === 'true' || urlParams.get('setup') === 'true';
+if (isEditMode) {
+enterEditMode();
+}
+} catch (error) {
+console.error('Error loading profile:', error);
+document.getElementById('loading-state').classList.add('hidden');
+document.getElementById('error-state').classList.remove('hidden');
+document.getElementById('error-message').textContent = error instanceof Error ? error.message : 'Unable to load profile';
+}
+}
 
-				// Skills management
-				const skillsInput = document.getElementById('skills-input');
-				const skillsContainer = document.getElementById('skills-container');
+function renderProfile(username, avatarUrl) {
+const container = document.getElementById('profile-content');
 
-				skillsInput?.addEventListener('keypress', (e) => {
-					if (e.key === 'Enter' || e.key === ',') {
-						e.preventDefault();
-						const skill = skillsInput.value.replace(',', '').trim();
-						if (skill && !skills.has(skill)) {
-							skills.add(skill);
-							addTag(skill, 'skill', skillsContainer);
-							skillsInput.value = '';
-						}
-					}
-				});
+const isIncomplete = !currentProfile.bio || (currentProfile.skills?.length || 0) < 2 || (currentProfile.interests?.length || 0) < 2;
 
-				// Interests management
-				const interestsInput = document.getElementById('interests-input');
-				const interestsContainer = document.getElementById('interests-container');
+container.innerHTML = `
+<!-- User header card -->
+<div class="bg-white rounded-2xl shadow-lg p-8 mb-8">
+<div class="flex items-start justify-between gap-6">
+<div class="flex items-start gap-6">
+<img src="${avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`}" alt="User Avatar" class="w-24 h-24 rounded-full border-4 border-primary-100" />
+<div class="flex-1">
+<h1 class="text-3xl font-bold text-slate-900 mb-2">@${username}</h1>
+<p class="text-slate-600 mb-4">CodePals Member</p>
+</div>
+</div>
+<div class="flex gap-2">
+<button id="edit-btn" onclick="enterEditMode()" class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center gap-2">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+</svg>
+Edit Profile
+</button>
+<button id="cancel-btn" onclick="exitEditMode()" class="hidden px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors">Cancel</button>
+</div>
+</div>
+</div>
 
-				interestsInput?.addEventListener('keypress', (e) => {
-					if (e.key === 'Enter' || e.key === ',') {
-						e.preventDefault();
-						const interest = interestsInput.value.replace(',', '').trim();
-						if (interest && !interests.has(interest)) {
-							interests.add(interest);
-							addTag(interest, 'interest', interestsContainer);
-							interestsInput.value = '';
-						}
-					}
-				});
+<!-- View mode -->
+<div id="view-mode">
+${isIncomplete ? `
+<div class="bg-amber-50 border border-amber-200 rounded-xl p-6 mb-8">
+<div class="flex items-start gap-4">
+<svg class="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+</svg>
+<div>
+<h3 class="font-semibold text-amber-900 mb-1">Complete your profile</h3>
+<p class="text-amber-800 text-sm mb-3">Add your bio, skills, and interests to help other CodePals find and connect with you.</p>
+<button onclick="enterEditMode()" class="text-sm font-medium text-amber-700 hover:text-amber-800 underline">Complete your profile →</button>
+</div>
+</div>
+</div>
+` : ''}
 
-				function addTag(text, type, container) {
-					const tag = document.createElement('span');
-					tag.className = 'inline-flex items-center gap-2 px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm';
-					tag.innerHTML = `
-						${text}
-						<button type="button" class="hover:text-primary-900 text-lg leading-none" onclick="removeTag('${text}', '${type}')">×</button>
-					`;
-					container.appendChild(tag);
-				}
+<div class="space-y-6">
+<div class="bg-white rounded-xl shadow p-6">
+<h2 class="text-xl font-bold text-slate-900 mb-4">About Me</h2>
+${currentProfile.bio ? `<p class="text-slate-700 whitespace-pre-wrap">${currentProfile.bio}</p>` : '<p class="italic text-slate-600">No bio added yet. Click "Edit Profile" to add one.</p>'}
+</div>
 
-				window.removeTag = function(text, type) {
-					if (type === 'skill') {
-						skills.delete(text);
-					} else {
-						interests.delete(text);
-					}
-					renderTags();
-				};
+<div class="bg-white rounded-xl shadow p-6">
+<h2 class="text-xl font-bold text-slate-900 mb-4">Skills</h2>
+${currentProfile.skills && currentProfile.skills.length > 0 ? `<div class="flex flex-wrap gap-2">${currentProfile.skills.map(skill => `<span class="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm">${skill}</span>`).join('')}</div>` : '<p class="italic text-slate-600">No skills added yet. Click "Edit Profile" to add some.</p>'}
+</div>
 
-				function renderTags() {
-					if (skillsContainer) {
-						skillsContainer.innerHTML = '';
-						skills.forEach(skill => addTag(skill, 'skill', skillsContainer));
-					}
-					if (interestsContainer) {
-						interestsContainer.innerHTML = '';
-						interests.forEach(interest => addTag(interest, 'interest', interestsContainer));
-					}
-				}
+<div class="bg-white rounded-xl shadow p-6">
+<h2 class="text-xl font-bold text-slate-900 mb-4">Interests</h2>
+${currentProfile.interests && currentProfile.interests.length > 0 ? `<div class="flex flex-wrap gap-2">${currentProfile.interests.map(interest => `<span class="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">${interest}</span>`).join('')}</div>` : '<p class="italic text-slate-600">No interests added yet. Click "Edit Profile" to add some.</p>'}
+</div>
 
-				// Form submission
-				const form = document.getElementById('profile-form');
-				form?.addEventListener('submit', async (e) => {
-					e.preventDefault();
+${(currentProfile.location || currentProfile.timezone || currentProfile.availability) ? `
+<div class="bg-white rounded-xl shadow p-6">
+<h2 class="text-xl font-bold text-slate-900 mb-4">Details</h2>
+<div class="space-y-2">
+${currentProfile.location ? `<p class="text-slate-700"><span class="font-semibold">Location:</span> ${currentProfile.location}</p>` : ''}
+${currentProfile.timezone ? `<p class="text-slate-700"><span class="font-semibold">Timezone:</span> ${currentProfile.timezone}</p>` : ''}
+${currentProfile.availability ? `<p class="text-slate-700"><span class="font-semibold">Availability:</span> <span class="capitalize">${currentProfile.availability.replace('_', ' ')}</span></p>` : ''}
+</div>
+</div>
+` : ''}
+</div>
+</div>
 
-					const displayName = document.getElementById('displayName').value;
-					const bio = document.getElementById('bio').value;
-					const location = document.getElementById('location').value;
-					const timezone = document.getElementById('timezone').value;
-					const availability = document.querySelector('input[name="availability"]:checked')?.value;
+<!-- Edit mode -->
+<div id="edit-mode" class="hidden bg-white rounded-2xl shadow-lg p-8">
+<h2 class="text-2xl font-bold text-slate-900 mb-6">Edit Your Profile</h2>
+<form id="profile-form" class="space-y-6">
+<div>
+<label for="displayName" class="block text-sm font-semibold text-slate-900 mb-2">Display Name *</label>
+<input type="text" id="displayName" name="displayName" required placeholder="How should we call you?" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+</div>
 
-					// Validation
-					if (bio.length < 50) {
-						alert('Bio must be at least 50 characters');
-						return;
-					}
+<div>
+<label for="bio" class="block text-sm font-semibold text-slate-900 mb-2">Bio *</label>
+<textarea id="bio" name="bio" required rows="4" maxlength="500" placeholder="Tell us about yourself..." class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"></textarea>
+<p class="mt-1 text-sm text-slate-500"><span id="bio-count">0</span>/500 characters (minimum 50)</p>
+</div>
 
-					if (skills.size < 2) {
-						alert('Please add at least 2 skills');
-						return;
-					}
+<div>
+<label class="block text-sm font-semibold text-slate-900 mb-2">Skills * (at least 2)</label>
+<input type="text" id="skills-input" placeholder="Type a skill and press Enter" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+<div id="skills-container" class="flex flex-wrap gap-2 mt-3 min-h-[40px]"></div>
+</div>
 
-					if (interests.size < 2) {
-						alert('Please add at least 2 interests');
-						return;
-					}
+<div>
+<label class="block text-sm font-semibold text-slate-900 mb-2">Interests * (at least 2)</label>
+<input type="text" id="interests-input" placeholder="Type an interest and press Enter" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+<div id="interests-container" class="flex flex-wrap gap-2 mt-3 min-h-[40px]"></div>
+</div>
 
-					const profileData = {
-						displayName,
-						bio,
-						skills: Array.from(skills),
-						interests: Array.from(interests),
-						location,
-						timezone,
-						availability: availability || 'active'
-					};
+<div class="grid md:grid-cols-2 gap-6">
+<div>
+<label for="location" class="block text-sm font-semibold text-slate-900 mb-2">Location</label>
+<input type="text" id="location" name="location" placeholder="e.g., Dublin, Ireland" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+</div>
+<div>
+<label for="timezone" class="block text-sm font-semibold text-slate-900 mb-2">Timezone</label>
+<select id="timezone" name="timezone" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+<option value="">Select timezone</option>
+<option value="UTC">UTC</option>
+<option value="Europe/Dublin">Europe/Dublin (GMT)</option>
+<option value="Europe/London">Europe/London (GMT)</option>
+<option value="America/New_York">America/New York (EST)</option>
+<option value="America/Los_Angeles">America/Los Angeles (PST)</option>
+<option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+<option value="Australia/Sydney">Australia/Sydney (AEDT)</option>
+</select>
+</div>
+</div>
 
-					// Submit to API
-					try {
-						const response = await fetch('/api/profile/save', {
-							method: 'POST',
-							headers: {
-								'Content-Type': 'application/json',
-							},
-							body: JSON.stringify(profileData),
-						});
+<div>
+<label class="block text-sm font-semibold text-slate-900 mb-2">Availability</label>
+<div class="space-y-2">
+<label class="flex items-center gap-2"><input type="radio" name="availability" value="active" class="text-primary-500" checked /><span class="text-slate-700">Active - Looking for a CodePal</span></label>
+<label class="flex items-center gap-2"><input type="radio" name="availability" value="casual" class="text-primary-500" /><span class="text-slate-700">Casual - Open to occasional connections</span></label>
+<label class="flex items-center gap-2"><input type="radio" name="availability" value="unavailable" class="text-primary-500" /><span class="text-slate-700">Not available right now</span></label>
+</div>
+</div>
 
-						if (!response.ok) {
-							const error = await response.json();
-							throw new Error(error.error || 'Failed to save profile');
-						}
+<div class="flex gap-4 pt-4">
+<button type="button" onclick="exitEditMode()" class="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors">Cancel</button>
+<button type="submit" id="submit-btn" class="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex-1">Save Profile</button>
+</div>
+</form>
+</div>
+`;
 
-						// Success - redirect to view mode
-						window.location.href = '/profile';
-					} catch (error) {
-						console.error('Save error:', error);
-						alert(error instanceof Error ? error.message : 'Failed to save profile');
-					}
-				});
+// Re-setup form handlers after rendering
+setupFormHandlers();
+}
 
-				// Initialize existing skills/interests
-				if (profile?.skills) {
-					skills.forEach(skill => addTag(skill, 'skill', skillsContainer));
-				}
-				if (profile?.interests) {
-					interests.forEach(interest => addTag(interest, 'interest', interestsContainer));
-				}
+function setupForm() {
+// Form submission handler will be set up after form is rendered
+}
 
-				// Update bio character count on initialization
-				if (bioTextarea && bioCount) {
-					bioCount.textContent = bioTextarea.value.length.toString();
-				}
+function setupFormHandlers() {
+// Populate form with current data
+document.getElementById('displayName').value = currentProfile.displayName || '';
+document.getElementById('bio').value = currentProfile.bio || '';
+document.getElementById('location').value = currentProfile.location || '';
+document.getElementById('timezone').value = currentProfile.timezone || '';
 
-				// Set timezone if it exists
-				if (profile?.timezone) {
-					const tzSelect = document.getElementById('timezone');
-					if (tzSelect) {
-						tzSelect.value = profile.timezone;
-					}
-				}
+const availInput = document.querySelector(`input[name="availability"][value="${currentProfile.availability || 'active'}"]`);
+if (availInput) availInput.checked = true;
 
-				// Set availability if it exists
-				if (profile?.availability) {
-					const availInput = document.querySelector(`input[name="availability"][value="${profile.availability}"]`);
-					if (availInput) {
-						availInput.checked = true;
-					}
-				}
-			</script>
-		)}
-	</body>
+// Bio counter
+const bioTextarea = document.getElementById('bio');
+const bioCount = document.getElementById('bio-count');
+bioCount.textContent = bioTextarea.value.length.toString();
+bioTextarea.addEventListener('input', () => {
+bioCount.textContent = bioTextarea.value.length.toString();
+});
+
+// Skills/Interests input handlers
+const skillsInput = document.getElementById('skills-input');
+const interestsInput = document.getElementById('interests-input');
+
+skillsInput.addEventListener('keypress', (e) => {
+if (e.key === 'Enter' || e.key === ',') {
+e.preventDefault();
+const skill = skillsInput.value.replace(',', '').trim();
+if (skill && !skills.has(skill)) {
+skills.add(skill);
+renderTags();
+skillsInput.value = '';
+}
+}
+});
+
+interestsInput.addEventListener('keypress', (e) => {
+if (e.key === 'Enter' || e.key === ',') {
+e.preventDefault();
+const interest = interestsInput.value.replace(',', '').trim();
+if (interest && !interests.has(interest)) {
+interests.add(interest);
+renderTags();
+interestsInput.value = '';
+}
+}
+});
+
+// Initial render of tags
+renderTags();
+
+// Form submission
+const form = document.getElementById('profile-form');
+form.addEventListener('submit', handleFormSubmit);
+}
+
+function renderTags() {
+const skillsContainer = document.getElementById('skills-container');
+const interestsContainer = document.getElementById('interests-container');
+
+skillsContainer.innerHTML = '';
+skills.forEach(skill => {
+const tag = document.createElement('span');
+tag.className = 'inline-flex items-center gap-2 px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm';
+tag.innerHTML = `${skill} <button type="button" class="hover:text-primary-900 text-lg leading-none" onclick="removeSkill('${skill.replace(/'/g, "\\'")}'); return false;">×</button>`;
+skillsContainer.appendChild(tag);
+});
+
+interestsContainer.innerHTML = '';
+interests.forEach(interest => {
+const tag = document.createElement('span');
+tag.className = 'inline-flex items-center gap-2 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm';
+tag.innerHTML = `${interest} <button type="button" class="hover:text-purple-900 text-lg leading-none" onclick="removeInterest('${interest.replace(/'/g, "\\'")}'); return false;">×</button>`;
+interestsContainer.appendChild(tag);
+});
+}
+
+window.removeSkill = function(skill) {
+skills.delete(skill);
+renderTags();
+};
+
+window.removeInterest = function(interest) {
+interests.delete(interest);
+renderTags();
+};
+
+async function handleFormSubmit(e) {
+e.preventDefault();
+
+const displayName = document.getElementById('displayName').value;
+const bio = document.getElementById('bio').value;
+const location = document.getElementById('location').value;
+const timezone = document.getElementById('timezone').value;
+const availability = document.querySelector('input[name="availability"]:checked')?.value;
+
+if (bio.length < 50) {
+alert('Bio must be at least 50 characters');
+return;
+}
+
+if (skills.size < 2) {
+alert('Please add at least 2 skills');
+return;
+}
+
+if (interests.size < 2) {
+alert('Please add at least 2 interests');
+return;
+}
+
+// Get userId from auth context
+const authResponse = await fetch('/.auth/me');
+const authData = await authResponse.json();
+const userId = authData.clientPrincipal?.userId;
+
+const profileData = {
+userId,
+displayName,
+bio,
+skills: Array.from(skills),
+interests: Array.from(interests),
+location,
+timezone,
+availability: availability || 'active'
+};
+
+try {
+const submitBtn = document.getElementById('submit-btn');
+submitBtn.disabled = true;
+submitBtn.textContent = 'Saving...';
+
+const response = await fetch('/api/profile/save', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify(profileData),
+});
+
+if (!response.ok) {
+const error = await response.json();
+throw new Error(error.error || 'Failed to save profile');
+}
+
+currentProfile = { ...currentProfile, ...profileData };
+skills = new Set(profileData.skills);
+interests = new Set(profileData.interests);
+
+// Show success message
+submitBtn.textContent = '✓ Profile saved!';
+submitBtn.style.backgroundColor = '#10b981';
+
+// Exit edit mode after showing success
+setTimeout(() => {
+	exitEditMode();
+	submitBtn.textContent = 'Save Profile';
+	submitBtn.style.backgroundColor = '';
+}, 1500);
+} catch (error) {
+console.error('Save error:', error);
+alert(error instanceof Error ? error.message : 'Failed to save profile');
+const submitBtn = document.getElementById('submit-btn');
+submitBtn.disabled = false;
+submitBtn.textContent = 'Save Profile';
+}
+}
+
+function enterEditMode() {
+document.getElementById('view-mode').classList.add('hidden');
+document.getElementById('edit-mode').classList.remove('hidden');
+document.getElementById('edit-btn').classList.add('hidden');
+document.getElementById('cancel-btn').classList.remove('hidden');
+}
+
+function exitEditMode() {
+document.getElementById('view-mode').classList.remove('hidden');
+document.getElementById('edit-mode').classList.add('hidden');
+document.getElementById('edit-btn').classList.remove('hidden');
+document.getElementById('cancel-btn').classList.add('hidden');
+}
+
+window.addEventListener('load', loadProfile);
+</script>
+</body>
 </html>
