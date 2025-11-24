@@ -1,8 +1,7 @@
 import { defineConfig } from 'astro/config';
 import tailwind from '@astrojs/tailwind';
 
-// Static mode for Azure Static Web Apps
-// API routes handled by Azure Functions in /api directory
+// Static mode - pages prerendered, API routes in /api folder
 export default defineConfig({
 	integrations: [tailwind()],
 	site: 'https://codepals.io',

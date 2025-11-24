@@ -27,3 +27,5 @@ yarn-error.log*
 *.Zone.Identifier
 Thumbs.db
 
+# Azure
+*-app.zip
