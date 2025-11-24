@@ -41,11 +41,13 @@ app.http('acceptTerms', {
                     termsAccepted: true,
                     termsAcceptedDate: new Date().toISOString(),
                 };
-                await container.item(userId, userId).replace(updatedUser);
+                const { resource: savedUser } = await container
+                    .item(userId, userId)
+                    .replace(updatedUser);
 
                 return {
                     status: 200,
-                    jsonBody: updatedUser,
+                    jsonBody: savedUser,
                 };
             } catch (e) {
                 return {

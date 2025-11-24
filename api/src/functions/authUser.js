@@ -31,24 +31,30 @@ app.http('authUser', {
             const container = client.database(database).container('users');
 
             let isNewUser = false;
-            let userObj = {
-                id: userId,
-                userId,
-                githubUsername: username,
-                avatarUrl,
-                registrationDate: new Date().toISOString(),
-                lastLogin: new Date().toISOString(),
-                termsAccepted: false,
-            };
+            let userObj;
 
             try {
                 const existingUser = await container.item(userId, userId).read();
-                // User exists, update it but preserve termsAccepted flag
-                userObj = { ...existingUser.resource, ...userObj };
+                // User exists - preserve all existing fields (including termsAccepted)
+                userObj = {
+                    ...existingUser.resource,
+                    avatarUrl, // Update avatar in case it changed
+                    lastLogin: new Date().toISOString(),
+                    // Explicitly preserve termsAccepted and termsAcceptedDate
+                };
                 await container.item(userId, userId).replace(userObj);
             } catch (e) {
-                // User doesn't exist, create new (isNewUser = true)
+                // User doesn't exist, create new
                 isNewUser = true;
+                userObj = {
+                    id: userId,
+                    userId,
+                    githubUsername: username,
+                    avatarUrl,
+                    registrationDate: new Date().toISOString(),
+                    lastLogin: new Date().toISOString(),
+                    termsAccepted: false,
+                };
                 await container.items.create(userObj);
             }
 
