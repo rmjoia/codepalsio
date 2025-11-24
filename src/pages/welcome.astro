@@ -139,6 +139,32 @@ const user = Astro.url.searchParams.get('user') || 'there';
 					const data = await response.json();
 					if (data.clientPrincipal && data.clientPrincipal.userDetails) {
 						const username = data.clientPrincipal.userDetails;
+						const userId = data.clientPrincipal.userId;
+						
+						// Check if user has already accepted terms
+						try {
+							const userResponse = await fetch('/api/auth/user', {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify({
+									userId: userId,
+									username: username,
+									avatarUrl: `https://avatars.githubusercontent.com/${username}?v=4`,
+								}),
+							});
+							
+							if (userResponse.ok) {
+								const userRecord = await userResponse.json();
+								// If user already accepted terms, redirect to profile
+								if (userRecord.termsAccepted) {
+									window.location.href = '/profile';
+									return;
+								}
+							}
+						} catch (e) {
+							console.warn('Failed to check user terms:', e);
+						}
+						
 						const heading = document.querySelector('h1');
 						if (heading) {
 							heading.textContent = `Welcome to CodePals, @${username}!`;

@@ -95,6 +95,12 @@
 									</svg>
 									My Profile
 								</a>
+								<button onclick="openDeleteDialog()" class="flex items-center gap-3 px-4 py-2 text-red-600 hover:bg-red-50 w-full text-left">
+									<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+									</svg>
+									Delete Account
+								</button>
 								<a href="/.auth/logout" class="flex items-center gap-3 px-4 py-2 text-slate-700 hover:bg-slate-50 rounded-b-lg">
 									<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
@@ -120,6 +126,12 @@
 							</svg>
 							My Profile
 						</a>
+						<button onclick="openDeleteDialog()" class="flex items-center gap-3 px-4 py-2 text-red-600 hover:bg-red-50 w-full text-left rounded-lg">
+							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+							</svg>
+							Delete Account
+						</button>
 						<a href="/.auth/logout" class="flex items-center gap-3 px-4 py-2 text-slate-700 hover:bg-slate-50 rounded-lg">
 							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
@@ -160,5 +172,121 @@
 			if (authMenu) authMenu.innerHTML = desktopHTML;
 			if (mobileAuth) mobileAuth.innerHTML = mobileHTML;
 		}
+
+		// Delete account dialog functions with enhanced confirmation
+		window.openDeleteDialog = function() {
+			const modal = document.createElement('div');
+			modal.id = 'delete-modal';
+			modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+			modal.innerHTML = `
+				<div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+					<div class="bg-red-50 border-b border-red-200 px-6 py-4">
+						<div class="flex items-center gap-3">
+							<svg class="w-6 h-6 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+							</svg>
+							<h2 class="text-2xl font-bold text-red-900">Delete Your Account?</h2>
+						</div>
+					</div>
+					
+					<div class="px-6 py-6 space-y-4">
+						<p class="text-slate-700 font-semibold">This action cannot be undone.</p>
+						
+						<div class="bg-red-50 border border-red-200 rounded-lg p-4 space-y-2">
+							<p class="text-sm font-semibold text-red-900">This will:</p>
+							<ul class="text-sm text-red-800 space-y-1 ml-4">
+								<li>✕ Delete your profile and all personal data</li>
+								<li>✕ Remove you from the CodePals platform</li>
+								<li>✕ Permanently revoke your authentication</li>
+								<li>✕ Immediately log you out</li>
+							</ul>
+						</div>
+						
+						<div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+							<p class="text-sm text-blue-900"><strong>Recovery window:</strong> You have <strong>90 days</strong> to contact support to recover your account. After 90 days, deletion is permanent.</p>
+						</div>
+					</div>
+					
+					<div class="px-6 py-4 border-t border-slate-200 flex gap-3">
+						<button onclick="closeDeleteDialog()" class="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium">
+							Cancel - Keep My Account
+						</button>
+						<button onclick="deleteAccount()" class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium cursor-pointer">
+							Yes, Delete Permanently
+						</button>
+					</div>
+					
+					<div class="px-6 py-3 bg-slate-50 border-t border-slate-200 rounded-b-lg">
+						<p class="text-xs text-slate-500 text-center">By confirming, you're requesting permanent deletion of your CodePals account.</p>
+					</div>
+				</div>
+			`;
+			
+			// Close on background click
+			modal.addEventListener('click', (e) => {
+				if (e.target === modal) closeDeleteDialog();
+			});
+			
+			document.body.appendChild(modal);
+		};
+
+		window.closeDeleteDialog = function() {
+			const modal = document.getElementById('delete-modal');
+			if (modal) {
+				modal.remove();
+			}
+		};
+
+		window.deleteAccount = async function() {
+			try {
+				// Get the delete button and disable it
+				const deleteBtn = event.target;
+				const originalText = deleteBtn.textContent;
+				deleteBtn.disabled = true;
+				deleteBtn.textContent = '⏳ Deleting...';
+
+				const authResponse = await fetch('/.auth/me');
+				const authData = await authResponse.json();
+				const userId = authData.clientPrincipal?.userId;
+
+				if (!userId) {
+					alert('Unable to identify user. Please try again.');
+					deleteBtn.disabled = false;
+					deleteBtn.textContent = originalText;
+					return;
+				}
+
+				const response = await fetch('/api/account/delete', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ userId }),
+				});
+
+				if (response.ok) {
+					const data = await response.json();
+					// Show confirmation before redirect
+					deleteBtn.textContent = '✓ Account deleted';
+					deleteBtn.className = deleteBtn.className.replace('bg-red-600', 'bg-green-600').replace('hover:bg-red-700', 'hover:bg-green-700');
+					
+					// Redirect to logout after a short delay
+					setTimeout(() => {
+						window.location.href = '/.auth/logout?post_logout_redirect_uri=/';
+					}, 1500);
+				} else {
+					const error = await response.json();
+					alert('Failed to delete account: ' + (error.error || 'Unknown error'));
+					deleteBtn.disabled = false;
+					deleteBtn.textContent = originalText;
+					closeDeleteDialog();
+				}
+			} catch (error) {
+				console.error('Error deleting account:', error);
+				alert('Failed to delete account. Please try again.');
+				const deleteBtn = event.target;
+				deleteBtn.disabled = false;
+				deleteBtn.textContent = 'Yes, Delete Permanently';
+				closeDeleteDialog();
+			}
+		};
 	})();
 </script>
