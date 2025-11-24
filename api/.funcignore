@@ -1,0 +1,14 @@
+.git
+.gitignore
+.vs
+.vscode
+__azurite_db__*__.json
+__blobstorage__
+__queuestorage__
+.pytest_cache
+.venv
+CVS
+dist
+node_modules
+venv
+.env
