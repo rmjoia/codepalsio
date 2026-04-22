@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 
-export type Availability = 'available' | 'busy' | 'unavailable';
+export type Availability = 'active' | 'casual' | 'unavailable';
 
 export interface ProfileProps {
 	userId: string;

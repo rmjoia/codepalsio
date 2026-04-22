@@ -1,9 +1,7 @@
 ---
-// Call to Action section
-import jwt from 'jsonwebtoken';
+import { getClientPrincipal } from '../lib/getClientPrincipal';
 
-const sessionCookie = Astro.cookies.get('session');
-const isSignedIn = !!sessionCookie?.value;
+const isSignedIn = !!getClientPrincipal(Astro.request);
 ---
 
 <section

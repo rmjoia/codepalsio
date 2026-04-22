@@ -1,53 +1,38 @@
 import type { APIRoute } from 'astro';
-import { AuthService } from '../../../services/AuthService';
 import { UserRepository } from '../../../infrastructure/UserRepository';
+import { ProfileRepository } from '../../../infrastructure/ProfileRepository';
+import { getClientPrincipal } from '../../../lib/getClientPrincipal';
 
-/**
- * GET /api/account/delete
- * Deletes user account and all associated data
- * GDPR compliant data deletion
- */
-export const GET: APIRoute = async ({ cookies, redirect }) => {
-	const sessionToken = cookies.get('session')?.value;
+export const POST: APIRoute = async ({ request }) => {
+	const headers = { 'Content-Type': 'application/json' };
 
-	if (!sessionToken) {
-		return redirect('/?error=not_authenticated', 302);
+	const principal = getClientPrincipal(request);
+	if (!principal) {
+		return new Response(JSON.stringify({ error: 'Not authenticated' }), { status: 401, headers });
 	}
 
 	const connectionString = import.meta.env.COSMOS_DB_CONNECTION_STRING;
 	const database = import.meta.env.COSMOS_DB_DATABASE_NAME;
-	const jwtSecret = import.meta.env.JWT_SECRET;
-
-	if (!connectionString || !database || !jwtSecret) {
-		return redirect('/?error=server_config', 302);
+	if (!connectionString || !database) {
+		return new Response(JSON.stringify({ error: 'Server configuration error' }), {
+			status: 500,
+			headers,
+		});
 	}
 
 	try {
-		const userRepository = new UserRepository(connectionString, database);
-		const authService = new AuthService(
-			userRepository,
-			jwtSecret,
-			'', // Not needed for verification
-			''
-		);
+		const profileRepo = new ProfileRepository(connectionString, database);
+		const userRepo = new UserRepository(connectionString, database);
 
-		// Verify token and get user
-		const payload = authService.verifyToken(sessionToken);
-		if (!payload) {
-			return redirect('/?error=invalid_session', 302);
+		const profile = await profileRepo.findByUserId(principal.userId);
+		if (profile) {
+			await profileRepo.delete(profile.id, principal.userId);
 		}
+		await userRepo.delete(principal.userId);
 
-		// Delete user from database
-		await userRepository.delete(payload.userId);
-
-		// Clear session cookie
-		cookies.delete('session', {
-			path: '/',
-		});
-
-		return redirect('/?message=account_deleted', 302);
-	} catch (err) {
-		console.error('Account deletion error:', err);
-		return redirect('/?error=deletion_failed', 302);
+		return new Response(JSON.stringify({ success: true }), { status: 200, headers });
+	} catch (error) {
+		const message = error instanceof Error ? error.message : 'Deletion failed';
+		return new Response(JSON.stringify({ error: message }), { status: 500, headers });
 	}
 };

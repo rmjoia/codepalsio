@@ -1,10 +1,15 @@
 import { defineConfig } from 'astro/config';
 import tailwind from '@astrojs/tailwind';
+import node from '@astrojs/node';
 
-// Static mode for Azure Static Web Apps
-// API routes handled by Azure Functions in /api directory
+// Server mode for Azure Static Web Apps (Standard tier)
+// dist/client -> static assets served by SWA
+// dist/server -> Node.js SSR handler wrapped as an Azure Function (see api/server.mjs)
 export default defineConfig({
 	integrations: [tailwind()],
 	site: 'https://codepals.io',
-	output: 'static',
+	output: 'server',
+	adapter: node({
+		mode: 'standalone',
+	}),
 });

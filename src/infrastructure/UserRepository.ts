@@ -69,9 +69,16 @@ export class UserRepository {
 	}
 
 	/**
-	 * Delete user
+	 * Delete user. Tolerates missing record.
 	 */
 	async delete(id: string): Promise<void> {
-		await this.container.item(id, id).delete();
+		try {
+			await this.container.item(id, id).delete();
+		} catch (error: unknown) {
+			if (error && typeof error === 'object' && 'code' in error && error.code === 404) {
+				return;
+			}
+			throw error;
+		}
 	}
 }

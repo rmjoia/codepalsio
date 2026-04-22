@@ -1,21 +1,22 @@
 import type { APIRoute } from 'astro';
 import { config } from '../../../services/ConfigService';
+import { getClientPrincipal, hasRole } from '../../../lib/getClientPrincipal';
 
 /**
  * GET /api/config/test
- * Test endpoint to verify configuration source (Key Vault vs env vars)
- * Shows which secrets are loaded and from where
+ * Admin-only: verifies which config source is active and shows masked secret shape.
  */
-export const GET: APIRoute = async () => {
-	const headers = {
-		'Content-Type': 'application/json',
-	};
+export const GET: APIRoute = async ({ request }) => {
+	const headers = { 'Content-Type': 'application/json' };
+
+	const principal = getClientPrincipal(request);
+	if (!hasRole(principal, 'admin')) {
+		return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers });
+	}
 
 	try {
-		// Load all secrets
 		const secrets = await config.loadAllSecrets();
 
-		// Mask sensitive values
 		const maskedSecrets = {
 			githubClientId: secrets.githubClientId.substring(0, 10) + '...',
 			githubClientSecret: '***' + secrets.githubClientSecret.slice(-4),
@@ -39,29 +40,19 @@ export const GET: APIRoute = async () => {
 			timestamp: new Date().toISOString(),
 		};
 
-		return new Response(JSON.stringify(configInfo, null, 2), {
-			status: 200,
-			headers,
-		});
+		return new Response(JSON.stringify(configInfo, null, 2), { status: 200, headers });
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 		return new Response(
-			JSON.stringify(
-				{
-					status: 'error',
-					error: errorMessage,
-					source:
-						process.env.AZURE_KEYVAULT_URL || process.env.KEY_VAULT_URI
-							? 'Azure Key Vault (failed)'
-							: 'Environment Variables',
-				},
-				null,
-				2
-			),
-			{
-				status: 500,
-				headers,
-			}
+			JSON.stringify({
+				status: 'error',
+				error: errorMessage,
+				source:
+					process.env.AZURE_KEYVAULT_URL || process.env.KEY_VAULT_URI
+						? 'Azure Key Vault (failed)'
+						: 'Environment Variables',
+			}),
+			{ status: 500, headers }
 		);
 	}
 };

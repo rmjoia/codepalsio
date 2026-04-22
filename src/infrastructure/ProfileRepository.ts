@@ -59,4 +59,18 @@ export class ProfileRepository {
 		await this.container.items.upsert(data);
 		return profile;
 	}
+
+	/**
+	 * Delete profile. Partition key is userId.
+	 */
+	async delete(profileId: string, userId: string): Promise<void> {
+		try {
+			await this.container.item(profileId, userId).delete();
+		} catch (error: unknown) {
+			if (error && typeof error === 'object' && 'code' in error && error.code === 404) {
+				return;
+			}
+			throw error;
+		}
+	}
 }

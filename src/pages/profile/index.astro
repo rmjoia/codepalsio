@@ -2,27 +2,20 @@
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import { ProfileRepository } from '../../infrastructure/ProfileRepository';
+import { getClientPrincipal, getAvatarUrl } from '../../lib/getClientPrincipal';
 
-// Check if user is authenticated via Azure Static Web Apps
-// This file needs to be server-rendered to access request headers
-// In static mode, protected routes are handled by staticwebapp.config.json
-
-// For server-rendered pages, check auth header
-const clientPrincipal = Astro.request.headers.get('x-ms-client-principal');
-if (!clientPrincipal) {
+const principal = getClientPrincipal(Astro.request);
+if (!principal) {
 	return Astro.redirect('/.auth/login/github?post_login_redirect_uri=/profile');
 }
 
-// Decode user principal from Azure
-const principal = JSON.parse(Buffer.from(clientPrincipal, 'base64').toString('utf-8'));
 const user = {
 	userId: principal.userId,
 	githubUsername: principal.userDetails,
-	avatarUrl: principal.claims?.find((c: any) => c.typ === 'avatar_url')?.val || '',
+	avatarUrl: getAvatarUrl(principal),
 };
 
-// Load existing profile
-let existingProfile: any = null;
+let existingProfile: Awaited<ReturnType<ProfileRepository['findByUserId']>> = null;
 try {
 	const connectionString = import.meta.env.COSMOS_DB_CONNECTION_STRING;
 	const database = import.meta.env.COSMOS_DB_DATABASE_NAME;
@@ -32,7 +25,6 @@ try {
 	console.error('Failed to load profile:', error);
 }
 
-// Check if we're in edit mode
 const isEditMode = Astro.url.searchParams.get('edit') === 'true';
 ---
 

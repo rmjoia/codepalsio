@@ -1,9 +1,7 @@
 ---
-// Hero section with animated background
-import jwt from 'jsonwebtoken';
+import { getClientPrincipal } from '../lib/getClientPrincipal';
 
-const sessionCookie = Astro.cookies.get('session');
-const isSignedIn = !!sessionCookie?.value;
+const isSignedIn = !!getClientPrincipal(Astro.request);
 ---
 
 <section class="relative overflow-hidden bg-white pt-20 pb-32 sm:pt-32 sm:pb-40">
