@@ -112,16 +112,15 @@
 	</style>
 
 	<script>
+		import { getPrincipal } from '../services/api';
+
 		(async () => {
-			try {
-				const res = await fetch('/.auth/me');
-				const { clientPrincipal } = await res.json();
-				if (clientPrincipal) {
-					document.getElementById('hero-cta-signedout')?.classList.add('hidden');
-					document.getElementById('hero-cta-signedin')?.classList.remove('hidden');
-					document.getElementById('hero-signup-note')?.classList.add('hidden');
-				}
-			} catch { /* keep default unauthenticated state */ }
+			const principal = await getPrincipal();
+			if (principal) {
+				document.getElementById('hero-cta-signedout')?.classList.add('hidden');
+				document.getElementById('hero-cta-signedin')?.classList.remove('hidden');
+				document.getElementById('hero-signup-note')?.classList.add('hidden');
+			}
 		})();
 	</script>
 </section>

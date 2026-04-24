@@ -61,15 +61,14 @@
 	</div>
 
 	<script>
+		import { getPrincipal } from '../services/api';
+
 		(async () => {
-			try {
-				const res = await fetch('/.auth/me');
-				const { clientPrincipal } = await res.json();
-				if (clientPrincipal) {
-					document.getElementById('cta-start')?.classList.add('hidden');
-					document.getElementById('cta-profile')?.classList.remove('hidden');
-				}
-			} catch { /* keep default unauthenticated state */ }
+			const principal = await getPrincipal();
+			if (principal) {
+				document.getElementById('cta-start')?.classList.add('hidden');
+				document.getElementById('cta-profile')?.classList.remove('hidden');
+			}
 		})();
 	</script>
 </section>

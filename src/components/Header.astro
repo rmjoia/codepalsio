@@ -80,7 +80,7 @@
 					<div class="border-t border-slate-200 my-2"></div>
 
 					<button
-						onclick="if(confirm('Are you sure you want to delete your account? This action cannot be undone.')) fetch('/api/account-delete', {method:'POST'}).then(r => r.ok ? window.location.href='/?message=account_deleted' : alert('Deletion failed'))"
+						id="delete-account-btn"
 						class="flex items-center gap-3 px-4 py-2 hover:bg-red-50 transition-colors text-red-600 w-full text-left"
 					>
 						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -110,46 +110,55 @@
 </header>
 
 <script>
-	// Resolve auth state from SWA's /.auth/me endpoint
+	import { getPrincipal, getAvatarUrl, hasRole, deleteAccount } from '../services/api';
+
 	(async () => {
-		try {
-			const res = await fetch('/.auth/me');
-			const data = await res.json();
-			const principal = data.clientPrincipal;
-			if (!principal) return;
+		const principal = await getPrincipal();
+		if (!principal) return;
 
-			const username = principal.userDetails || 'User';
-			const avatarClaim = principal.claims?.find((c: { typ: string }) => c.typ === 'avatar_url');
-			const avatarUrl = avatarClaim?.val || '';
-			const isAdmin = principal.userRoles?.includes('admin') ?? false;
+		const username = principal.userDetails || 'User';
+		const avatarUrl = getAvatarUrl(principal);
+		const isAdmin = hasRole(principal, 'admin');
 
-			// Swap sign-in button for user menu
-			document.getElementById('sign-in-btn')?.classList.add('hidden');
-			document.getElementById('user-menu-container')?.classList.remove('hidden');
-			document.getElementById('nav-find')?.classList.remove('hidden');
+		// Swap sign-in button for user menu
+		document.getElementById('sign-in-btn')?.classList.add('hidden');
+		document.getElementById('user-menu-container')?.classList.remove('hidden');
+		document.getElementById('nav-find')?.classList.remove('hidden');
 
-			// Populate avatar
-			if (avatarUrl) {
-				const img = document.getElementById('user-avatar') as HTMLImageElement;
-				if (img) { img.src = avatarUrl; img.alt = username; img.classList.remove('hidden'); }
-				document.getElementById('user-avatar-fallback')?.classList.add('hidden');
-			} else {
-				const fallback = document.getElementById('user-avatar-fallback');
-				if (fallback) fallback.textContent = username.charAt(0).toUpperCase();
+		// Populate avatar
+		if (avatarUrl) {
+			const img = document.getElementById('user-avatar') as HTMLImageElement;
+			if (img) {
+				img.src = avatarUrl;
+				img.alt = username;
+				img.classList.remove('hidden');
 			}
+			document.getElementById('user-avatar-fallback')?.classList.add('hidden');
+		} else {
+			const fallback = document.getElementById('user-avatar-fallback');
+			if (fallback) fallback.textContent = username.charAt(0).toUpperCase();
+		}
 
-			const displayName = document.getElementById('user-display-name');
-			if (displayName) displayName.textContent = '@' + username;
-			const dropdownUsername = document.getElementById('dropdown-username');
-			if (dropdownUsername) dropdownUsername.textContent = '@' + username;
+		const displayName = document.getElementById('user-display-name');
+		if (displayName) displayName.textContent = '@' + username;
+		const dropdownUsername = document.getElementById('dropdown-username');
+		if (dropdownUsername) dropdownUsername.textContent = '@' + username;
 
-			if (isAdmin) {
-				document.getElementById('admin-link')?.classList.remove('hidden');
-			}
-		} catch {
-			// Network error — keep sign-in button visible
+		if (isAdmin) {
+			document.getElementById('admin-link')?.classList.remove('hidden');
 		}
 	})();
+
+	// Wire the Delete Account button properly (was inline onclick with hardcoded fetch).
+	document.getElementById('delete-account-btn')?.addEventListener('click', async () => {
+		if (!confirm('Are you sure you want to delete your account? This action cannot be undone.')) return;
+		try {
+			await deleteAccount();
+			window.location.href = '/?message=account_deleted';
+		} catch {
+			alert('Deletion failed');
+		}
+	});
 
 	// Dropdown toggle
 	const menuButton = document.getElementById('user-menu-button');
