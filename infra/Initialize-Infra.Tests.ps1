@@ -28,22 +28,52 @@ Describe 'Bicep Template Resource Definitions' {
         $compiledJson = az bicep build --file $bicepFile --stdout 2>&1 | ConvertFrom-Json
     }
     
-    It 'Must define Cosmos DB account with free tier enabled' {
-        $cosmosAccount = $compiledJson.resources | Where-Object { 
-            $_.type -eq 'Microsoft.DocumentDB/databaseAccounts' 
-        }
-        
-        $cosmosAccount | Should -Not -BeNullOrEmpty -Because "Cosmos DB account must be defined"
-        $cosmosAccount.properties.enableFreeTier | Should -Be $true -Because "Free tier must be enabled to avoid costs"
-    }
-    
     It 'Must define Cosmos DB with serverless capability' {
-        $cosmosAccount = $compiledJson.resources | Where-Object { 
-            $_.type -eq 'Microsoft.DocumentDB/databaseAccounts' 
+        # Free tier and serverless are mutually exclusive on Cosmos DB; we
+        # chose serverless (no upfront commitment, low/bursty workload).
+        $cosmosAccount = $compiledJson.resources | Where-Object {
+            $_.type -eq 'Microsoft.DocumentDB/databaseAccounts'
         }
-        
+
+        $cosmosAccount | Should -Not -BeNullOrEmpty -Because "Cosmos DB account must be defined"
         $capability = $cosmosAccount.properties.capabilities | Where-Object { $_.name -eq 'EnableServerless' }
-        $capability | Should -Not -BeNullOrEmpty -Because "Serverless mode is required for cost efficiency"
+        $capability | Should -Not -BeNullOrEmpty -Because "Serverless mode is required"
+        $cosmosAccount.properties.enableFreeTier | Should -Not -Be $true -Because "Free tier is incompatible with serverless"
+    }
+
+    It 'Must disable Cosmos DB key-based metadata writes' {
+        $cosmosAccount = $compiledJson.resources | Where-Object {
+            $_.type -eq 'Microsoft.DocumentDB/databaseAccounts'
+        }
+        $cosmosAccount.properties.disableKeyBasedMetadataWriteAccess | Should -Be $true -Because "Schema writes must go through ARM + MI, not the account key"
+    }
+
+    It 'Static Web App must have a user-assigned managed identity' {
+        $swa = $compiledJson.resources | Where-Object {
+            $_.type -eq 'Microsoft.Web/staticSites'
+        }
+        $swa.identity.type | Should -Be 'UserAssigned' -Because "SWA needs a managed identity to read Key Vault at runtime"
+    }
+
+    It 'Static Web App must not set repositoryUrl (managed by GitHub Actions workflow)' {
+        $swa = $compiledJson.resources | Where-Object {
+            $_.type -eq 'Microsoft.Web/staticSites'
+        }
+        $swa.properties.repositoryUrl | Should -BeNullOrEmpty -Because "Setting repositoryUrl causes Azure to overwrite the hand-written GitHub Actions workflow"
+    }
+
+    It 'Static Web App app settings must include COSMOS_DB_CONNECTION_STRING' {
+        $swaConfig = $compiledJson.resources | Where-Object {
+            $_.type -eq 'Microsoft.Web/staticSites/config' -and $_.name -match 'appsettings'
+        }
+        $swaConfig.properties.COSMOS_DB_CONNECTION_STRING | Should -Not -BeNullOrEmpty -Because "The /api/* Azure Functions read COSMOS_DB_CONNECTION_STRING from env vars"
+    }
+
+    It 'Key Vault must retain soft-deleted secrets for at least 90 days' {
+        $keyVault = $compiledJson.resources | Where-Object {
+            $_.type -eq 'Microsoft.KeyVault/vaults'
+        }
+        $keyVault.properties.softDeleteRetentionInDays | Should -Be 90 -Because "90-day retention is the usual compliance baseline"
     }
     
     It 'Must define all three required Cosmos DB containers' {
