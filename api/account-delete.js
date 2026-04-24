@@ -1,7 +1,7 @@
 'use strict';
+const { app } = require('@azure/functions');
 const { CosmosClient } = require('@azure/cosmos');
 
-// Cached at module scope (see profile-get.js).
 let cachedClient = null;
 let cachedConnectionString = null;
 function getClient(connectionString) {
@@ -12,8 +12,8 @@ function getClient(connectionString) {
 	return cachedClient;
 }
 
-function getClientPrincipal(req) {
-	const header = req.headers['x-ms-client-principal'];
+function getClientPrincipal(request) {
+	const header = request.headers.get('x-ms-client-principal');
 	if (!header) return null;
 	try {
 		return JSON.parse(Buffer.from(header, 'base64').toString('utf-8'));
@@ -22,78 +22,66 @@ function getClientPrincipal(req) {
 	}
 }
 
-module.exports = async function (context, req) {
-	const headers = { 'Content-Type': 'application/json' };
-
-	if (req.method !== 'POST') {
-		context.res = { status: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
-		return;
-	}
-
-	const principal = getClientPrincipal(req);
-	if (!principal) {
-		context.res = { status: 401, headers, body: JSON.stringify({ error: 'Not authenticated' }) };
-		return;
-	}
-
-	const connectionString = process.env.COSMOS_DB_CONNECTION_STRING;
-	const database = process.env.COSMOS_DB_DATABASE_NAME;
-	if (!connectionString || !database) {
-		context.res = { status: 500, headers, body: JSON.stringify({ error: 'Server configuration error' }) };
-		return;
-	}
-
-	try {
-		const client = getClient(connectionString);
-
-		// Delete profile
-		const profilesContainer = client.database(database).container('profiles');
-		const { resources: profiles } = await profilesContainer.items
-			.query({
-				query: 'SELECT c.id FROM c WHERE c.userId = @userId',
-				parameters: [{ name: '@userId', value: principal.userId }],
-			})
-			.fetchAll();
-
-		for (const p of profiles) {
-			try {
-				await profilesContainer.item(p.id, principal.userId).delete();
-			} catch (e) {
-				if (!e || e.code !== 404) throw e;
-			}
+app.http('account-delete', {
+	methods: ['POST'],
+	authLevel: 'anonymous',
+	handler: async (request, context) => {
+		const principal = getClientPrincipal(request);
+		if (!principal) {
+			return { status: 401, jsonBody: { error: 'Not authenticated' } };
 		}
 
-		// Delete user record if users container exists
+		const connectionString = process.env.COSMOS_DB_CONNECTION_STRING;
+		const database = process.env.COSMOS_DB_DATABASE_NAME;
+		if (!connectionString || !database) {
+			context.error('account-delete: missing COSMOS_DB_CONNECTION_STRING or COSMOS_DB_DATABASE_NAME');
+			return { status: 500, jsonBody: { error: 'Server configuration error' } };
+		}
+
 		try {
-			const usersContainer = client.database(database).container('users');
-			const { resources: users } = await usersContainer.items
+			const client = getClient(connectionString);
+
+			const profilesContainer = client.database(database).container('profiles');
+			const { resources: profiles } = await profilesContainer.items
 				.query({
-					query: 'SELECT c.id FROM c WHERE c.id = @userId',
+					query: 'SELECT c.id FROM c WHERE c.userId = @userId',
 					parameters: [{ name: '@userId', value: principal.userId }],
 				})
 				.fetchAll();
 
-			for (const u of users) {
+			for (const p of profiles) {
 				try {
-					await usersContainer.item(u.id, u.id).delete();
+					await profilesContainer.item(p.id, principal.userId).delete();
 				} catch (e) {
 					if (!e || e.code !== 404) throw e;
 				}
 			}
-		} catch {
-			// users container may not exist — ignore
-		}
 
-		context.res = {
-			status: 200,
-			headers,
-			body: JSON.stringify({ success: true }),
-		};
-	} catch (error) {
-		context.res = {
-			status: 500,
-			headers,
-			body: JSON.stringify({ error: 'Failed to delete account' }),
-		};
-	}
-};
+			// Users container may not exist in every env — swallow and move on.
+			try {
+				const usersContainer = client.database(database).container('users');
+				const { resources: users } = await usersContainer.items
+					.query({
+						query: 'SELECT c.id FROM c WHERE c.id = @userId',
+						parameters: [{ name: '@userId', value: principal.userId }],
+					})
+					.fetchAll();
+
+				for (const u of users) {
+					try {
+						await usersContainer.item(u.id, u.id).delete();
+					} catch (e) {
+						if (!e || e.code !== 404) throw e;
+					}
+				}
+			} catch {
+				// no users container, nothing to do
+			}
+
+			return { status: 200, jsonBody: { success: true } };
+		} catch (error) {
+			context.error('account-delete failed:', error);
+			return { status: 500, jsonBody: { error: 'Failed to delete account' } };
+		}
+	},
+});
