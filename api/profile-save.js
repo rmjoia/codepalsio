@@ -5,6 +5,20 @@ const { randomUUID } = require('crypto');
 
 const VALID_AVAILABILITY = ['active', 'casual', 'unavailable'];
 
+// Bounds. The goal isn't UX — the edit form already has maxlength/arity
+// limits — it's defense in depth so a hand-crafted POST can't blow up
+// document size, starve indexing, or smuggle garbage into rendering paths
+// downstream. Keep these in sync with the UI if the UI changes.
+const LIMITS = {
+	displayName: 100,
+	bio: 500,
+	location: 100,
+	timezone: 64,
+	url: 500,
+	tagItem: 50, // single skill / interest
+	tagCount: 30, // skills or interests array length
+};
+
 let cachedClient = null;
 let cachedConnectionString = null;
 function getContainer(connectionString, database, containerName) {
@@ -25,13 +39,40 @@ function getClientPrincipal(request) {
 	}
 }
 
-// Coerce input to a clean string[] — drop non-strings, trim, drop empties.
-function normalizeStringList(input) {
+// Coerce input to a clean string[]: drop non-strings, trim, drop empties,
+// cap per-item length, cap array length. The handler then validates the
+// normalized result, so inputs like ["   "] don't slip through as a
+// "has one skill" check and 10k-element arrays don't reach Cosmos.
+function normalizeStringList(input, itemMax, countMax) {
 	if (!Array.isArray(input)) return [];
 	return input
 		.filter((item) => typeof item === 'string')
-		.map((item) => item.trim())
-		.filter(Boolean);
+		.map((item) => item.trim().slice(0, itemMax))
+		.filter(Boolean)
+		.slice(0, countMax);
+}
+
+function trimmedString(value, max) {
+	if (typeof value !== 'string') return undefined;
+	const out = value.trim().slice(0, max);
+	return out || undefined;
+}
+
+// Only allow https:// URLs on the three public profile link fields.
+// Blocks javascript:, data:, vbscript: etc. that would turn into XSS the
+// moment a directory page renders <a href={profile.githubUrl}>.
+function sanitizedUrl(value, max) {
+	if (typeof value !== 'string') return undefined;
+	const trimmed = value.trim();
+	if (!trimmed) return undefined;
+	if (trimmed.length > max) return undefined;
+	try {
+		const parsed = new URL(trimmed);
+		if (parsed.protocol !== 'https:') return undefined;
+		return parsed.toString();
+	} catch {
+		return undefined;
+	}
 }
 
 app.http('profile-save', {
@@ -57,14 +98,14 @@ app.http('profile-save', {
 			return { status: 400, jsonBody: { error: 'Invalid JSON body' } };
 		}
 
-		const skills = normalizeStringList(body?.skills);
-		const interests = normalizeStringList(body?.interests);
-		const displayName = typeof body?.displayName === 'string' ? body.displayName.trim() : '';
-		const bio = typeof body?.bio === 'string' ? body.bio.trim() : '';
+		const skills = normalizeStringList(body?.skills, LIMITS.tagItem, LIMITS.tagCount);
+		const interests = normalizeStringList(body?.interests, LIMITS.tagItem, LIMITS.tagCount);
+		const displayName = trimmedString(body?.displayName, LIMITS.displayName);
+		const bio = trimmedString(body?.bio, LIMITS.bio + 1); // keep one over so we can 400 on >500 explicitly
 
 		if (!displayName) return { status: 400, jsonBody: { error: 'Display name is required' } };
 		if (!bio) return { status: 400, jsonBody: { error: 'Bio is required' } };
-		if (bio.length > 500) return { status: 400, jsonBody: { error: 'Bio must not exceed 500 characters' } };
+		if (bio.length > LIMITS.bio) return { status: 400, jsonBody: { error: `Bio must not exceed ${LIMITS.bio} characters` } };
 		if (skills.length === 0) return { status: 400, jsonBody: { error: 'At least one skill is required' } };
 		if (interests.length === 0) return { status: 400, jsonBody: { error: 'At least one interest is required' } };
 
@@ -91,11 +132,11 @@ app.http('profile-save', {
 				skills,
 				interests,
 				availability,
-				location: typeof body?.location === 'string' ? body.location.trim() || undefined : undefined,
-				timezone: typeof body?.timezone === 'string' ? body.timezone || undefined : undefined,
-				githubUrl: typeof body?.githubUrl === 'string' ? body.githubUrl.trim() || undefined : undefined,
-				linkedinUrl: typeof body?.linkedinUrl === 'string' ? body.linkedinUrl.trim() || undefined : undefined,
-				websiteUrl: typeof body?.websiteUrl === 'string' ? body.websiteUrl.trim() || undefined : undefined,
+				location: trimmedString(body?.location, LIMITS.location),
+				timezone: trimmedString(body?.timezone, LIMITS.timezone),
+				githubUrl: sanitizedUrl(body?.githubUrl, LIMITS.url),
+				linkedinUrl: sanitizedUrl(body?.linkedinUrl, LIMITS.url),
+				websiteUrl: sanitizedUrl(body?.websiteUrl, LIMITS.url),
 			};
 
 			await container.items.upsert(profile);
