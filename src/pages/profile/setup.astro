@@ -1,4 +1,10 @@
 ---
-// Redirect to profile page in edit mode (first-time setup)
-return Astro.redirect('/profile?edit=true');
+// Client-side redirect — Astro.redirect() is not available in static mode
 ---
+<html>
+	<head>
+		<meta http-equiv="refresh" content="0;url=/profile?edit=true" />
+		<script is:inline>window.location.replace('/profile?edit=true');</script>
+	</head>
+	<body></body>
+</html>

@@ -2,9 +2,6 @@
 	"platform": {
 		"apiRuntime": "node:20"
 	},
-	"navigationFallback": {
-		"rewrite": "/api/render"
-	},
 	"routes": [
 		{
 			"route": "/login",
@@ -35,24 +32,23 @@
 			"allowedRoles": ["authenticated"]
 		},
 		{
-			"route": "/api/profile/*",
+			"route": "/api/profile-save",
 			"allowedRoles": ["authenticated"]
 		},
 		{
-			"route": "/api/account/*",
+			"route": "/api/profile-get",
 			"allowedRoles": ["authenticated"]
 		},
 		{
-			"route": "/api/admin/*",
+			"route": "/api/account-delete",
+			"allowedRoles": ["authenticated"]
+		},
+		{
+			"route": "/api/admin-users",
 			"allowedRoles": ["authenticated"]
 		},
 		{
 			"route": "/api/*",
-			"allowedRoles": ["anonymous", "authenticated"]
-		},
-		{
-			"route": "/*",
-			"rewrite": "/api/render",
 			"allowedRoles": ["anonymous", "authenticated"]
 		}
 	],
@@ -62,7 +58,7 @@
 			"statusCode": 302
 		},
 		"404": {
-			"rewrite": "/api/render"
+			"rewrite": "/404.html"
 		}
 	},
 	"globalHeaders": {
