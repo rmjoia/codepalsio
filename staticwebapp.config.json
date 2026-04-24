@@ -29,7 +29,7 @@
 		},
 		{
 			"route": "/admin/*",
-			"allowedRoles": ["authenticated"]
+			"allowedRoles": ["admin"]
 		},
 		{
 			"route": "/api/profile-save",
@@ -45,7 +45,7 @@
 		},
 		{
 			"route": "/api/admin-users",
-			"allowedRoles": ["authenticated"]
+			"allowedRoles": ["admin"]
 		},
 		{
 			"route": "/api/*",

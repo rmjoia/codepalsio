@@ -1,6 +1,17 @@
 'use strict';
 const { CosmosClient } = require('@azure/cosmos');
 
+// Cached at module scope (see profile-get.js).
+let cachedClient = null;
+let cachedConnectionString = null;
+function getClient(connectionString) {
+	if (!cachedClient || cachedConnectionString !== connectionString) {
+		cachedClient = new CosmosClient(connectionString);
+		cachedConnectionString = connectionString;
+	}
+	return cachedClient;
+}
+
 function getClientPrincipal(req) {
 	const header = req.headers['x-ms-client-principal'];
 	if (!header) return null;
@@ -33,7 +44,7 @@ module.exports = async function (context, req) {
 	}
 
 	try {
-		const client = new CosmosClient(connectionString);
+		const client = getClient(connectionString);
 
 		// Delete profile
 		const profilesContainer = client.database(database).container('profiles');

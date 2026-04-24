@@ -18,6 +18,18 @@ import Footer from '../../components/Footer.astro';
 			<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
 		</div>
 
+		<!-- Error state -->
+		<div id="error-state" class="hidden mx-auto max-w-2xl px-4 py-16 text-center">
+			<h1 class="text-2xl font-bold text-red-700 mb-2">Couldn't load your profile</h1>
+			<p class="text-slate-600 mb-6">Something went wrong. Please refresh the page and try again.</p>
+			<button
+				onclick="window.location.reload()"
+				class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+			>
+				Refresh
+			</button>
+		</div>
+
 		<main id="profile-main" class="hidden mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12">
 			<!-- User header card -->
 			<div class="bg-white rounded-2xl shadow-lg p-8 mb-8">
@@ -317,30 +329,31 @@ import Footer from '../../components/Footer.astro';
 					interestsEmpty.classList.remove('hidden');
 				}
 
-				// Details card
+				// Details card. Build via DOM/textContent rather than innerHTML —
+				// location/timezone/availability round-trip through Cosmos and are
+				// user-controlled, so concatenating them into HTML is an XSS vector.
 				const detailsCard = document.getElementById('profile-details-card');
 				const locEl = document.getElementById('detail-location');
 				const tzEl = document.getElementById('detail-timezone');
 				const avEl = document.getElementById('detail-availability');
 
-				if (profile?.location) {
-					locEl.innerHTML = '<span class="font-semibold">Location:</span> ' + profile.location;
-					locEl.classList.remove('hidden');
-				} else {
-					locEl.classList.add('hidden');
+				function renderDetail(el, label, value) {
+					el.replaceChildren();
+					if (!value) {
+						el.classList.add('hidden');
+						return;
+					}
+					const labelSpan = document.createElement('span');
+					labelSpan.className = 'font-semibold';
+					labelSpan.textContent = label + ':';
+					el.appendChild(labelSpan);
+					el.appendChild(document.createTextNode(' ' + value));
+					el.classList.remove('hidden');
 				}
-				if (profile?.timezone) {
-					tzEl.innerHTML = '<span class="font-semibold">Timezone:</span> ' + profile.timezone;
-					tzEl.classList.remove('hidden');
-				} else {
-					tzEl.classList.add('hidden');
-				}
-				if (profile?.availability) {
-					avEl.innerHTML = '<span class="font-semibold">Availability:</span> ' + profile.availability.replace('_', ' ');
-					avEl.classList.remove('hidden');
-				} else {
-					avEl.classList.add('hidden');
-				}
+
+				renderDetail(locEl, 'Location', profile?.location);
+				renderDetail(tzEl, 'Timezone', profile?.timezone);
+				renderDetail(avEl, 'Availability', profile?.availability ? profile.availability.replace('_', ' ') : '');
 
 				if (profile?.location || profile?.timezone || profile?.availability) {
 					detailsCard.classList.remove('hidden');
@@ -397,55 +410,72 @@ import Footer from '../../components/Footer.astro';
 			}
 
 			function addTag(text, type, container) {
+				// Build via DOM — 'text' is user input, so keep it out of innerHTML.
 				const tag = document.createElement('span');
 				tag.className = 'inline-flex items-center gap-2 px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm';
 				tag.dataset.value = text;
-				tag.innerHTML = text + ' <button type="button" class="hover:text-primary-900 text-lg leading-none" aria-label="Remove">\xd7</button>';
-				tag.querySelector('button').addEventListener('click', () => {
+				tag.appendChild(document.createTextNode(text));
+				const btn = document.createElement('button');
+				btn.type = 'button';
+				btn.className = 'hover:text-primary-900 text-lg leading-none';
+				btn.setAttribute('aria-label', 'Remove');
+				btn.textContent = '×';
+				btn.addEventListener('click', () => {
 					if (type === 'skill') skills.delete(text);
 					else interests.delete(text);
 					tag.remove();
 				});
+				tag.appendChild(document.createTextNode(' '));
+				tag.appendChild(btn);
 				container.appendChild(tag);
 			}
 
 			async function init() {
-				const [authRes, profileRes] = await Promise.all([
-					fetch('/.auth/me'),
-					fetch('/api/profile-get'),
-				]);
+				try {
+					const [authRes, profileRes] = await Promise.all([
+						fetch('/.auth/me'),
+						fetch('/api/profile-get'),
+					]);
 
-				const auth = await authRes.json();
-				const principal = auth.clientPrincipal;
+					const auth = await authRes.json();
+					const principal = auth.clientPrincipal;
 
-				if (!principal) {
-					window.location.href = '/.auth/login/github?post_login_redirect_uri=/profile';
-					return;
+					if (!principal) {
+						window.location.href = '/.auth/login/github?post_login_redirect_uri=/profile';
+						return;
+					}
+
+					// Avatar and username
+					const avatarClaim = principal.claims?.find(c => c.typ === 'avatar_url');
+					const avatarUrl = avatarClaim?.val || '';
+					const username = principal.userDetails || 'User';
+					const avatarEl = document.getElementById('user-avatar');
+					if (avatarEl) { avatarEl.src = avatarUrl; avatarEl.alt = username; }
+					const usernameEl = document.getElementById('username-display');
+					if (usernameEl) usernameEl.textContent = '@' + username;
+
+					if (!profileRes.ok && profileRes.status !== 404) {
+						throw new Error('profile-get returned ' + profileRes.status);
+					}
+					const profileData = await profileRes.json();
+					currentProfile = profileData.profile || null;
+
+					populateViewMode(currentProfile);
+
+					const isEditMode = new URLSearchParams(window.location.search).get('edit') === 'true';
+					if (isEditMode) {
+						showEditMode();
+					} else {
+						showViewMode();
+					}
+
+					document.getElementById('loading-state').classList.add('hidden');
+					document.getElementById('profile-main').classList.remove('hidden');
+				} catch (error) {
+					console.error('Profile init failed:', error);
+					document.getElementById('loading-state').classList.add('hidden');
+					document.getElementById('error-state').classList.remove('hidden');
 				}
-
-				// Avatar and username
-				const avatarClaim = principal.claims?.find(c => c.typ === 'avatar_url');
-				const avatarUrl = avatarClaim?.val || '';
-				const username = principal.userDetails || 'User';
-				const avatarEl = document.getElementById('user-avatar');
-				if (avatarEl) { avatarEl.src = avatarUrl; avatarEl.alt = username; }
-				const usernameEl = document.getElementById('username-display');
-				if (usernameEl) usernameEl.textContent = '@' + username;
-
-				const profileData = await profileRes.json();
-				currentProfile = profileData.profile || null;
-
-				populateViewMode(currentProfile);
-
-				const isEditMode = new URLSearchParams(window.location.search).get('edit') === 'true';
-				if (isEditMode) {
-					showEditMode();
-				} else {
-					showViewMode();
-				}
-
-				document.getElementById('loading-state').classList.add('hidden');
-				document.getElementById('profile-main').classList.remove('hidden');
 			}
 
 			// Bio character counter
