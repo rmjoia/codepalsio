@@ -1,9 +1,9 @@
 'use strict';
+const { app } = require('@azure/functions');
 const { CosmosClient } = require('@azure/cosmos');
 
-// Cached at module scope — Azure Functions reuses the worker process
-// across invocations, so keeping the client around avoids socket churn
-// and the ~50ms TLS/auth handshake on every request.
+// Azure Functions reuses the worker process across invocations, so keeping
+// the client at module scope avoids the TLS/auth handshake on every request.
 let cachedClient = null;
 let cachedConnectionString = null;
 function getContainer(connectionString, database, containerName) {
@@ -14,8 +14,8 @@ function getContainer(connectionString, database, containerName) {
 	return cachedClient.database(database).container(containerName);
 }
 
-function getClientPrincipal(req) {
-	const header = req.headers['x-ms-client-principal'];
+function getClientPrincipal(request) {
+	const header = request.headers.get('x-ms-client-principal');
 	if (!header) return null;
 	try {
 		return JSON.parse(Buffer.from(header, 'base64').toString('utf-8'));
@@ -24,41 +24,35 @@ function getClientPrincipal(req) {
 	}
 }
 
-module.exports = async function (context, req) {
-	const headers = { 'Content-Type': 'application/json' };
+app.http('profile-get', {
+	methods: ['GET'],
+	authLevel: 'anonymous',
+	handler: async (request, context) => {
+		const principal = getClientPrincipal(request);
+		if (!principal) {
+			return { status: 401, jsonBody: { error: 'Not authenticated' } };
+		}
 
-	const principal = getClientPrincipal(req);
-	if (!principal) {
-		context.res = { status: 401, headers, body: JSON.stringify({ error: 'Not authenticated' }) };
-		return;
-	}
+		const connectionString = process.env.COSMOS_DB_CONNECTION_STRING;
+		const database = process.env.COSMOS_DB_DATABASE_NAME;
+		if (!connectionString || !database) {
+			context.error('profile-get: missing COSMOS_DB_CONNECTION_STRING or COSMOS_DB_DATABASE_NAME');
+			return { status: 500, jsonBody: { error: 'Server configuration error' } };
+		}
 
-	const connectionString = process.env.COSMOS_DB_CONNECTION_STRING;
-	const database = process.env.COSMOS_DB_DATABASE_NAME;
-	if (!connectionString || !database) {
-		context.res = { status: 500, headers, body: JSON.stringify({ error: 'Server configuration error' }) };
-		return;
-	}
+		try {
+			const container = getContainer(connectionString, database, 'profiles');
+			const { resources } = await container.items
+				.query({
+					query: 'SELECT * FROM c WHERE c.userId = @userId',
+					parameters: [{ name: '@userId', value: principal.userId }],
+				})
+				.fetchAll();
 
-	try {
-		const container = getContainer(connectionString, database, 'profiles');
-		const { resources } = await container.items
-			.query({
-				query: 'SELECT * FROM c WHERE c.userId = @userId',
-				parameters: [{ name: '@userId', value: principal.userId }],
-			})
-			.fetchAll();
-
-		context.res = {
-			status: 200,
-			headers,
-			body: JSON.stringify({ profile: resources[0] || null }),
-		};
-	} catch (error) {
-		context.res = {
-			status: 500,
-			headers,
-			body: JSON.stringify({ error: 'Failed to load profile' }),
-		};
-	}
-};
+			return { status: 200, jsonBody: { profile: resources[0] || null } };
+		} catch (error) {
+			context.error('profile-get failed:', error);
+			return { status: 500, jsonBody: { error: 'Failed to load profile' } };
+		}
+	},
+});

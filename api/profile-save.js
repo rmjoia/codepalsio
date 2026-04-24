@@ -1,10 +1,24 @@
 'use strict';
+const { app } = require('@azure/functions');
 const { CosmosClient } = require('@azure/cosmos');
 const { randomUUID } = require('crypto');
 
 const VALID_AVAILABILITY = ['active', 'casual', 'unavailable'];
 
-// Cached at module scope (see profile-get.js).
+// Bounds. The goal isn't UX — the edit form already has maxlength/arity
+// limits — it's defense in depth so a hand-crafted POST can't blow up
+// document size, starve indexing, or smuggle garbage into rendering paths
+// downstream. Keep these in sync with the UI if the UI changes.
+const LIMITS = {
+	displayName: 100,
+	bio: 500,
+	location: 100,
+	timezone: 64,
+	url: 500,
+	tagItem: 50, // single skill / interest
+	tagCount: 30, // skills or interests array length
+};
+
 let cachedClient = null;
 let cachedConnectionString = null;
 function getContainer(connectionString, database, containerName) {
@@ -15,8 +29,8 @@ function getContainer(connectionString, database, containerName) {
 	return cachedClient.database(database).container(containerName);
 }
 
-function getClientPrincipal(req) {
-	const header = req.headers['x-ms-client-principal'];
+function getClientPrincipal(request) {
+	const header = request.headers.get('x-ms-client-principal');
 	if (!header) return null;
 	try {
 		return JSON.parse(Buffer.from(header, 'base64').toString('utf-8'));
@@ -25,110 +39,112 @@ function getClientPrincipal(req) {
 	}
 }
 
-// Coerce input to a clean string[] — drop non-strings, trim whitespace,
-// drop empties. The caller then validates the normalized result, so
-// inputs like ["   "] don't slip through as a "has one skill" check.
-function normalizeStringList(input) {
+// Coerce input to a clean string[]: drop non-strings, trim, drop empties,
+// cap per-item length, cap array length. The handler then validates the
+// normalized result, so inputs like ["   "] don't slip through as a
+// "has one skill" check and 10k-element arrays don't reach Cosmos.
+function normalizeStringList(input, itemMax, countMax) {
 	if (!Array.isArray(input)) return [];
 	return input
 		.filter((item) => typeof item === 'string')
-		.map((item) => item.trim())
-		.filter(Boolean);
+		.map((item) => item.trim().slice(0, itemMax))
+		.filter(Boolean)
+		.slice(0, countMax);
 }
 
-module.exports = async function (context, req) {
-	const headers = { 'Content-Type': 'application/json' };
+function trimmedString(value, max) {
+	if (typeof value !== 'string') return undefined;
+	const out = value.trim().slice(0, max);
+	return out || undefined;
+}
 
-	const principal = getClientPrincipal(req);
-	if (!principal) {
-		context.res = { status: 401, headers, body: JSON.stringify({ error: 'Not authenticated' }) };
-		return;
-	}
-
-	const connectionString = process.env.COSMOS_DB_CONNECTION_STRING;
-	const database = process.env.COSMOS_DB_DATABASE_NAME;
-	if (!connectionString || !database) {
-		context.res = { status: 500, headers, body: JSON.stringify({ error: 'Server configuration error' }) };
-		return;
-	}
-
-	let body;
+// Only allow https:// URLs on the three public profile link fields.
+// Blocks javascript:, data:, vbscript: etc. that would turn into XSS the
+// moment a directory page renders <a href={profile.githubUrl}>.
+function sanitizedUrl(value, max) {
+	if (typeof value !== 'string') return undefined;
+	const trimmed = value.trim();
+	if (!trimmed) return undefined;
+	if (trimmed.length > max) return undefined;
 	try {
-		body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+		const parsed = new URL(trimmed);
+		if (parsed.protocol !== 'https:') return undefined;
+		return parsed.toString();
 	} catch {
-		context.res = { status: 400, headers, body: JSON.stringify({ error: 'Invalid JSON body' }) };
-		return;
+		return undefined;
 	}
+}
 
-	// Normalize first, then validate — see normalizeStringList above.
-	const skills = normalizeStringList(body?.skills);
-	const interests = normalizeStringList(body?.interests);
-	const displayName = typeof body?.displayName === 'string' ? body.displayName.trim() : '';
-	const bio = typeof body?.bio === 'string' ? body.bio.trim() : '';
+app.http('profile-save', {
+	methods: ['POST'],
+	authLevel: 'anonymous',
+	handler: async (request, context) => {
+		const principal = getClientPrincipal(request);
+		if (!principal) {
+			return { status: 401, jsonBody: { error: 'Not authenticated' } };
+		}
 
-	if (!displayName) {
-		context.res = { status: 400, headers, body: JSON.stringify({ error: 'Display name is required' }) };
-		return;
-	}
-	if (!bio) {
-		context.res = { status: 400, headers, body: JSON.stringify({ error: 'Bio is required' }) };
-		return;
-	}
-	if (bio.length > 500) {
-		context.res = { status: 400, headers, body: JSON.stringify({ error: 'Bio must not exceed 500 characters' }) };
-		return;
-	}
-	if (skills.length === 0) {
-		context.res = { status: 400, headers, body: JSON.stringify({ error: 'At least one skill is required' }) };
-		return;
-	}
-	if (interests.length === 0) {
-		context.res = { status: 400, headers, body: JSON.stringify({ error: 'At least one interest is required' }) };
-		return;
-	}
+		const connectionString = process.env.COSMOS_DB_CONNECTION_STRING;
+		const database = process.env.COSMOS_DB_DATABASE_NAME;
+		if (!connectionString || !database) {
+			context.error('profile-save: missing COSMOS_DB_CONNECTION_STRING or COSMOS_DB_DATABASE_NAME');
+			return { status: 500, jsonBody: { error: 'Server configuration error' } };
+		}
 
-	const availability = VALID_AVAILABILITY.includes(body?.availability) ? body.availability : 'active';
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			return { status: 400, jsonBody: { error: 'Invalid JSON body' } };
+		}
 
-	try {
-		const container = getContainer(connectionString, database, 'profiles');
+		const skills = normalizeStringList(body?.skills, LIMITS.tagItem, LIMITS.tagCount);
+		const interests = normalizeStringList(body?.interests, LIMITS.tagItem, LIMITS.tagCount);
+		const displayName = trimmedString(body?.displayName, LIMITS.displayName);
+		const bio = trimmedString(body?.bio, LIMITS.bio + 1); // keep one over so we can 400 on >500 explicitly
 
-		// Preserve the existing profile id on update (upsert keyed by id).
-		const { resources } = await container.items
-			.query({
-				query: 'SELECT c.id FROM c WHERE c.userId = @userId',
-				parameters: [{ name: '@userId', value: principal.userId }],
-			})
-			.fetchAll();
+		if (!displayName) return { status: 400, jsonBody: { error: 'Display name is required' } };
+		if (!bio) return { status: 400, jsonBody: { error: 'Bio is required' } };
+		if (bio.length > LIMITS.bio) return { status: 400, jsonBody: { error: `Bio must not exceed ${LIMITS.bio} characters` } };
+		if (skills.length === 0) return { status: 400, jsonBody: { error: 'At least one skill is required' } };
+		if (interests.length === 0) return { status: 400, jsonBody: { error: 'At least one interest is required' } };
 
-		const profileId = resources[0]?.id || `profile-${randomUUID()}`;
+		const availability = VALID_AVAILABILITY.includes(body?.availability) ? body.availability : 'active';
 
-		const profile = {
-			id: profileId,
-			userId: principal.userId,
-			displayName,
-			bio,
-			skills,
-			interests,
-			availability,
-			location: typeof body?.location === 'string' ? body.location.trim() || undefined : undefined,
-			timezone: typeof body?.timezone === 'string' ? body.timezone || undefined : undefined,
-			githubUrl: typeof body?.githubUrl === 'string' ? body.githubUrl.trim() || undefined : undefined,
-			linkedinUrl: typeof body?.linkedinUrl === 'string' ? body.linkedinUrl.trim() || undefined : undefined,
-			websiteUrl: typeof body?.websiteUrl === 'string' ? body.websiteUrl.trim() || undefined : undefined,
-		};
+		try {
+			const container = getContainer(connectionString, database, 'profiles');
 
-		await container.items.upsert(profile);
+			// Preserve the existing profile id on update.
+			const { resources } = await container.items
+				.query({
+					query: 'SELECT c.id FROM c WHERE c.userId = @userId',
+					parameters: [{ name: '@userId', value: principal.userId }],
+				})
+				.fetchAll();
 
-		context.res = {
-			status: 200,
-			headers,
-			body: JSON.stringify({ success: true, profile }),
-		};
-	} catch (error) {
-		context.res = {
-			status: 500,
-			headers,
-			body: JSON.stringify({ error: 'Failed to save profile' }),
-		};
-	}
-};
+			const profileId = resources[0]?.id || `profile-${randomUUID()}`;
+
+			const profile = {
+				id: profileId,
+				userId: principal.userId,
+				displayName,
+				bio,
+				skills,
+				interests,
+				availability,
+				location: trimmedString(body?.location, LIMITS.location),
+				timezone: trimmedString(body?.timezone, LIMITS.timezone),
+				githubUrl: sanitizedUrl(body?.githubUrl, LIMITS.url),
+				linkedinUrl: sanitizedUrl(body?.linkedinUrl, LIMITS.url),
+				websiteUrl: sanitizedUrl(body?.websiteUrl, LIMITS.url),
+			};
+
+			await container.items.upsert(profile);
+
+			return { status: 200, jsonBody: { success: true, profile } };
+		} catch (error) {
+			context.error('profile-save failed:', error);
+			return { status: 500, jsonBody: { error: 'Failed to save profile' } };
+		}
+	},
+});
