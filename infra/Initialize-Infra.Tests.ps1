@@ -75,6 +75,14 @@ Describe 'Bicep Template Resource Definitions' {
         }
         $keyVault.properties.softDeleteRetentionInDays | Should -Be 90 -Because "90-day retention is the usual compliance baseline"
     }
+
+    It 'Key Vault must deny by default with AzureServices bypass' {
+        $keyVault = $compiledJson.resources | Where-Object {
+            $_.type -eq 'Microsoft.KeyVault/vaults'
+        }
+        $keyVault.properties.networkAcls.defaultAction | Should -Be 'Deny' -Because "Public internet should not reach Key Vault by default"
+        $keyVault.properties.networkAcls.bypass | Should -Be 'AzureServices' -Because "Trusted Azure services need to reach KV for managed-identity-based reads"
+    }
     
     It 'Must define all three required Cosmos DB containers' {
         $containers = $compiledJson.resources | Where-Object { 

@@ -108,7 +108,23 @@ function Initialize-Infra {
         New-AzResourceGroup -Name $ResourceGroupName -Location $Location -Tag @{ project=$Project; environment=$Environment } -Force | Out-Null
     }
 
-    # 3. Deploy Bicep template
+    # 3. Detect operator public IP so the Key Vault firewall lets this machine
+    #    write secrets (Set-AzKeyVaultSecret is a data-plane call). KV's
+    #    default action is Deny; without this IP in the allowlist, secret
+    #    writes later in this script would fail with 403 Forbidden.
+    Write-Host "→ Detecting operator public IP for Key Vault firewall..."
+    $OperatorPublicIp = try {
+        (Invoke-RestMethod -Uri 'https://api.ipify.org' -TimeoutSec 10 -ErrorAction Stop).ToString().Trim()
+    } catch {
+        $null
+    }
+
+    if ([string]::IsNullOrWhiteSpace($OperatorPublicIp)) {
+        throw "Unable to detect operator public IP (needed for Key Vault firewall allowlist). Pre-set it in the environment via `$env:OPERATOR_PUBLIC_IP and re-run, or provide it as a parameter to the Bicep deployment."
+    }
+    Write-Host "   Operator IP: $OperatorPublicIp"
+
+    # 4. Deploy Bicep template
     Write-Host "→ Deploying infrastructure via Bicep..."
 
     $ScriptDir = if ($PSScriptRoot) {
@@ -132,7 +148,8 @@ function Initialize-Infra {
         -TemplateFile $BicepFile `
         -location $Location `
         -environment $Environment `
-        -currentUserObjectId $currentUserObjectId
+        -currentUserObjectId $currentUserObjectId `
+        -operatorPublicIp $OperatorPublicIp
 
     $SWAUrl = $Deployment.Outputs['staticWebAppDefaultHostname'].Value
     $StaticWebAppId = $Deployment.Outputs['staticWebAppId'].Value

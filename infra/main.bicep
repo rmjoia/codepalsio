@@ -14,6 +14,9 @@ param githubRepo string = 'rmjoia/codepalsio'
 @description('Object ID of the human operator running the deployment. Granted full secret management on Key Vault so the post-deploy scripts can store tokens. Leave empty in CI / headless runs — the corresponding access policy entry is omitted when empty.')
 param currentUserObjectId string = ''
 
+@description('Public IP of the operator running the deploy, in CIDR or single-IP form. Added to the Key Vault firewall allowlist so the post-deploy PowerShell can write secrets. Leave empty in headless CI — the firewall then relies solely on AzureServices bypass. Detect with: (Invoke-RestMethod https://api.ipify.org).Trim()')
+param operatorPublicIp string = ''
+
 var project = 'codepals'
 var staticWebAppName = '${project}-${environment}'
 var keyVaultName = '${project}-${environment}-kv'
@@ -65,10 +68,17 @@ var operatorAccessPolicy = {
 }
 var keyVaultAccessPolicies = empty(currentUserObjectId) ? [ managedIdentityAccessPolicy ] : [ managedIdentityAccessPolicy, operatorAccessPolicy ]
 
-// Key Vault. publicNetworkAccess stays Enabled so the post-deploy PowerShell
-// scripts (running on the operator's machine) can write secrets. For
-// locked-down prod, either add networkAcls pinning the operator's public
-// IP range or flip to Disabled and deploy from a trusted network / jumpbox.
+// Key Vault. Public network surface is restricted:
+//   - defaultAction: Deny — the internet can't reach KV by default
+//   - bypass: AzureServices — trusted Azure services (App Config, ARM, etc.)
+//     and managed identities from the same tenant can still talk to KV
+//   - ipRules — the operator's public IP is allowlisted for the duration
+//     of the deploy so Set-AzKeyVaultSecret works from their machine
+// publicNetworkAccess stays 'Enabled' because that's the only state where
+// networkAcls firewall rules actually apply; flipping to 'Disabled' would
+// require a Private Endpoint (not set up here).
+var keyVaultIpRules = empty(operatorPublicIp) ? [] : [ { value: operatorPublicIp } ]
+
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
   location: location
@@ -83,6 +93,12 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableSoftDelete: true
     softDeleteRetentionInDays: 90
     publicNetworkAccess: 'Enabled'
+    networkAcls: {
+      defaultAction: 'Deny'
+      bypass: 'AzureServices'
+      ipRules: keyVaultIpRules
+      virtualNetworkRules: []
+    }
   }
 }
 
