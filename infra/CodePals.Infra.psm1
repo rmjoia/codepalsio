@@ -14,7 +14,7 @@ $ModuleRoot = $PSScriptRoot
 $FunctionScripts = @(
     'Initialize-Infra.ps1'
     'Initialize-DNS.ps1'
-    'Initialize-GitHubOAuth.ps1'
+    'Initialize-DNSZones.ps1'
 )
 
 foreach ($script in $FunctionScripts) {
@@ -30,5 +30,5 @@ foreach ($script in $FunctionScripts) {
 Export-ModuleMember -Function @(
     'Initialize-Infra'
     'Initialize-DNS'
-    'Initialize-GitHubOAuth'
+    'Initialize-DNSZones'
 )

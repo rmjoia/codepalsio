@@ -1,11 +1,10 @@
 # CodePals Infrastructure Module
 
-PowerShell module for managing CodePals.io Azure infrastructure.
+PowerShell module for managing CodePals.io Azure infrastructure. Auth is handled by [Azure Static Web Apps built-in authentication](https://learn.microsoft.com/en-us/azure/static-web-apps/authentication-authorization) (`.auth/login/github`), so this module no longer provisions a custom GitHub OAuth app.
 
 ## Installation
 
 ```powershell
-# Import the module
 Import-Module ./infra/CodePals.Infra.psd1
 ```
 
@@ -29,15 +28,15 @@ Initialize-Infra -Environment prod -SubscriptionId "your-subscription-id"
 
 **Provisions:**
 - Resource Group
-- Static Web App
-- Key Vault
-- Managed Identity
-- Cosmos DB (with users, profiles, connections containers)
-- DNS records
-- Federated credentials for GitHub Actions
+- Static Web App (with user-assigned managed identity)
+- Key Vault (access policy model; soft delete enabled, 90-day retention)
+- User-Assigned Managed Identity (Cosmos DB Data Contributor)
+- Cosmos DB serverless account with `users`, `profiles`, `connections` containers
+- DNS records for the environment's custom domain
+- Federated identity credential for GitHub Actions OIDC
 
 ### Initialize-DNS
-Configures DNS records for custom domain.
+Configures DNS records for a custom domain pointing at a Static Web App.
 
 ```powershell
 Initialize-DNS -Environment dev -StaticWebAppDomain "your-swa.azurestaticapps.net"
@@ -45,62 +44,39 @@ Initialize-DNS -Environment dev -StaticWebAppDomain "your-swa.azurestaticapps.ne
 
 **Parameters:**
 - `Environment` (required): 'dev' or 'prod'
-- `StaticWebAppDomain` (required): Static Web App default domain
+- `StaticWebAppDomain` (required): Static Web App default hostname
+- `StaticWebAppResourceId` (required for prod apex): full Azure resource ID of the SWA (used for ALIAS record)
 - `SubscriptionId` (optional): Azure subscription ID
 
-**Creates:**
-- CNAME record pointing custom domain to Static Web App
+**Behaviour:**
+- For `dev` (subdomain zone `dev.codepals.io`): creates/updates a CNAME at the zone apex (`@`) pointing at the SWA hostname — CNAMEs at apex are allowed because this zone is itself a subdomain delegation.
+- For `prod` (apex zone `codepals.io`): creates/updates an Azure DNS **ALIAS** record at the apex targeting the Static Web App resource (CNAME at a true zone apex is not permitted in standard DNS).
 
-### Initialize-GitHubOAuth
-Sets up GitHub OAuth application and stores credentials in Key Vault.
+### Initialize-DNSZones
+Creates the DNS zones and prints the nameservers you need to delegate at your registrar.
 
 ```powershell
-Initialize-GitHubOAuth -Environment dev
+Initialize-DNSZones -Environment dev
+Initialize-DNSZones -Environment prod
 ```
-
-**Parameters:**
-- `Environment` (required): 'dev' or 'prod'
-- `CallbackUrl` (optional): OAuth callback URL (auto-generated based on environment)
-- `AppName` (optional): OAuth app name (auto-generated based on environment)
-
-**Stores in Key Vault:**
-- `GITHUB-CLIENT-ID`: OAuth app client ID
-- `GITHUB-CLIENT-SECRET`: OAuth app client secret
-- `JWT-SECRET`: Generated JWT signing secret
-- `GITHUB-OAUTH-METADATA`: OAuth app configuration metadata
 
 ## Usage Examples
 
-### Complete Infrastructure Setup
+### One-Time Zone Setup
 
 ```powershell
-# Import module
 Import-Module ./infra/CodePals.Infra.psd1
 
-# Provision infrastructure
+# Create zones, print NS records to delegate at the registrar
+Initialize-DNSZones -Environment prod
+Initialize-DNSZones -Environment dev
+```
+
+### Provision an Environment
+
+```powershell
 Initialize-Infra -Environment dev
-
-# Set up GitHub OAuth (interactive - requires manual GitHub app creation)
-Initialize-GitHubOAuth -Environment dev
-```
-
-### Update DNS Only
-
-```powershell
-Import-Module ./infra/CodePals.Infra.psd1
-Initialize-DNS -Environment dev -StaticWebAppDomain "codepals-dev.azurestaticapps.net"
-```
-
-### Production Deployment
-
-```powershell
-Import-Module ./infra/CodePals.Infra.psd1
-
-# Provision production infrastructure
 Initialize-Infra -Environment prod -SubscriptionId "your-prod-subscription-id"
-
-# Configure production OAuth
-Initialize-GitHubOAuth -Environment prod
 ```
 
 ## Prerequisites
@@ -113,40 +89,37 @@ Initialize-GitHubOAuth -Environment prod
   - Az.Websites
   - Az.Dns
   - Az.CosmosDB
-- Azure CLI (authenticated)
-- GitHub CLI (for OAuth setup, authenticated)
+- Authenticated Azure session (`Connect-AzAccount`)
 
 ## Architecture
 
 ```
 infra/
 ├── CodePals.Infra.psd1          # Module manifest
-├── CodePals.Infra.psm1          # Main module file
+├── CodePals.Infra.psm1          # Module entrypoint (dot-sources scripts)
 ├── Initialize-Infra.ps1         # Infrastructure provisioning
-├── Initialize-DNS.ps1           # DNS configuration
-├── Initialize-GitHubOAuth.ps1   # GitHub OAuth setup
-├── main.bicep                   # Bicep template
-└── *.Tests.ps1                  # Pester tests
+├── Initialize-DNS.ps1           # DNS record configuration
+├── Initialize-DNSZones.ps1      # DNS zone provisioning
+├── main.bicep                   # Core Bicep template (SWA, KV, MI, Cosmos)
+├── dns-delegation.bicep         # Subdomain NS delegation template
+└── Initialize-Infra.Tests.ps1   # Pester tests
 ```
 
 ## Testing
 
 ```powershell
-# Run all tests
 Invoke-Pester -Path ./infra/*.Tests.ps1
-
-# Run specific test
-Invoke-Pester -Path ./infra/Initialize-GitHubOAuth.Tests.ps1
 ```
 
 ## Security
 
-All secrets are stored in Azure Key Vault and never exposed in plaintext:
-- Static Web App deployment token
-- Managed Identity client ID
-- Cosmos DB connection strings
-- GitHub OAuth credentials
-- JWT signing secrets
+Secrets live in Azure Key Vault:
+- `AZURE-STATIC-WEB-APPS-TOKEN` — SWA deployment token
+- `COSMOS-DB-CONNECTION-STRING` — Cosmos DB connection string
+- `COSMOS-DB-ENDPOINT` — Cosmos DB account endpoint
+- `COSMOS-DB-DATABASE-NAME` — Cosmos DB database name
+
+The Static Web App's user-assigned managed identity pulls the Cosmos connection string into its app settings via a Key Vault reference at deploy time. The managed identity client ID is exposed as a deployment output and a plain app setting (it's a public identifier, not a secret).
 
 ## License
 

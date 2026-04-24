@@ -37,7 +37,7 @@
     FunctionsToExport = @(
         'Initialize-Infra'
         'Initialize-DNS'
-        'Initialize-GitHubOAuth'
+        'Initialize-DNSZones'
     )
 
     # Cmdlets to export from this module
@@ -66,8 +66,8 @@
 # Version 1.0.0
 - Initial release
 - Initialize-Infra: Provision complete Azure infrastructure
-- Initialize-DNS: Configure DNS records for custom domains
-- Initialize-GitHubOAuth: Set up GitHub OAuth applications
+- Initialize-DNS: Configure CNAME / ALIAS records for custom domains
+- Initialize-DNSZones: Create DNS zones and print nameservers
 '@
         }
     }
