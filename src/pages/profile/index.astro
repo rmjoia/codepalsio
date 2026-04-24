@@ -445,10 +445,13 @@ import Footer from '../../components/Footer.astro';
 						return;
 					}
 
-					// Avatar and username
-					const avatarClaim = principal.claims?.find(c => c.typ === 'avatar_url');
-					const avatarUrl = avatarClaim?.val || '';
+					// Avatar and username. SWA's GitHub auth doesn't reliably emit an
+					// avatar_url claim, so fall back to github.com/{username}.png —
+					// GitHub serves every user's avatar at that URL and redirects
+					// to the CDN, no API call or token needed.
 					const username = principal.userDetails || 'User';
+					const avatarClaim = principal.claims?.find(c => c.typ === 'avatar_url');
+					const avatarUrl = avatarClaim?.val || `https://github.com/${encodeURIComponent(username)}.png`;
 					const avatarEl = document.getElementById('user-avatar');
 					if (avatarEl) { avatarEl.src = avatarUrl; avatarEl.alt = username; }
 					const usernameEl = document.getElementById('username-display');

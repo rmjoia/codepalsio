@@ -119,8 +119,10 @@
 			if (!principal) return;
 
 			const username = principal.userDetails || 'User';
+			// SWA's GitHub auth doesn't reliably emit avatar_url in claims — fall
+			// back to github.com/{username}.png (public, no auth needed).
 			const avatarClaim = principal.claims?.find((c: { typ: string }) => c.typ === 'avatar_url');
-			const avatarUrl = avatarClaim?.val || '';
+			const avatarUrl = avatarClaim?.val || `https://github.com/${encodeURIComponent(username)}.png`;
 			const isAdmin = principal.userRoles?.includes('admin') ?? false;
 
 			// Swap sign-in button for user menu
