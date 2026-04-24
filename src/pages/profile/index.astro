@@ -48,7 +48,6 @@ import Footer from '../../components/Footer.astro';
 					</div>
 					<button
 						id="edit-btn"
-						onclick="showEditMode()"
 						class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center gap-2"
 					>
 						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -58,7 +57,6 @@ import Footer from '../../components/Footer.astro';
 					</button>
 					<button
 						id="cancel-btn"
-						onclick="showViewMode()"
 						class="hidden px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
 					>
 						Cancel
@@ -80,7 +78,7 @@ import Footer from '../../components/Footer.astro';
 								Add your bio, skills, and interests to help other CodePals find and connect with you.
 							</p>
 							<button
-								onclick="showEditMode()"
+								id="complete-profile-btn"
 								class="text-sm font-medium text-amber-700 hover:text-amber-800 underline"
 							>
 								Complete your profile →
@@ -239,7 +237,7 @@ import Footer from '../../components/Footer.astro';
 					<div class="flex gap-4 pt-4">
 						<button
 							type="button"
-							onclick="showViewMode()"
+							id="form-cancel-btn"
 							class="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
 						>
 							Cancel
@@ -258,29 +256,31 @@ import Footer from '../../components/Footer.astro';
 
 		<Footer />
 
-		<script is:inline>
-			let currentProfile = null;
-			const skills = new Set();
-			const interests = new Set();
+		<script>
+			import { getPrincipal, getAvatarUrl, getProfile, saveProfile, type Profile } from '../../services/api';
+
+			let currentProfile: Profile | null = null;
+			const skills = new Set<string>();
+			const interests = new Set<string>();
 
 			function showViewMode() {
-				document.getElementById('edit-mode').classList.add('hidden');
-				document.getElementById('view-mode').classList.remove('hidden');
-				document.getElementById('edit-btn').classList.remove('hidden');
-				document.getElementById('cancel-btn').classList.add('hidden');
+				document.getElementById('edit-mode')?.classList.add('hidden');
+				document.getElementById('view-mode')?.classList.remove('hidden');
+				document.getElementById('edit-btn')?.classList.remove('hidden');
+				document.getElementById('cancel-btn')?.classList.add('hidden');
 				history.replaceState(null, '', '/profile');
 			}
 
 			function showEditMode() {
-				document.getElementById('view-mode').classList.add('hidden');
-				document.getElementById('edit-mode').classList.remove('hidden');
-				document.getElementById('edit-btn').classList.add('hidden');
-				document.getElementById('cancel-btn').classList.remove('hidden');
+				document.getElementById('view-mode')?.classList.add('hidden');
+				document.getElementById('edit-mode')?.classList.remove('hidden');
+				document.getElementById('edit-btn')?.classList.add('hidden');
+				document.getElementById('cancel-btn')?.classList.remove('hidden');
 				populateEditForm();
 				history.replaceState(null, '', '/profile?edit=true');
 			}
 
-			function populateViewMode(profile) {
+			function populateViewMode(profile: Profile | null) {
 				// Bio
 				const bioEl = document.getElementById('profile-bio');
 				const bioEmpty = document.getElementById('profile-bio-empty');
@@ -373,43 +373,44 @@ import Footer from '../../components/Footer.astro';
 
 			function populateEditForm() {
 				const profile = currentProfile;
-				const displayNameEl = document.getElementById('displayName');
-				const bioEl = document.getElementById('bio');
-				const locationEl = document.getElementById('location');
-				const timezoneEl = document.getElementById('timezone');
+				const displayNameEl = document.getElementById('displayName') as HTMLInputElement | null;
+				const bioEl = document.getElementById('bio') as HTMLTextAreaElement | null;
+				const locationEl = document.getElementById('location') as HTMLInputElement | null;
+				const timezoneEl = document.getElementById('timezone') as HTMLSelectElement | null;
+				const bioCountEl = document.getElementById('bio-count');
 
 				if (displayNameEl) displayNameEl.value = profile?.displayName || '';
 				if (bioEl) {
 					bioEl.value = profile?.bio || '';
-					document.getElementById('bio-count').textContent = bioEl.value.length;
+					if (bioCountEl) bioCountEl.textContent = String(bioEl.value.length);
 				}
 				if (locationEl) locationEl.value = profile?.location || '';
 				if (timezoneEl && profile?.timezone) timezoneEl.value = profile.timezone;
 
 				if (profile?.availability) {
-					const radio = document.querySelector('input[name="availability"][value="' + profile.availability + '"]');
+					const radio = document.querySelector<HTMLInputElement>(
+						'input[name="availability"][value="' + profile.availability + '"]'
+					);
 					if (radio) radio.checked = true;
 				}
 
-				// Populate skills
 				skills.clear();
-				(profile?.skills || []).forEach(s => skills.add(s));
+				(profile?.skills || []).forEach((s) => skills.add(s));
 				renderTags('skills-container', skills, 'skill');
 
-				// Populate interests
 				interests.clear();
-				(profile?.interests || []).forEach(i => interests.add(i));
+				(profile?.interests || []).forEach((i) => interests.add(i));
 				renderTags('interests-container', interests, 'interest');
 			}
 
-			function renderTags(containerId, set, type) {
+			function renderTags(containerId: string, set: Set<string>, type: 'skill' | 'interest') {
 				const container = document.getElementById(containerId);
 				if (!container) return;
-				container.innerHTML = '';
-				set.forEach(text => addTag(text, type, container));
+				container.replaceChildren();
+				set.forEach((text) => addTag(text, type, container));
 			}
 
-			function addTag(text, type, container) {
+			function addTag(text: string, type: 'skill' | 'interest', container: HTMLElement) {
 				// Build via DOM — 'text' is user input, so keep it out of innerHTML.
 				const tag = document.createElement('span');
 				tag.className = 'inline-flex items-center gap-2 px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm';
@@ -432,37 +433,24 @@ import Footer from '../../components/Footer.astro';
 
 			async function init() {
 				try {
-					const [authRes, profileRes] = await Promise.all([
-						fetch('/.auth/me'),
-						fetch('/api/profile-get'),
-					]);
-
-					const auth = await authRes.json();
-					const principal = auth.clientPrincipal;
+					const [principal, profile] = await Promise.all([getPrincipal(), getProfile()]);
 
 					if (!principal) {
 						window.location.href = '/.auth/login/github?post_login_redirect_uri=/profile';
 						return;
 					}
 
-					// Avatar and username. SWA's GitHub auth doesn't reliably emit an
-					// avatar_url claim, so fall back to github.com/{username}.png —
-					// GitHub serves every user's avatar at that URL and redirects
-					// to the CDN, no API call or token needed.
 					const username = principal.userDetails || 'User';
-					const avatarClaim = principal.claims?.find(c => c.typ === 'avatar_url');
-					const avatarUrl = avatarClaim?.val || `https://github.com/${encodeURIComponent(username)}.png`;
-					const avatarEl = document.getElementById('user-avatar');
-					if (avatarEl) { avatarEl.src = avatarUrl; avatarEl.alt = username; }
+					const avatarUrl = getAvatarUrl(principal);
+					const avatarEl = document.getElementById('user-avatar') as HTMLImageElement | null;
+					if (avatarEl) {
+						avatarEl.src = avatarUrl;
+						avatarEl.alt = username;
+					}
 					const usernameEl = document.getElementById('username-display');
 					if (usernameEl) usernameEl.textContent = '@' + username;
 
-					if (!profileRes.ok && profileRes.status !== 404) {
-						throw new Error('profile-get returned ' + profileRes.status);
-					}
-					const profileData = await profileRes.json();
-					currentProfile = profileData.profile || null;
-
+					currentProfile = profile;
 					populateViewMode(currentProfile);
 
 					const isEditMode = new URLSearchParams(window.location.search).get('edit') === 'true';
@@ -472,88 +460,89 @@ import Footer from '../../components/Footer.astro';
 						showViewMode();
 					}
 
-					document.getElementById('loading-state').classList.add('hidden');
-					document.getElementById('profile-main').classList.remove('hidden');
+					document.getElementById('loading-state')?.classList.add('hidden');
+					document.getElementById('profile-main')?.classList.remove('hidden');
 				} catch (error) {
 					console.error('Profile init failed:', error);
-					document.getElementById('loading-state').classList.add('hidden');
-					document.getElementById('error-state').classList.remove('hidden');
+					document.getElementById('loading-state')?.classList.add('hidden');
+					document.getElementById('error-state')?.classList.remove('hidden');
 				}
 			}
 
+			// Mode toggle buttons (replace the old inline onclick handlers).
+			document.getElementById('edit-btn')?.addEventListener('click', showEditMode);
+			document.getElementById('cancel-btn')?.addEventListener('click', showViewMode);
+			document.getElementById('complete-profile-btn')?.addEventListener('click', showEditMode);
+			document.getElementById('form-cancel-btn')?.addEventListener('click', showViewMode);
+
 			// Bio character counter
-			document.getElementById('bio')?.addEventListener('input', function () {
-				document.getElementById('bio-count').textContent = this.value.length;
+			document.getElementById('bio')?.addEventListener('input', (e) => {
+				const target = e.target as HTMLTextAreaElement;
+				const counter = document.getElementById('bio-count');
+				if (counter) counter.textContent = String(target.value.length);
 			});
 
-			// Skills tag input
-			document.getElementById('skills-input')?.addEventListener('keydown', function (e) {
-				if (e.key === 'Enter' || e.key === ',') {
+			function bindTagInput(inputId: string, containerId: string, set: Set<string>, type: 'skill' | 'interest') {
+				const input = document.getElementById(inputId) as HTMLInputElement | null;
+				const container = document.getElementById(containerId);
+				if (!input || !container) return;
+				input.addEventListener('keydown', (e) => {
+					if (e.key !== 'Enter' && e.key !== ',') return;
 					e.preventDefault();
-					const skill = this.value.replace(/,/g, '').trim();
-					if (skill && !skills.has(skill)) {
-						skills.add(skill);
-						addTag(skill, 'skill', document.getElementById('skills-container'));
+					const value = input.value.replace(/,/g, '').trim();
+					if (value && !set.has(value)) {
+						set.add(value);
+						addTag(value, type, container);
 					}
-					this.value = '';
-				}
-			});
-
-			// Interests tag input
-			document.getElementById('interests-input')?.addEventListener('keydown', function (e) {
-				if (e.key === 'Enter' || e.key === ',') {
-					e.preventDefault();
-					const interest = this.value.replace(/,/g, '').trim();
-					if (interest && !interests.has(interest)) {
-						interests.add(interest);
-						addTag(interest, 'interest', document.getElementById('interests-container'));
-					}
-					this.value = '';
-				}
-			});
+					input.value = '';
+				});
+			}
+			bindTagInput('skills-input', 'skills-container', skills, 'skill');
+			bindTagInput('interests-input', 'interests-container', interests, 'interest');
 
 			// Form submission
-			document.getElementById('profile-form')?.addEventListener('submit', async function (e) {
+			document.getElementById('profile-form')?.addEventListener('submit', async (e) => {
 				e.preventDefault();
 
-				const bio = document.getElementById('bio').value;
+				const displayNameEl = document.getElementById('displayName') as HTMLInputElement | null;
+				const bioEl = document.getElementById('bio') as HTMLTextAreaElement | null;
+				const locationEl = document.getElementById('location') as HTMLInputElement | null;
+				const timezoneEl = document.getElementById('timezone') as HTMLSelectElement | null;
+				const availabilityEl = document.querySelector<HTMLInputElement>(
+					'input[name="availability"]:checked'
+				);
+				const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement | null;
+
+				const bio = bioEl?.value || '';
 				if (bio.length < 50) { alert('Bio must be at least 50 characters'); return; }
 				if (skills.size < 2) { alert('Please add at least 2 skills'); return; }
 				if (interests.size < 2) { alert('Please add at least 2 interests'); return; }
 
-				const btn = document.getElementById('submit-btn');
-				btn.disabled = true;
-				btn.textContent = 'Saving…';
+				if (submitBtn) {
+					submitBtn.disabled = true;
+					submitBtn.textContent = 'Saving…';
+				}
 
 				try {
-					const res = await fetch('/api/profile-save', {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({
-							displayName: document.getElementById('displayName').value,
-							bio,
-							skills: Array.from(skills),
-							interests: Array.from(interests),
-							location: document.getElementById('location').value,
-							timezone: document.getElementById('timezone').value,
-							availability: document.querySelector('input[name="availability"]:checked')?.value || 'active',
-						}),
+					const saved = await saveProfile({
+						displayName: displayNameEl?.value || '',
+						bio,
+						skills: Array.from(skills),
+						interests: Array.from(interests),
+						location: locationEl?.value,
+						timezone: timezoneEl?.value,
+						availability: (availabilityEl?.value as Profile['availability']) || 'active',
 					});
-
-					if (!res.ok) {
-						const err = await res.json();
-						throw new Error(err.error || 'Failed to save profile');
-					}
-
-					const saved = await res.json();
-					currentProfile = saved.profile;
+					currentProfile = saved;
 					populateViewMode(currentProfile);
 					showViewMode();
 				} catch (err) {
 					alert(err instanceof Error ? err.message : 'Failed to save profile');
 				} finally {
-					btn.disabled = false;
-					btn.textContent = 'Save Profile';
+					if (submitBtn) {
+						submitBtn.disabled = false;
+						submitBtn.textContent = 'Save Profile';
+					}
 				}
 			});
 
