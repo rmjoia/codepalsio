@@ -12,12 +12,8 @@
 			"redirect": "/.auth/logout"
 		},
 		{
-			"route": "/api/profile-save",
-			"allowedRoles": ["authenticated"]
-		},
-		{
-			"route": "/api/account-delete",
-			"allowedRoles": ["authenticated"]
+			"route": "/_astro/*",
+			"allowedRoles": ["anonymous"]
 		},
 		{
 			"route": "/profile/*",
@@ -26,17 +22,44 @@
 		{
 			"route": "/welcome",
 			"allowedRoles": ["authenticated"]
+		},
+		{
+			"route": "/find",
+			"allowedRoles": ["authenticated"]
+		},
+		{
+			"route": "/admin/*",
+			"allowedRoles": ["admin"]
+		},
+		{
+			"route": "/api/profile-save",
+			"allowedRoles": ["authenticated"]
+		},
+		{
+			"route": "/api/profile-get",
+			"allowedRoles": ["authenticated"]
+		},
+		{
+			"route": "/api/account-delete",
+			"allowedRoles": ["authenticated"]
+		},
+		{
+			"route": "/api/admin-users",
+			"allowedRoles": ["admin"]
+		},
+		{
+			"route": "/api/*",
+			"allowedRoles": ["anonymous", "authenticated"]
 		}
 	],
 	"responseOverrides": {
 		"401": {
 			"redirect": "/.auth/login/github?post_login_redirect_uri=.referrer",
 			"statusCode": 302
+		},
+		"404": {
+			"rewrite": "/404.html"
 		}
-	},
-	"navigationFallback": {
-		"rewrite": "/404.html",
-		"exclude": ["/_astro/*", "/images/*.{png,jpg,gif,ico}", "/favicon.ico", "/.auth/*", "/api/*"]
 	},
 	"globalHeaders": {
 		"X-Content-Type-Options": "nosniff",

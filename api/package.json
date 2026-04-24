@@ -1,0 +1,7 @@
+{
+  "name": "codepals-api",
+  "version": "1.0.0",
+  "dependencies": {
+    "@azure/cosmos": "^4.8.0"
+  }
+}

@@ -1,39 +1,6 @@
 ---
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
-import { ProfileRepository } from '../../infrastructure/ProfileRepository';
-
-// Check if user is authenticated via Azure Static Web Apps
-// This file needs to be server-rendered to access request headers
-// In static mode, protected routes are handled by staticwebapp.config.json
-
-// For server-rendered pages, check auth header
-const clientPrincipal = Astro.request.headers.get('x-ms-client-principal');
-if (!clientPrincipal) {
-	return Astro.redirect('/.auth/login/github?post_login_redirect_uri=/profile');
-}
-
-// Decode user principal from Azure
-const principal = JSON.parse(Buffer.from(clientPrincipal, 'base64').toString('utf-8'));
-const user = {
-	userId: principal.userId,
-	githubUsername: principal.userDetails,
-	avatarUrl: principal.claims?.find((c: any) => c.typ === 'avatar_url')?.val || '',
-};
-
-// Load existing profile
-let existingProfile: any = null;
-try {
-	const connectionString = import.meta.env.COSMOS_DB_CONNECTION_STRING;
-	const database = import.meta.env.COSMOS_DB_DATABASE_NAME;
-	const profileRepo = new ProfileRepository(connectionString, database);
-	existingProfile = await profileRepo.findByUserId(user.userId);
-} catch (error) {
-	console.error('Failed to load profile:', error);
-}
-
-// Check if we're in edit mode
-const isEditMode = Astro.url.searchParams.get('edit') === 'true';
 ---
 
 <!DOCTYPE html>
@@ -41,461 +8,553 @@ const isEditMode = Astro.url.searchParams.get('edit') === 'true';
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>{isEditMode ? 'Edit Profile' : 'My Profile'} - CodePals</title>
+		<title>My Profile - CodePals</title>
 	</head>
 	<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
 		<Header />
 
-		<main class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12">
+		<!-- Loading state -->
+		<div id="loading-state" class="flex justify-center items-center min-h-[60vh]">
+			<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+		</div>
+
+		<!-- Error state -->
+		<div id="error-state" class="hidden mx-auto max-w-2xl px-4 py-16 text-center">
+			<h1 class="text-2xl font-bold text-red-700 mb-2">Couldn't load your profile</h1>
+			<p class="text-slate-600 mb-6">Something went wrong. Please refresh the page and try again.</p>
+			<button
+				onclick="window.location.reload()"
+				class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+			>
+				Refresh
+			</button>
+		</div>
+
+		<main id="profile-main" class="hidden mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12">
+			<!-- User header card -->
 			<div class="bg-white rounded-2xl shadow-lg p-8 mb-8">
 				<div class="flex items-start justify-between gap-6">
 					<div class="flex items-start gap-6">
 						<img
-							src={user?.avatarUrl}
-							alt={user?.githubUsername}
+							id="user-avatar"
+							src=""
+							alt="Avatar"
 							class="w-24 h-24 rounded-full border-4 border-primary-100"
 						/>
 						<div class="flex-1">
-							<h1 class="text-3xl font-bold text-slate-900 mb-2">
-								@{user?.githubUsername}
-							</h1>
-							<p class="text-slate-600 mb-4">
-								CodePals Member
-							</p>
+							<h1 id="username-display" class="text-3xl font-bold text-slate-900 mb-2"></h1>
+							<p class="text-slate-600 mb-4">CodePals Member</p>
 						</div>
 					</div>
-					
-					{!isEditMode ? (
-						<button
-							onclick="window.location.href='/profile?edit=true'"
-							class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center gap-2"
-						>
-							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-							</svg>
-							Edit Profile
-						</button>
-					) : (
-						<button
-							onclick="window.location.href='/profile'"
-							class="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
-						>
-							Cancel
-						</button>
-					)}
+					<button
+						id="edit-btn"
+						onclick="showEditMode()"
+						class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center gap-2"
+					>
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+						</svg>
+						Edit Profile
+					</button>
+					<button
+						id="cancel-btn"
+						onclick="showViewMode()"
+						class="hidden px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+					>
+						Cancel
+					</button>
 				</div>
 			</div>
 
-			{!isEditMode ? (
-				<>
-				{!existingProfile?.isComplete() && (
-					<div class="bg-amber-50 border border-amber-200 rounded-xl p-6 mb-8">
-						<div class="flex items-start gap-4">
-							<svg class="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-							</svg>
-							<div>
-								<h3 class="font-semibold text-amber-900 mb-1">Complete your profile</h3>
-								<p class="text-amber-800 text-sm mb-3">
-									Add your bio, skills, and interests to help other CodePals find and connect with you.
-								</p>
-								<button 
-									onclick="window.location.href='/profile?edit=true'"
-									class="text-sm font-medium text-amber-700 hover:text-amber-800 underline"
-								>
-									Complete your profile →
-								</button>
-							</div>
+			<!-- View mode -->
+			<div id="view-mode">
+				<!-- Incomplete profile banner -->
+				<div id="incomplete-banner" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-6 mb-8">
+					<div class="flex items-start gap-4">
+						<svg class="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+						</svg>
+						<div>
+							<h3 class="font-semibold text-amber-900 mb-1">Complete your profile</h3>
+							<p class="text-amber-800 text-sm mb-3">
+								Add your bio, skills, and interests to help other CodePals find and connect with you.
+							</p>
+							<button
+								onclick="showEditMode()"
+								class="text-sm font-medium text-amber-700 hover:text-amber-800 underline"
+							>
+								Complete your profile →
+							</button>
 						</div>
 					</div>
-				)}
+				</div>
 
 				<div class="space-y-6">
 					<div class="bg-white rounded-xl shadow p-6">
 						<h2 class="text-xl font-bold text-slate-900 mb-4">About Me</h2>
-						{existingProfile?.bio ? (
-							<p class="text-slate-700 whitespace-pre-wrap">{existingProfile.bio}</p>
-						) : (
-							<p class="text-slate-600 italic">
-								No bio added yet. Click "Edit Profile" to add one.
-							</p>
-						)}
+						<p id="profile-bio" class="text-slate-700 whitespace-pre-wrap hidden"></p>
+						<p id="profile-bio-empty" class="text-slate-600 italic hidden">No bio added yet. Click "Edit Profile" to add one.</p>
 					</div>
 
 					<div class="bg-white rounded-xl shadow p-6">
 						<h2 class="text-xl font-bold text-slate-900 mb-4">Skills</h2>
-						{existingProfile?.skills?.length > 0 ? (
-							<div class="flex flex-wrap gap-2">
-								{existingProfile.skills.map((skill: string) => (
-									<span class="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm">
-										{skill}
-									</span>
-								))}
-							</div>
-						) : (
-							<p class="text-slate-600 italic">
-								No skills added yet. Click "Edit Profile" to add some.
-							</p>
-						)}
+						<div id="profile-skills" class="flex flex-wrap gap-2 hidden"></div>
+						<p id="profile-skills-empty" class="text-slate-600 italic hidden">No skills added yet. Click "Edit Profile" to add some.</p>
 					</div>
 
 					<div class="bg-white rounded-xl shadow p-6">
 						<h2 class="text-xl font-bold text-slate-900 mb-4">Interests</h2>
-						{existingProfile?.interests?.length > 0 ? (
-							<div class="flex flex-wrap gap-2">
-								{existingProfile.interests.map((interest: string) => (
-									<span class="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">
-										{interest}
-									</span>
-								))}
-							</div>
-						) : (
-							<p class="text-slate-600 italic">
-								No interests added yet. Click "Edit Profile" to add some.
-							</p>
-						)}
+						<div id="profile-interests" class="flex flex-wrap gap-2 hidden"></div>
+						<p id="profile-interests-empty" class="text-slate-600 italic hidden">No interests added yet. Click "Edit Profile" to add some.</p>
 					</div>
 
-					{(existingProfile?.location || existingProfile?.timezone || existingProfile?.availability) && (
-						<div class="bg-white rounded-xl shadow p-6">
-							<h2 class="text-xl font-bold text-slate-900 mb-4">Details</h2>
-							<div class="space-y-2">
-								{existingProfile.location && (
-									<p class="text-slate-700">
-										<span class="font-semibold">Location:</span> {existingProfile.location}
-									</p>
-								)}
-								{existingProfile.timezone && (
-									<p class="text-slate-700">
-										<span class="font-semibold">Timezone:</span> {existingProfile.timezone}
-									</p>
-								)}
-								{existingProfile.availability && (
-									<p class="text-slate-700">
-										<span class="font-semibold">Availability:</span> <span class="capitalize">{existingProfile.availability.replace('_', ' ')}</span>
-									</p>
-								)}
-							</div>
+					<div id="profile-details-card" class="hidden bg-white rounded-xl shadow p-6">
+						<h2 class="text-xl font-bold text-slate-900 mb-4">Details</h2>
+						<div class="space-y-2">
+							<p id="detail-location" class="hidden text-slate-700"></p>
+							<p id="detail-timezone" class="hidden text-slate-700"></p>
+							<p id="detail-availability" class="hidden text-slate-700"></p>
 						</div>
-					)}
+					</div>
 				</div>
-				</>
-			) : (
-				<div class="bg-white rounded-2xl shadow-lg p-8">
-					<h2 class="text-2xl font-bold text-slate-900 mb-6">Edit Your Profile</h2>
-					
+			</div>
+
+			<!-- Edit mode (hidden by default) -->
+			<div id="edit-mode" class="hidden bg-white rounded-2xl shadow-lg p-8">
+				<h2 class="text-2xl font-bold text-slate-900 mb-6">Edit Your Profile</h2>
+
 				<form id="profile-form" class="space-y-6">
 					<div>
-							<label for="displayName" class="block text-sm font-semibold text-slate-900 mb-2">
-								Display Name *
-							</label>
-							<input
-								type="text"
-								id="displayName"
-								name="displayName"
-								required
-								value={existingProfile?.displayName || user?.githubUsername || ''}
-								placeholder="How should we call you?"
-								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-							/>
-						</div>
+						<label for="displayName" class="block text-sm font-semibold text-slate-900 mb-2">
+							Display Name *
+						</label>
+						<input
+							type="text"
+							id="displayName"
+							name="displayName"
+							required
+							placeholder="How should we call you?"
+							class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+						/>
+					</div>
 
-						<div>
-							<label for="bio" class="block text-sm font-semibold text-slate-900 mb-2">
-								Bio *
-							</label>
-							<textarea
-								id="bio"
-								name="bio"
-								required
-								rows="4"
-								maxlength="500"
-								placeholder="Tell us about yourself, your interests, and what you're looking for in a CodePal..."
-								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-							>{existingProfile?.bio || ''}</textarea>
-							<p class="mt-1 text-sm text-slate-500">
-								<span id="bio-count">0</span>/500 characters (minimum 50)
-							</p>
-						</div>
+					<div>
+						<label for="bio" class="block text-sm font-semibold text-slate-900 mb-2">
+							Bio *
+						</label>
+						<textarea
+							id="bio"
+							name="bio"
+							required
+							rows="4"
+							maxlength="500"
+							placeholder="Tell us about yourself, your interests, and what you're looking for in a CodePal..."
+							class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+						></textarea>
+						<p class="mt-1 text-sm text-slate-500">
+							<span id="bio-count">0</span>/500 characters (minimum 50)
+						</p>
+					</div>
 
-						<div>
-							<label class="block text-sm font-semibold text-slate-900 mb-2">
-								Skills * (at least 2)
-							</label>
-							<input
-								type="text"
-								id="skills-input"
-								placeholder="Type a skill and press Enter to add (e.g., C#, JavaScript, Python)"
-								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-							/>
-							<p class="mt-1 text-sm text-slate-500">
-								💡 Type each skill and press <kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">Enter</kbd> or <kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">comma</kbd> to add it
-							</p>
-							<div id="skills-container" class="flex flex-wrap gap-2 mt-3 min-h-[40px]">
-							</div>
-						</div>
+					<div>
+						<label class="block text-sm font-semibold text-slate-900 mb-2">
+							Skills * (at least 2)
+						</label>
+						<input
+							type="text"
+							id="skills-input"
+							placeholder="Type a skill and press Enter to add (e.g., C#, JavaScript, Python)"
+							class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+						/>
+						<p class="mt-1 text-sm text-slate-500">
+							Type each skill and press <kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">Enter</kbd> or <kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">comma</kbd> to add it
+						</p>
+						<div id="skills-container" class="flex flex-wrap gap-2 mt-3 min-h-[40px]"></div>
+					</div>
 
-						<div>
-							<label class="block text-sm font-semibold text-slate-900 mb-2">
-								Interests * (at least 2)
-							</label>
-							<input
-								type="text"
-								id="interests-input"
-								placeholder="Type an interest and press Enter to add (e.g., Web Development, AI)"
-								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-							/>
-							<p class="mt-1 text-sm text-slate-500">
-								💡 Type each interest and press <kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">Enter</kbd> or <kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">comma</kbd> to add it
-							</p>
-							<div id="interests-container" class="flex flex-wrap gap-2 mt-3 min-h-[40px]">
-							</div>
+					<div>
+						<label class="block text-sm font-semibold text-slate-900 mb-2">
+							Interests * (at least 2)
+						</label>
+						<input
+							type="text"
+							id="interests-input"
+							placeholder="Type an interest and press Enter to add (e.g., Web Development, AI)"
+							class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+						/>
+						<p class="mt-1 text-sm text-slate-500">
+							Type each interest and press <kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">Enter</kbd> or <kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">comma</kbd> to add it
+						</p>
+						<div id="interests-container" class="flex flex-wrap gap-2 mt-3 min-h-[40px]"></div>
 					</div>
 
 					<div class="grid md:grid-cols-2 gap-6">
-							<div>
-								<label for="location" class="block text-sm font-semibold text-slate-900 mb-2">
-									Location
-								</label>
-								<input
-									type="text"
-									id="location"
-									name="location"
-									value={existingProfile?.location || ''}
-									placeholder="e.g., Dublin, Ireland"
-									class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-								/>
-							</div>
-
-							<div>
-								<label for="timezone" class="block text-sm font-semibold text-slate-900 mb-2">
-									Timezone
-								</label>
-								<select
-									id="timezone"
-									name="timezone"
-									class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-								>
-									<option value="">Select timezone</option>
-									<option value="UTC">UTC</option>
-									<option value="Europe/Dublin">Europe/Dublin (GMT)</option>
-									<option value="Europe/London">Europe/London (GMT)</option>
-									<option value="America/New_York">America/New York (EST)</option>
-									<option value="America/Los_Angeles">America/Los Angeles (PST)</option>
-									<option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
-									<option value="Australia/Sydney">Australia/Sydney (AEDT)</option>
-								</select>
-							</div>
-						</div>
-
 						<div>
-							<label class="block text-sm font-semibold text-slate-900 mb-2">
-								Availability
+							<label for="location" class="block text-sm font-semibold text-slate-900 mb-2">Location</label>
+							<input
+								type="text"
+								id="location"
+								name="location"
+								placeholder="e.g., Dublin, Ireland"
+								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+							/>
+						</div>
+						<div>
+							<label for="timezone" class="block text-sm font-semibold text-slate-900 mb-2">Timezone</label>
+							<select
+								id="timezone"
+								name="timezone"
+								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+							>
+								<option value="">Select timezone</option>
+								<option value="UTC">UTC</option>
+								<option value="Europe/Dublin">Europe/Dublin (GMT)</option>
+								<option value="Europe/London">Europe/London (GMT)</option>
+								<option value="America/New_York">America/New York (EST)</option>
+								<option value="America/Los_Angeles">America/Los Angeles (PST)</option>
+								<option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+								<option value="Australia/Sydney">Australia/Sydney (AEDT)</option>
+							</select>
+						</div>
+					</div>
+
+					<div>
+						<label class="block text-sm font-semibold text-slate-900 mb-2">Availability</label>
+						<div class="space-y-2">
+							<label class="flex items-center gap-2">
+								<input type="radio" name="availability" value="active" class="text-primary-500" checked />
+								<span class="text-slate-700">Active - Looking for a CodePal</span>
 							</label>
-							<div class="space-y-2">
-								<label class="flex items-center gap-2">
-									<input type="radio" name="availability" value="active" class="text-primary-500" checked />
-									<span class="text-slate-700">Active - Looking for a CodePal</span>
-								</label>
-								<label class="flex items-center gap-2">
-									<input type="radio" name="availability" value="casual" class="text-primary-500" />
-									<span class="text-slate-700">Casual - Open to occasional connections</span>
-								</label>
-								<label class="flex items-center gap-2">
-									<input type="radio" name="availability" value="unavailable" class="text-primary-500" />
-									<span class="text-slate-700">Not available right now</span>
-								</label>
-							</div>
+							<label class="flex items-center gap-2">
+								<input type="radio" name="availability" value="casual" class="text-primary-500" />
+								<span class="text-slate-700">Casual - Open to occasional connections</span>
+							</label>
+							<label class="flex items-center gap-2">
+								<input type="radio" name="availability" value="unavailable" class="text-primary-500" />
+								<span class="text-slate-700">Not available right now</span>
+							</label>
+						</div>
 					</div>
 
 					<div class="flex gap-4 pt-4">
-							<button
-								type="button"
-								onclick="window.location.href='/profile'"
-								class="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
-							>
-								Cancel
-							</button>
-							<button
-								type="submit"
-								id="submit-btn"
-								class="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex-1"
-							>
-								Save Profile
-							</button>
-						</div>
-					</form>
-				</div>
-			)}
+						<button
+							type="button"
+							onclick="showViewMode()"
+							class="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+						>
+							Cancel
+						</button>
+						<button
+							type="submit"
+							id="submit-btn"
+							class="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex-1"
+						>
+							Save Profile
+						</button>
+					</div>
+				</form>
+			</div>
 		</main>
 
 		<Footer />
 
-		{isEditMode && (
-			<script is:inline define:vars={{ profile: existingProfile }}>
-				const skills = new Set(profile?.skills || []);
-				const interests = new Set(profile?.interests || []);
+		<script is:inline>
+			let currentProfile = null;
+			const skills = new Set();
+			const interests = new Set();
 
-				// Bio character count
-				const bioTextarea = document.getElementById('bio');
-				const bioCount = document.getElementById('bio-count');
-				bioTextarea?.addEventListener('input', () => {
-					if (bioCount) {
-						bioCount.textContent = bioTextarea.value.length.toString();
-					}
-				});
+			function showViewMode() {
+				document.getElementById('edit-mode').classList.add('hidden');
+				document.getElementById('view-mode').classList.remove('hidden');
+				document.getElementById('edit-btn').classList.remove('hidden');
+				document.getElementById('cancel-btn').classList.add('hidden');
+				history.replaceState(null, '', '/profile');
+			}
 
-				// Skills management
-				const skillsInput = document.getElementById('skills-input');
-				const skillsContainer = document.getElementById('skills-container');
+			function showEditMode() {
+				document.getElementById('view-mode').classList.add('hidden');
+				document.getElementById('edit-mode').classList.remove('hidden');
+				document.getElementById('edit-btn').classList.add('hidden');
+				document.getElementById('cancel-btn').classList.remove('hidden');
+				populateEditForm();
+				history.replaceState(null, '', '/profile?edit=true');
+			}
 
-				skillsInput?.addEventListener('keypress', (e) => {
-					if (e.key === 'Enter' || e.key === ',') {
-						e.preventDefault();
-						const skill = skillsInput.value.replace(',', '').trim();
-						if (skill && !skills.has(skill)) {
-							skills.add(skill);
-							addTag(skill, 'skill', skillsContainer);
-							skillsInput.value = '';
-						}
-					}
-				});
-
-				// Interests management
-				const interestsInput = document.getElementById('interests-input');
-				const interestsContainer = document.getElementById('interests-container');
-
-				interestsInput?.addEventListener('keypress', (e) => {
-					if (e.key === 'Enter' || e.key === ',') {
-						e.preventDefault();
-						const interest = interestsInput.value.replace(',', '').trim();
-						if (interest && !interests.has(interest)) {
-							interests.add(interest);
-							addTag(interest, 'interest', interestsContainer);
-							interestsInput.value = '';
-						}
-					}
-				});
-
-				function addTag(text, type, container) {
-					const tag = document.createElement('span');
-					tag.className = 'inline-flex items-center gap-2 px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm';
-					tag.innerHTML = `
-						${text}
-						<button type="button" class="hover:text-primary-900 text-lg leading-none" onclick="removeTag('${text}', '${type}')">×</button>
-					`;
-					container.appendChild(tag);
+			function populateViewMode(profile) {
+				// Bio
+				const bioEl = document.getElementById('profile-bio');
+				const bioEmpty = document.getElementById('profile-bio-empty');
+				if (profile?.bio) {
+					bioEl.textContent = profile.bio;
+					bioEl.classList.remove('hidden');
+					bioEmpty.classList.add('hidden');
+				} else {
+					bioEl.classList.add('hidden');
+					bioEmpty.classList.remove('hidden');
 				}
 
-				window.removeTag = function(text, type) {
-					if (type === 'skill') {
-						skills.delete(text);
-					} else {
-						interests.delete(text);
-					}
-					renderTags();
-				};
-
-				function renderTags() {
-					if (skillsContainer) {
-						skillsContainer.innerHTML = '';
-						skills.forEach(skill => addTag(skill, 'skill', skillsContainer));
-					}
-					if (interestsContainer) {
-						interestsContainer.innerHTML = '';
-						interests.forEach(interest => addTag(interest, 'interest', interestsContainer));
-					}
+				// Skills
+				const skillsEl = document.getElementById('profile-skills');
+				const skillsEmpty = document.getElementById('profile-skills-empty');
+				skillsEl.innerHTML = '';
+				if (profile?.skills?.length > 0) {
+					profile.skills.forEach(skill => {
+						const span = document.createElement('span');
+						span.className = 'px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm';
+						span.textContent = skill;
+						skillsEl.appendChild(span);
+					});
+					skillsEl.classList.remove('hidden');
+					skillsEmpty.classList.add('hidden');
+				} else {
+					skillsEl.classList.add('hidden');
+					skillsEmpty.classList.remove('hidden');
 				}
 
-				// Form submission
-				const form = document.getElementById('profile-form');
-				form?.addEventListener('submit', async (e) => {
-					e.preventDefault();
+				// Interests
+				const interestsEl = document.getElementById('profile-interests');
+				const interestsEmpty = document.getElementById('profile-interests-empty');
+				interestsEl.innerHTML = '';
+				if (profile?.interests?.length > 0) {
+					profile.interests.forEach(interest => {
+						const span = document.createElement('span');
+						span.className = 'px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm';
+						span.textContent = interest;
+						interestsEl.appendChild(span);
+					});
+					interestsEl.classList.remove('hidden');
+					interestsEmpty.classList.add('hidden');
+				} else {
+					interestsEl.classList.add('hidden');
+					interestsEmpty.classList.remove('hidden');
+				}
 
-					const displayName = document.getElementById('displayName').value;
-					const bio = document.getElementById('bio').value;
-					const location = document.getElementById('location').value;
-					const timezone = document.getElementById('timezone').value;
-					const availability = document.querySelector('input[name="availability"]:checked')?.value;
+				// Details card. Build via DOM/textContent rather than innerHTML —
+				// location/timezone/availability round-trip through Cosmos and are
+				// user-controlled, so concatenating them into HTML is an XSS vector.
+				const detailsCard = document.getElementById('profile-details-card');
+				const locEl = document.getElementById('detail-location');
+				const tzEl = document.getElementById('detail-timezone');
+				const avEl = document.getElementById('detail-availability');
 
-					// Validation
-					if (bio.length < 50) {
-						alert('Bio must be at least 50 characters');
+				function renderDetail(el, label, value) {
+					el.replaceChildren();
+					if (!value) {
+						el.classList.add('hidden');
 						return;
 					}
-
-					if (skills.size < 2) {
-						alert('Please add at least 2 skills');
-						return;
-					}
-
-					if (interests.size < 2) {
-						alert('Please add at least 2 interests');
-						return;
-					}
-
-					const profileData = {
-						displayName,
-						bio,
-						skills: Array.from(skills),
-						interests: Array.from(interests),
-						location,
-						timezone,
-						availability: availability || 'active'
-					};
-
-					// Submit to API
-					try {
-						const response = await fetch('/api/profile/save', {
-							method: 'POST',
-							headers: {
-								'Content-Type': 'application/json',
-							},
-							body: JSON.stringify(profileData),
-						});
-
-						if (!response.ok) {
-							const error = await response.json();
-							throw new Error(error.error || 'Failed to save profile');
-						}
-
-						// Success - redirect to view mode
-						window.location.href = '/profile';
-					} catch (error) {
-						console.error('Save error:', error);
-						alert(error instanceof Error ? error.message : 'Failed to save profile');
-					}
-				});
-
-				// Initialize existing skills/interests
-				if (profile?.skills) {
-					skills.forEach(skill => addTag(skill, 'skill', skillsContainer));
-				}
-				if (profile?.interests) {
-					interests.forEach(interest => addTag(interest, 'interest', interestsContainer));
+					const labelSpan = document.createElement('span');
+					labelSpan.className = 'font-semibold';
+					labelSpan.textContent = label + ':';
+					el.appendChild(labelSpan);
+					el.appendChild(document.createTextNode(' ' + value));
+					el.classList.remove('hidden');
 				}
 
-				// Update bio character count on initialization
-				if (bioTextarea && bioCount) {
-					bioCount.textContent = bioTextarea.value.length.toString();
+				renderDetail(locEl, 'Location', profile?.location);
+				renderDetail(tzEl, 'Timezone', profile?.timezone);
+				renderDetail(avEl, 'Availability', profile?.availability ? profile.availability.replace('_', ' ') : '');
+
+				if (profile?.location || profile?.timezone || profile?.availability) {
+					detailsCard.classList.remove('hidden');
+				} else {
+					detailsCard.classList.add('hidden');
 				}
 
-				// Set timezone if it exists
-				if (profile?.timezone) {
-					const tzSelect = document.getElementById('timezone');
-					if (tzSelect) {
-						tzSelect.value = profile.timezone;
-					}
-				}
+				// Incomplete banner — a complete profile needs bio ≥50 chars, ≥2 skills, ≥2 interests, location, timezone
+				const isComplete = profile &&
+					profile.bio?.length >= 50 &&
+					profile.skills?.length >= 2 &&
+					profile.interests?.length >= 2 &&
+					profile.location &&
+					profile.timezone;
+				document.getElementById('incomplete-banner').classList.toggle('hidden', !!isComplete);
+			}
 
-				// Set availability if it exists
+			function populateEditForm() {
+				const profile = currentProfile;
+				const displayNameEl = document.getElementById('displayName');
+				const bioEl = document.getElementById('bio');
+				const locationEl = document.getElementById('location');
+				const timezoneEl = document.getElementById('timezone');
+
+				if (displayNameEl) displayNameEl.value = profile?.displayName || '';
+				if (bioEl) {
+					bioEl.value = profile?.bio || '';
+					document.getElementById('bio-count').textContent = bioEl.value.length;
+				}
+				if (locationEl) locationEl.value = profile?.location || '';
+				if (timezoneEl && profile?.timezone) timezoneEl.value = profile.timezone;
+
 				if (profile?.availability) {
-					const availInput = document.querySelector(`input[name="availability"][value="${profile.availability}"]`);
-					if (availInput) {
-						availInput.checked = true;
-					}
+					const radio = document.querySelector('input[name="availability"][value="' + profile.availability + '"]');
+					if (radio) radio.checked = true;
 				}
-			</script>
-		)}
+
+				// Populate skills
+				skills.clear();
+				(profile?.skills || []).forEach(s => skills.add(s));
+				renderTags('skills-container', skills, 'skill');
+
+				// Populate interests
+				interests.clear();
+				(profile?.interests || []).forEach(i => interests.add(i));
+				renderTags('interests-container', interests, 'interest');
+			}
+
+			function renderTags(containerId, set, type) {
+				const container = document.getElementById(containerId);
+				if (!container) return;
+				container.innerHTML = '';
+				set.forEach(text => addTag(text, type, container));
+			}
+
+			function addTag(text, type, container) {
+				// Build via DOM — 'text' is user input, so keep it out of innerHTML.
+				const tag = document.createElement('span');
+				tag.className = 'inline-flex items-center gap-2 px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm';
+				tag.dataset.value = text;
+				tag.appendChild(document.createTextNode(text));
+				const btn = document.createElement('button');
+				btn.type = 'button';
+				btn.className = 'hover:text-primary-900 text-lg leading-none';
+				btn.setAttribute('aria-label', 'Remove');
+				btn.textContent = '×';
+				btn.addEventListener('click', () => {
+					if (type === 'skill') skills.delete(text);
+					else interests.delete(text);
+					tag.remove();
+				});
+				tag.appendChild(document.createTextNode(' '));
+				tag.appendChild(btn);
+				container.appendChild(tag);
+			}
+
+			async function init() {
+				try {
+					const [authRes, profileRes] = await Promise.all([
+						fetch('/.auth/me'),
+						fetch('/api/profile-get'),
+					]);
+
+					const auth = await authRes.json();
+					const principal = auth.clientPrincipal;
+
+					if (!principal) {
+						window.location.href = '/.auth/login/github?post_login_redirect_uri=/profile';
+						return;
+					}
+
+					// Avatar and username
+					const avatarClaim = principal.claims?.find(c => c.typ === 'avatar_url');
+					const avatarUrl = avatarClaim?.val || '';
+					const username = principal.userDetails || 'User';
+					const avatarEl = document.getElementById('user-avatar');
+					if (avatarEl) { avatarEl.src = avatarUrl; avatarEl.alt = username; }
+					const usernameEl = document.getElementById('username-display');
+					if (usernameEl) usernameEl.textContent = '@' + username;
+
+					if (!profileRes.ok && profileRes.status !== 404) {
+						throw new Error('profile-get returned ' + profileRes.status);
+					}
+					const profileData = await profileRes.json();
+					currentProfile = profileData.profile || null;
+
+					populateViewMode(currentProfile);
+
+					const isEditMode = new URLSearchParams(window.location.search).get('edit') === 'true';
+					if (isEditMode) {
+						showEditMode();
+					} else {
+						showViewMode();
+					}
+
+					document.getElementById('loading-state').classList.add('hidden');
+					document.getElementById('profile-main').classList.remove('hidden');
+				} catch (error) {
+					console.error('Profile init failed:', error);
+					document.getElementById('loading-state').classList.add('hidden');
+					document.getElementById('error-state').classList.remove('hidden');
+				}
+			}
+
+			// Bio character counter
+			document.getElementById('bio')?.addEventListener('input', function () {
+				document.getElementById('bio-count').textContent = this.value.length;
+			});
+
+			// Skills tag input
+			document.getElementById('skills-input')?.addEventListener('keydown', function (e) {
+				if (e.key === 'Enter' || e.key === ',') {
+					e.preventDefault();
+					const skill = this.value.replace(/,/g, '').trim();
+					if (skill && !skills.has(skill)) {
+						skills.add(skill);
+						addTag(skill, 'skill', document.getElementById('skills-container'));
+					}
+					this.value = '';
+				}
+			});
+
+			// Interests tag input
+			document.getElementById('interests-input')?.addEventListener('keydown', function (e) {
+				if (e.key === 'Enter' || e.key === ',') {
+					e.preventDefault();
+					const interest = this.value.replace(/,/g, '').trim();
+					if (interest && !interests.has(interest)) {
+						interests.add(interest);
+						addTag(interest, 'interest', document.getElementById('interests-container'));
+					}
+					this.value = '';
+				}
+			});
+
+			// Form submission
+			document.getElementById('profile-form')?.addEventListener('submit', async function (e) {
+				e.preventDefault();
+
+				const bio = document.getElementById('bio').value;
+				if (bio.length < 50) { alert('Bio must be at least 50 characters'); return; }
+				if (skills.size < 2) { alert('Please add at least 2 skills'); return; }
+				if (interests.size < 2) { alert('Please add at least 2 interests'); return; }
+
+				const btn = document.getElementById('submit-btn');
+				btn.disabled = true;
+				btn.textContent = 'Saving…';
+
+				try {
+					const res = await fetch('/api/profile-save', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							displayName: document.getElementById('displayName').value,
+							bio,
+							skills: Array.from(skills),
+							interests: Array.from(interests),
+							location: document.getElementById('location').value,
+							timezone: document.getElementById('timezone').value,
+							availability: document.querySelector('input[name="availability"]:checked')?.value || 'active',
+						}),
+					});
+
+					if (!res.ok) {
+						const err = await res.json();
+						throw new Error(err.error || 'Failed to save profile');
+					}
+
+					const saved = await res.json();
+					currentProfile = saved.profile;
+					populateViewMode(currentProfile);
+					showViewMode();
+				} catch (err) {
+					alert(err instanceof Error ? err.message : 'Failed to save profile');
+				} finally {
+					btn.disabled = false;
+					btn.textContent = 'Save Profile';
+				}
+			});
+
+			init();
+		</script>
 	</body>
 </html>

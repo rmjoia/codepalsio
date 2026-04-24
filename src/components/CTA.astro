@@ -1,9 +1,5 @@
 ---
-// Call to Action section
-import jwt from 'jsonwebtoken';
-
-const sessionCookie = Astro.cookies.get('session');
-const isSignedIn = !!sessionCookie?.value;
+// Auth state resolved client-side — render unauthenticated state by default
 ---
 
 <section
@@ -13,8 +9,7 @@ const isSignedIn = !!sessionCookie?.value;
 	<!-- Animated background -->
 	<div class="absolute inset-0 overflow-hidden">
 		<div class="absolute -top-40 -right-40 w-80 h-80 bg-primary-500/10 rounded-full blur-3xl"></div>
-		<div class="absolute -bottom-40 -left-40 w-80 h-80 bg-accent-500/10 rounded-full blur-3xl">
-		</div>
+		<div class="absolute -bottom-40 -left-40 w-80 h-80 bg-accent-500/10 rounded-full blur-3xl"></div>
 	</div>
 
 	<div class="relative mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
@@ -30,23 +25,22 @@ const isSignedIn = !!sessionCookie?.value;
 
 		<!-- CTA Buttons -->
 		<div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-			{
-				!isSignedIn ? (
-					<a
-						href="/#how-it-works"
-						class="px-8 py-4 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors"
-					>
-						Start for Free
-					</a>
-				) : (
-					<a
-						href="/profile"
-						class="px-8 py-4 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors"
-					>
-						Go to Profile
-					</a>
-				)
-			}
+			<!-- Unauthenticated (default) -->
+			<a
+				id="cta-start"
+				href="/#how-it-works"
+				class="px-8 py-4 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors"
+			>
+				Start for Free
+			</a>
+			<!-- Authenticated (hidden until JS confirms) -->
+			<a
+				id="cta-profile"
+				href="/profile"
+				class="hidden px-8 py-4 bg-accent-500 text-white rounded-lg font-semibold hover:bg-accent-600 transition-colors"
+			>
+				Go to Profile
+			</a>
 			<a
 				href="https://github.com/rmjoia/codepalsio"
 				target="_blank"
@@ -65,4 +59,17 @@ const isSignedIn = !!sessionCookie?.value;
 			</a>
 		</div>
 	</div>
+
+	<script>
+		(async () => {
+			try {
+				const res = await fetch('/.auth/me');
+				const { clientPrincipal } = await res.json();
+				if (clientPrincipal) {
+					document.getElementById('cta-start')?.classList.add('hidden');
+					document.getElementById('cta-profile')?.classList.remove('hidden');
+				}
+			} catch { /* keep default unauthenticated state */ }
+		})();
+	</script>
 </section>

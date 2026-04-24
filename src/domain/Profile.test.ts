@@ -10,7 +10,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Full-stack developer',
 				skills: ['TypeScript', 'React', 'Node.js'],
 				interests: ['Open Source', 'Web Development'],
-				availability: 'available',
+				availability: 'active',
 			};
 
 			const profile = Profile.create(props);
@@ -20,7 +20,7 @@ describe('Profile Domain Model', () => {
 			expect(profile.bio).toBe('Full-stack developer');
 			expect(profile.skills).toEqual(['TypeScript', 'React', 'Node.js']);
 			expect(profile.interests).toEqual(['Open Source', 'Web Development']);
-			expect(profile.availability).toBe('available');
+			expect(profile.availability).toBe('active');
 			expect(profile.id).toMatch(/^profile-/);
 		});
 
@@ -31,7 +31,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			};
 
 			const profile1 = Profile.create(props);
@@ -47,7 +47,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			};
 
 			expect(() => Profile.create(props)).toThrow('User ID is required');
@@ -60,7 +60,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			};
 
 			expect(() => Profile.create(props)).toThrow('Display name is required');
@@ -73,7 +73,7 @@ describe('Profile Domain Model', () => {
 				bio: 'a'.repeat(501),
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			};
 
 			expect(() => Profile.create(props)).toThrow('Bio must not exceed 500 characters');
@@ -86,7 +86,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: [],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			};
 
 			expect(() => Profile.create(props)).toThrow('At least one skill is required');
@@ -99,16 +99,16 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: [],
-				availability: 'available',
+				availability: 'active',
 			};
 
 			expect(() => Profile.create(props)).toThrow('At least one interest is required');
 		});
 
 		it('should accept valid availability values', () => {
-			const availabilities: Array<'available' | 'busy' | 'unavailable'> = [
-				'available',
-				'busy',
+			const availabilities: Array<'active' | 'casual' | 'unavailable'> = [
+				'active',
+				'casual',
 				'unavailable',
 			];
 
@@ -134,7 +134,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 				location: 'San Francisco',
 				timezone: 'America/Los_Angeles',
 				githubUrl: 'https://github.com/johndoe',
@@ -160,7 +160,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Old bio',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			});
 
 			profile.updateBio('New bio');
@@ -175,7 +175,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Old bio',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			});
 
 			expect(() => profile.updateBio('a'.repeat(501))).toThrow(
@@ -190,12 +190,12 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			});
 
-			profile.updateAvailability('busy');
+			profile.updateAvailability('casual');
 
-			expect(profile.availability).toBe('busy');
+			expect(profile.availability).toBe('casual');
 		});
 
 		it('should add skill', () => {
@@ -205,7 +205,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			});
 
 			profile.addSkill('React');
@@ -221,7 +221,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			});
 
 			profile.addSkill('TypeScript');
@@ -236,7 +236,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript', 'React'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			});
 
 			profile.removeSkill('TypeScript');
@@ -252,7 +252,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			});
 
 			expect(() => profile.removeSkill('TypeScript')).toThrow(
@@ -267,7 +267,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			});
 
 			profile.addInterest('Open Source');
@@ -283,7 +283,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			});
 
 			profile.addInterest('Coding');
@@ -298,7 +298,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: ['Coding', 'Open Source'],
-				availability: 'available',
+				availability: 'active',
 			});
 
 			profile.removeInterest('Coding');
@@ -314,7 +314,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			});
 
 			expect(() => profile.removeInterest('Coding')).toThrow(
@@ -329,7 +329,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 			});
 
 			expect(incompleteProfile.isComplete()).toBe(false);
@@ -340,7 +340,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Full-stack developer with 5 years experience building scalable web applications. Passionate about clean code and mentoring.',
 				skills: ['TypeScript', 'React', 'Node.js'],
 				interests: ['Open Source', 'Mentoring'],
-				availability: 'available',
+				availability: 'active',
 				location: 'San Francisco',
 				timezone: 'America/Los_Angeles',
 			});
@@ -357,7 +357,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript'],
 				interests: ['Coding'],
-				availability: 'available',
+				availability: 'active',
 				location: 'San Francisco',
 			});
 
@@ -369,7 +369,7 @@ describe('Profile Domain Model', () => {
 			expect(json).toHaveProperty('bio', 'Developer');
 			expect(json).toHaveProperty('skills');
 			expect(json).toHaveProperty('interests');
-			expect(json).toHaveProperty('availability', 'available');
+			expect(json).toHaveProperty('availability', 'active');
 			expect(json).toHaveProperty('location', 'San Francisco');
 		});
 
@@ -381,7 +381,7 @@ describe('Profile Domain Model', () => {
 				bio: 'Developer',
 				skills: ['TypeScript', 'React'],
 				interests: ['Coding', 'Open Source'],
-				availability: 'available' as const,
+				availability: 'active' as const,
 				location: 'San Francisco',
 				timezone: 'America/Los_Angeles',
 			};
@@ -394,7 +394,7 @@ describe('Profile Domain Model', () => {
 			expect(profile.bio).toBe('Developer');
 			expect(profile.skills).toEqual(['TypeScript', 'React']);
 			expect(profile.interests).toEqual(['Coding', 'Open Source']);
-			expect(profile.availability).toBe('available');
+			expect(profile.availability).toBe('active');
 			expect(profile.location).toBe('San Francisco');
 			expect(profile.timezone).toBe('America/Los_Angeles');
 		});
