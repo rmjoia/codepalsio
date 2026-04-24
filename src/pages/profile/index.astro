@@ -36,7 +36,7 @@ import Footer from '../../components/Footer.astro';
 				<div class="flex items-start justify-between gap-6">
 					<div class="flex items-start gap-6">
 						<img
-							id="user-avatar"
+							id="profile-avatar"
 							src=""
 							alt="Avatar"
 							class="w-24 h-24 rounded-full border-4 border-primary-100"
@@ -442,7 +442,7 @@ import Footer from '../../components/Footer.astro';
 
 					const username = principal.userDetails || 'User';
 					const avatarUrl = getAvatarUrl(principal);
-					const avatarEl = document.getElementById('user-avatar') as HTMLImageElement | null;
+					const avatarEl = document.getElementById('profile-avatar') as HTMLImageElement | null;
 					if (avatarEl) {
 						avatarEl.src = avatarUrl;
 						avatarEl.alt = username;
