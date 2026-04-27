@@ -28,7 +28,13 @@ app.http('profile-save', {
 
 		let body: Record<string, unknown>;
 		try {
-			body = (await request.json()) as Record<string, unknown>;
+			const parsed = await request.json();
+			// request.json() can return null (literal `null` body) or an array;
+			// guard before the cast so body.skills etc. don't blow up at runtime.
+			if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+				return { status: 400, jsonBody: { error: 'Invalid JSON body' } };
+			}
+			body = parsed as Record<string, unknown>;
 		} catch {
 			return { status: 400, jsonBody: { error: 'Invalid JSON body' } };
 		}

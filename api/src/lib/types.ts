@@ -15,7 +15,13 @@ export interface ClientPrincipal {
 	claims?: Array<{ typ: string; val: string }>;
 }
 
-export type Availability = 'active' | 'casual' | 'unavailable';
+/**
+ * Single source of truth for the Availability vocabulary. The runtime
+ * array and the type are derived together so they can't drift —
+ * validation.ts imports both.
+ */
+export const AVAILABILITY_VALUES = ['active', 'casual', 'unavailable'] as const;
+export type Availability = (typeof AVAILABILITY_VALUES)[number];
 
 export interface Profile {
 	id: string;

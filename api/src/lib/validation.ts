@@ -1,3 +1,5 @@
+import { AVAILABILITY_VALUES, type Availability } from './types';
+
 /**
  * Input bounds for profile-save. The edit form already enforces these,
  * so the goal here isn't UX — it's defense in depth so a hand-crafted
@@ -14,11 +16,8 @@ export const LIMITS = {
 	tagCount: 30, // skills or interests array length
 } as const;
 
-export const VALID_AVAILABILITY = ['active', 'casual', 'unavailable'] as const;
-export type Availability = (typeof VALID_AVAILABILITY)[number];
-
 export function isAvailability(value: unknown): value is Availability {
-	return typeof value === 'string' && (VALID_AVAILABILITY as readonly string[]).includes(value);
+	return typeof value === 'string' && (AVAILABILITY_VALUES as readonly string[]).includes(value);
 }
 
 /**
