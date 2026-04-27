@@ -1,49 +1,28 @@
-'use strict';
-const { app } = require('@azure/functions');
-const { CosmosClient } = require('@azure/cosmos');
-
-let cachedClient = null;
-let cachedConnectionString = null;
-function getClient(connectionString) {
-	if (!cachedClient || cachedConnectionString !== connectionString) {
-		cachedClient = new CosmosClient(connectionString);
-		cachedConnectionString = connectionString;
-	}
-	return cachedClient;
-}
-
-function getClientPrincipal(request) {
-	const header = request.headers.get('x-ms-client-principal');
-	if (!header) return null;
-	try {
-		return JSON.parse(Buffer.from(header, 'base64').toString('utf-8'));
-	} catch {
-		return null;
-	}
-}
+import { app, type HttpRequest, type InvocationContext, type HttpResponseInit } from '@azure/functions';
+import { getClientPrincipal } from './lib/principal';
+import { getCosmosClient, getCosmosConfig } from './lib/cosmos';
 
 app.http('account-delete', {
 	methods: ['POST'],
 	authLevel: 'anonymous',
-	handler: async (request, context) => {
+	handler: async (request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> => {
 		const principal = getClientPrincipal(request);
 		if (!principal) {
 			return { status: 401, jsonBody: { error: 'Not authenticated' } };
 		}
 
-		const connectionString = process.env.COSMOS_DB_CONNECTION_STRING;
-		const database = process.env.COSMOS_DB_DATABASE_NAME;
-		if (!connectionString || !database) {
+		const cfg = getCosmosConfig();
+		if (!cfg) {
 			context.error('account-delete: missing COSMOS_DB_CONNECTION_STRING or COSMOS_DB_DATABASE_NAME');
 			return { status: 500, jsonBody: { error: 'Server configuration error' } };
 		}
 
 		try {
-			const client = getClient(connectionString);
+			const client = getCosmosClient(cfg.connectionString);
 
-			const profilesContainer = client.database(database).container('profiles');
+			const profilesContainer = client.database(cfg.database).container('profiles');
 			const { resources: profiles } = await profilesContainer.items
-				.query({
+				.query<{ id: string }>({
 					query: 'SELECT c.id FROM c WHERE c.userId = @userId',
 					parameters: [{ name: '@userId', value: principal.userId }],
 				})
@@ -52,16 +31,16 @@ app.http('account-delete', {
 			for (const p of profiles) {
 				try {
 					await profilesContainer.item(p.id, principal.userId).delete();
-				} catch (e) {
-					if (!e || e.code !== 404) throw e;
+				} catch (e: unknown) {
+					if (!isCosmosNotFound(e)) throw e;
 				}
 			}
 
-			// Users container may not exist in every env — swallow and move on.
+			// Users container may not exist in every environment — swallow + move on.
 			try {
-				const usersContainer = client.database(database).container('users');
+				const usersContainer = client.database(cfg.database).container('users');
 				const { resources: users } = await usersContainer.items
-					.query({
+					.query<{ id: string }>({
 						query: 'SELECT c.id FROM c WHERE c.id = @userId',
 						parameters: [{ name: '@userId', value: principal.userId }],
 					})
@@ -70,8 +49,8 @@ app.http('account-delete', {
 				for (const u of users) {
 					try {
 						await usersContainer.item(u.id, u.id).delete();
-					} catch (e) {
-						if (!e || e.code !== 404) throw e;
+					} catch (e: unknown) {
+						if (!isCosmosNotFound(e)) throw e;
 					}
 				}
 			} catch {
@@ -85,3 +64,12 @@ app.http('account-delete', {
 		}
 	},
 });
+
+function isCosmosNotFound(error: unknown): boolean {
+	return (
+		typeof error === 'object' &&
+		error !== null &&
+		'code' in error &&
+		(error as { code: unknown }).code === 404
+	);
+}
