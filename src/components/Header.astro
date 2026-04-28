@@ -193,12 +193,18 @@
 		if (isAdmin) document.getElementById('admin-link')?.classList.remove('hidden');
 
 		// === Mobile ===
-		document.getElementById('mobile-sign-in-btn')?.classList.add('hidden');
-		document.getElementById('mobile-user-info')?.classList.remove('hidden');
-		document.getElementById('mobile-user-info')?.classList.add('flex');
-		document.getElementById('mobile-signed-in-actions')?.classList.remove('hidden');
-		document.getElementById('mobile-signed-in-actions')?.classList.add('flex');
-		document.getElementById('mobile-nav-find')?.classList.remove('hidden');
+		// `mobile-user-info` and `mobile-signed-in-actions` already have `flex`
+		// in their static class list alongside `hidden` — Tailwind's `hidden`
+		// wins until removed, so dropping `hidden` is all that's needed.
+		const mobileSignIn = document.getElementById('mobile-sign-in-btn');
+		const mobileUserInfo = document.getElementById('mobile-user-info');
+		const mobileSignedInActions = document.getElementById('mobile-signed-in-actions');
+		const mobileNavFind = document.getElementById('mobile-nav-find');
+
+		mobileSignIn?.classList.add('hidden');
+		mobileUserInfo?.classList.remove('hidden');
+		mobileSignedInActions?.classList.remove('hidden');
+		mobileNavFind?.classList.remove('hidden');
 
 		const mobileAvatar = document.getElementById('mobile-user-avatar') as HTMLImageElement | null;
 		if (avatarUrl && mobileAvatar) {
@@ -242,7 +248,8 @@
 		});
 
 		document.addEventListener('click', (e) => {
-			const target = e.target as Node;
+			const target = e.target;
+			if (!(target instanceof Node)) return;
 			if (!menuButton.contains(target) && !menuDropdown.contains(target)) {
 				menuDropdown.classList.add('hidden');
 				menuButton.setAttribute('aria-expanded', 'false');
@@ -272,7 +279,8 @@
 
 		// Close on tap outside
 		document.addEventListener('click', (e) => {
-			const target = e.target as Node;
+			const target = e.target;
+			if (!(target instanceof Node)) return;
 			if (!mobileMenu.contains(target) && !mobileBtn.contains(target)) {
 				setMobileMenuOpen(false);
 			}
