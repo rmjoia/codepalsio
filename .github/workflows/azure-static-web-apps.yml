@@ -30,6 +30,7 @@ jobs:
           app_location: "/"
           api_location: "api"
           output_location: "dist"
+          api_build_command: "npm ci --include=dev && npm run build"
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
