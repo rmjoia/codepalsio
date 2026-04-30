@@ -1,6 +1,7 @@
 import { app, type HttpRequest, type InvocationContext, type HttpResponseInit } from '@azure/functions';
 import { getClientPrincipal } from './lib/principal';
 import { getContainer, getCosmosConfig } from './lib/cosmos';
+import { isProfileVisibility } from './lib/validation';
 import type { Profile } from './lib/types';
 
 app.http('profile-get', {
@@ -28,10 +29,25 @@ app.http('profile-get', {
 				})
 				.fetchAll();
 
-			return { status: 200, jsonBody: { profile: resources[0] ?? null } };
+			return { status: 200, jsonBody: { profile: normalizeLegacy(resources[0]) } };
 		} catch (error) {
 			context.error('profile-get failed:', error);
 			return { status: 500, jsonBody: { error: 'Failed to load profile' } };
 		}
 	},
 });
+
+/**
+ * Backfill defaults for fields that pre-date their feature flag. Today this
+ * is just `profileVisibility` (added in #23) — older docs return undefined
+ * for the field. Default to 'private' so the Profile type contract holds
+ * for every consumer (frontend service, future directory endpoint, admin
+ * view) and we fail safely toward not-listed.
+ */
+function normalizeLegacy(profile: Profile | undefined): Profile | null {
+	if (!profile) return null;
+	if (!isProfileVisibility(profile.profileVisibility)) {
+		profile.profileVisibility = 'private';
+	}
+	return profile;
+}

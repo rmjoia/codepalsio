@@ -1,4 +1,4 @@
-import { AVAILABILITY_VALUES, type Availability } from './types';
+import { AVAILABILITY_VALUES, type Availability, PROFILE_VISIBILITY_VALUES, type ProfileVisibility } from './types';
 
 /**
  * Input bounds for profile-save. The edit form already enforces these,
@@ -18,6 +18,10 @@ export const LIMITS = {
 
 export function isAvailability(value: unknown): value is Availability {
 	return typeof value === 'string' && (AVAILABILITY_VALUES as readonly string[]).includes(value);
+}
+
+export function isProfileVisibility(value: unknown): value is ProfileVisibility {
+	return typeof value === 'string' && (PROFILE_VISIBILITY_VALUES as readonly string[]).includes(value);
 }
 
 /**

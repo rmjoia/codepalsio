@@ -5,6 +5,7 @@ import { getContainer, getCosmosConfig } from './lib/cosmos';
 import {
 	LIMITS,
 	isAvailability,
+	isProfileVisibility,
 	normalizeStringList,
 	sanitizedUrl,
 	trimmedString,
@@ -54,6 +55,12 @@ app.http('profile-save', {
 			return { status: 400, jsonBody: { error: 'At least one interest is required' } };
 
 		const availability = isAvailability(body.availability) ? body.availability : 'active';
+		// Visibility defaults to 'private' — users opt in to /find discovery,
+		// not out. Anything other than literal 'public' or 'private' coerces
+		// to 'private'.
+		const profileVisibility = isProfileVisibility(body.profileVisibility)
+			? body.profileVisibility
+			: 'private';
 
 		try {
 			const container = getContainer(cfg.connectionString, cfg.database, 'profiles');
@@ -76,6 +83,7 @@ app.http('profile-save', {
 				skills,
 				interests,
 				availability,
+				profileVisibility,
 				location: trimmedString(body.location, LIMITS.location),
 				timezone: trimmedString(body.timezone, LIMITS.timezone),
 				githubUrl: sanitizedUrl(body.githubUrl, LIMITS.url),

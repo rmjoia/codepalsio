@@ -43,7 +43,11 @@ import Footer from '../../components/Footer.astro';
 						/>
 						<div class="flex-1">
 							<h1 id="username-display" class="text-3xl font-bold text-slate-900 mb-2"></h1>
-							<p class="text-slate-600 mb-4">CodePals Member</p>
+							<p class="text-slate-600 mb-2">CodePals Member</p>
+							<span
+								id="visibility-badge"
+								class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full"
+							></span>
 						</div>
 					</div>
 					<button
@@ -234,6 +238,23 @@ import Footer from '../../components/Footer.astro';
 						</div>
 					</div>
 
+					<div>
+						<label class="block text-sm font-semibold text-slate-900 mb-2">Profile Visibility</label>
+						<p class="text-sm text-slate-500 mb-3">
+							Control whether your profile shows up in the public CodePals directory at <code class="text-xs">/find</code>. You can flip this any time.
+						</p>
+						<div class="space-y-2">
+							<label class="flex items-center gap-2">
+								<input type="radio" name="profileVisibility" value="private" class="text-primary-500" checked />
+								<span class="text-slate-700">Private - Only you see your profile</span>
+							</label>
+							<label class="flex items-center gap-2">
+								<input type="radio" name="profileVisibility" value="public" class="text-primary-500" />
+								<span class="text-slate-700">Public - Listed in the CodePals directory</span>
+							</label>
+						</div>
+					</div>
+
 					<div class="flex gap-4 pt-4">
 						<button
 							type="button"
@@ -361,6 +382,20 @@ import Footer from '../../components/Footer.astro';
 					detailsCard.classList.add('hidden');
 				}
 
+				// Visibility badge — public uses green, private uses slate. Defaults to
+				// private for legacy docs missing the field.
+				const visibilityBadge = document.getElementById('visibility-badge');
+				if (visibilityBadge) {
+					const visibility = profile?.profileVisibility ?? 'private';
+					visibilityBadge.textContent =
+						visibility === 'public' ? '🌍 Public profile' : '🔒 Private profile';
+					visibilityBadge.className =
+						'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ' +
+						(visibility === 'public'
+							? 'bg-green-100 text-green-700'
+							: 'bg-slate-100 text-slate-600');
+				}
+
 				// Incomplete banner — a complete profile needs bio ≥50 chars, ≥2 skills, ≥2 interests, location, timezone
 				const isComplete = profile &&
 					profile.bio?.length >= 50 &&
@@ -393,6 +428,13 @@ import Footer from '../../components/Footer.astro';
 					);
 					if (radio) radio.checked = true;
 				}
+
+				// Visibility — defaults to 'private' if missing (legacy docs).
+				const visibility = profile?.profileVisibility ?? 'private';
+				const visRadio = document.querySelector<HTMLInputElement>(
+					'input[name="profileVisibility"][value="' + visibility + '"]'
+				);
+				if (visRadio) visRadio.checked = true;
 
 				skills.clear();
 				(profile?.skills || []).forEach((s) => skills.add(s));
@@ -511,6 +553,9 @@ import Footer from '../../components/Footer.astro';
 				const availabilityEl = document.querySelector<HTMLInputElement>(
 					'input[name="availability"]:checked'
 				);
+				const visibilityEl = document.querySelector<HTMLInputElement>(
+					'input[name="profileVisibility"]:checked'
+				);
 				const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement | null;
 
 				const bio = bioEl?.value || '';
@@ -532,6 +577,7 @@ import Footer from '../../components/Footer.astro';
 						location: locationEl?.value,
 						timezone: timezoneEl?.value,
 						availability: (availabilityEl?.value as Profile['availability']) || 'active',
+						profileVisibility: (visibilityEl?.value as Profile['profileVisibility']) || 'private',
 					});
 					currentProfile = saved;
 					populateViewMode(currentProfile);
