@@ -4,6 +4,8 @@
 
 <div
 	id="sponsorship-modal"
+	data-modal-id="sponsorship-modal"
+	aria-hidden="true"
 	class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
 >
 	<div
@@ -11,7 +13,7 @@
 	>
 		<!-- Close Button -->
 		<button
-			onclick="toggleModal('sponsorship-modal')"
+			data-modal-close="sponsorship-modal"
 			class="absolute top-4 right-4 p-2 hover:bg-slate-100 rounded-lg transition-colors"
 			aria-label="Close"
 		>

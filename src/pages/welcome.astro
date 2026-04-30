@@ -51,7 +51,8 @@ const user = Astro.url.searchParams.get('user') || 'there';
 							<span class="text-slate-700 group-hover:text-slate-900">
 								I have read and agree to the
 								<button
-									onclick="toggleModal('terms-modal')"
+									type="button"
+									data-modal-open="terms-modal"
 									class="text-primary-500 hover:text-primary-600 font-semibold underline"
 								>
 									Terms of Service
@@ -69,7 +70,8 @@ const user = Astro.url.searchParams.get('user') || 'there';
 							<span class="text-slate-700 group-hover:text-slate-900">
 								I have read and agree to the
 								<button
-									onclick="toggleModal('privacy-modal')"
+									type="button"
+									data-modal-open="privacy-modal"
 									class="text-primary-500 hover:text-primary-600 font-semibold underline"
 								>
 									Privacy Policy
@@ -87,7 +89,8 @@ const user = Astro.url.searchParams.get('user') || 'there';
 							<span class="text-slate-700 group-hover:text-slate-900">
 								I agree to follow the
 								<button
-									onclick="toggleModal('coc-modal')"
+									type="button"
+									data-modal-open="coc-modal"
 									class="text-primary-500 hover:text-primary-600 font-semibold underline"
 								>
 									Code of Conduct
@@ -98,9 +101,9 @@ const user = Astro.url.searchParams.get('user') || 'there';
 
 					<button
 						id="continue-btn"
+						type="button"
 						disabled
 						class="w-full btn-primary opacity-50 cursor-not-allowed transition-all"
-						onclick="acceptTerms()"
 					>
 						Continue to Profile Setup
 					</button>
@@ -130,50 +133,35 @@ const user = Astro.url.searchParams.get('user') || 'there';
 			</div>
 		</div>
 
-		<!-- Include modals from components (we'll need to import these) -->
-		<script is:inline>
-			// Modal toggle function
-			function toggleModal(modalId) {
-				const modal = document.getElementById(modalId);
-				if (modal) {
-					modal.classList.toggle('hidden');
-				}
-			}
+		<script>
+			// Modal handling is provided globally by Footer.astro's modal
+			// delegation script — the data-modal-open attributes above hook
+			// into that. This script only owns the page-specific behavior:
+			// the three required-acknowledgement checkboxes + continue button.
 
-			// Check if all checkboxes are checked
+			const checkboxIds = ['accept-terms', 'accept-privacy', 'accept-coc'] as const;
+
 			function updateContinueButton() {
-				const terms = document.getElementById('accept-terms');
-				const privacy = document.getElementById('accept-privacy');
-				const coc = document.getElementById('accept-coc');
-				const continueBtn = document.getElementById('continue-btn');
-
-				if (terms.checked && privacy.checked && coc.checked) {
-					continueBtn.disabled = false;
-					continueBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-					continueBtn.classList.add('hover:bg-primary-600');
-				} else {
-					continueBtn.disabled = true;
-					continueBtn.classList.add('opacity-50', 'cursor-not-allowed');
-					continueBtn.classList.remove('hover:bg-primary-600');
-				}
-			}
-
-			// Accept terms and continue
-			async function acceptTerms() {
-				// TODO: Call API to save terms acceptance with timestamps
-				// For now, redirect to profile setup
-				window.location.href = '/profile/setup';
-			}
-
-			// Add event listeners
-			document.addEventListener('DOMContentLoaded', () => {
-				const checkboxes = ['accept-terms', 'accept-privacy', 'accept-coc'];
-				checkboxes.forEach((id) => {
-					const checkbox = document.getElementById(id);
-					if (checkbox) {
-						checkbox.addEventListener('change', updateContinueButton);
-					}
+				const continueBtn = document.getElementById('continue-btn') as HTMLButtonElement | null;
+				if (!continueBtn) return;
+				const allChecked = checkboxIds.every((id) => {
+					const cb = document.getElementById(id) as HTMLInputElement | null;
+					return !!cb?.checked;
 				});
+				continueBtn.disabled = !allChecked;
+				continueBtn.classList.toggle('opacity-50', !allChecked);
+				continueBtn.classList.toggle('cursor-not-allowed', !allChecked);
+				continueBtn.classList.toggle('hover:bg-primary-600', allChecked);
+			}
+
+			checkboxIds.forEach((id) => {
+				document.getElementById(id)?.addEventListener('change', updateContinueButton);
+			});
+
+			// TODO: Call API to save terms acceptance with timestamps. For
+			// now, redirect to profile setup once all checkboxes are ticked.
+			document.getElementById('continue-btn')?.addEventListener('click', () => {
+				window.location.href = '/profile/setup';
 			});
 		</script>
 

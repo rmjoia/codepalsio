@@ -70,36 +70,31 @@ import SponsorshipModal from '../components/SponsorshipModal.astro';
 		<CodeOfConductModal />
 		<SponsorshipModal />
 
-		<script is:inline>
-			// Smooth scroll for anchor links (both #section and /#section)
-			document.querySelectorAll('a[href^="#"], a[href^="/#"]').forEach((anchor) => {
-				anchor.addEventListener('click', function (e) {
-					const href = this.getAttribute('href');
+		<script>
+			// Smooth scroll for anchor links (both #section and /#section).
+			document.querySelectorAll<HTMLAnchorElement>('a[href^="#"], a[href^="/#"]').forEach((anchor) => {
+				anchor.addEventListener('click', (e) => {
+					const href = anchor.getAttribute('href');
+					if (!href) return;
 					const hash = href.startsWith('/#') ? href.substring(1) : href;
 					const target = document.querySelector(hash);
-
 					if (target) {
 						e.preventDefault();
 						target.scrollIntoView({ behavior: 'smooth' });
-						// Update URL hash without jumping
-						history.pushState(null, null, hash);
+						history.pushState(null, '', hash);
 					}
 				});
 			});
 
-			// Scroll to hash on page load
+			// Scroll to hash on page load.
 			window.addEventListener('load', () => {
-				if (window.location.hash) {
-					const target = document.querySelector(window.location.hash);
-					if (target) {
-						setTimeout(() => {
-							target.scrollIntoView({ behavior: 'smooth' });
-						}, 100);
-					}
-				}
+				if (!window.location.hash) return;
+				const target = document.querySelector(window.location.hash);
+				if (!target) return;
+				setTimeout(() => target.scrollIntoView({ behavior: 'smooth' }), 100);
 			});
 
-			// Navbar shadow enhancement on scroll
+			// Navbar shadow enhancement on scroll.
 			window.addEventListener('scroll', () => {
 				const header = document.querySelector('header');
 				if (window.scrollY > 10) {
