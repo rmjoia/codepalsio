@@ -78,6 +78,10 @@ app.http('profile-save', {
 			const profile: Profile = {
 				id: profileId,
 				userId: principal.userId,
+				// Set server-side from the principal — never from request body —
+				// so users can't impersonate someone else's GitHub login in the
+				// directory.
+				githubUsername: principal.userDetails || undefined,
 				displayName,
 				bio,
 				skills,

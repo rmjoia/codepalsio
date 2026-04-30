@@ -26,6 +26,8 @@ export type ProfileVisibility = 'public' | 'private';
 export interface Profile {
 	id: string;
 	userId: string;
+	/** GitHub login, set server-side from the SWA principal at save time. */
+	githubUsername?: string;
 	displayName: string;
 	bio: string;
 	skills: string[];
@@ -92,6 +94,50 @@ export function getAvatarUrl(principal: ClientPrincipal | null): string {
 
 export function hasRole(principal: ClientPrincipal | null, role: string): boolean {
 	return !!principal?.userRoles?.includes(role);
+}
+
+/**
+ * Subset of Profile returned by GET /api/profiles. The directory endpoint
+ * intentionally projects only the fields the cards render — no userId,
+ * no profileVisibility — to minimise data exposure.
+ */
+export type DirectoryProfile = Pick<
+	Profile,
+	| 'id'
+	| 'githubUsername'
+	| 'displayName'
+	| 'bio'
+	| 'skills'
+	| 'availability'
+	| 'location'
+	| 'timezone'
+	| 'updatedAt'
+>;
+
+/**
+ * GET /api/profiles → returns the public profiles directory (excludes the
+ * current user). Throws on non-OK status.
+ */
+export async function getPublicProfiles(): Promise<DirectoryProfile[]> {
+	const res = await fetch('/api/profiles');
+	if (!res.ok) {
+		throw new Error(`profiles ${res.status}`);
+	}
+	const data = await res.json();
+	return data?.profiles ?? [];
+}
+
+/**
+ * Avatar URL for a directory profile. Returns the GitHub profile picture
+ * for users with a stored `githubUsername`, or an empty string for legacy
+ * docs that predate the field — callers should fall back to their own
+ * placeholder (e.g., the user's initial in a coloured circle).
+ */
+export function getProfileAvatarUrl(profile: Pick<Profile, 'githubUsername' | 'id'>): string {
+	if (profile.githubUsername) {
+		return `https://github.com/${encodeURIComponent(profile.githubUsername)}.png`;
+	}
+	return '';
 }
 
 /**

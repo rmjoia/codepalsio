@@ -33,6 +33,12 @@ export type ProfileVisibility = (typeof PROFILE_VISIBILITY_VALUES)[number];
 export interface Profile {
 	id: string;
 	userId: string;
+	/**
+	 * GitHub login (the SWA principal's `userDetails`), set server-side at
+	 * save time. Used to render avatars in the directory: github.com/{login}.png.
+	 * Optional only because pre-#24 docs don't have it; new saves always set it.
+	 */
+	githubUsername?: string;
 	displayName: string;
 	bio: string;
 	skills: string[];

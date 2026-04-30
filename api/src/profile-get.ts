@@ -24,7 +24,7 @@ app.http('profile-get', {
 			const { resources } = await container.items
 				.query<Profile>({
 					query:
-						'SELECT c.id, c.userId, c.displayName, c.bio, c.skills, c.interests, c.availability, c.location, c.timezone, c.githubUrl, c.linkedinUrl, c.websiteUrl, c.preferredLanguages, c.yearsOfExperience, c.profileVisibility, c.updatedAt FROM c WHERE c.userId = @userId',
+						'SELECT c.id, c.userId, c.githubUsername, c.displayName, c.bio, c.skills, c.interests, c.availability, c.location, c.timezone, c.githubUrl, c.linkedinUrl, c.websiteUrl, c.preferredLanguages, c.yearsOfExperience, c.profileVisibility, c.updatedAt FROM c WHERE c.userId = @userId',
 					parameters: [{ name: '@userId', value: principal.userId }],
 				})
 				.fetchAll();
