@@ -26,6 +26,8 @@ export type ProfileVisibility = 'public' | 'private';
 export interface Profile {
 	id: string;
 	userId: string;
+	/** GitHub login, set server-side from the SWA principal at save time. */
+	githubUsername?: string;
 	displayName: string;
 	bio: string;
 	skills: string[];
@@ -92,6 +94,30 @@ export function getAvatarUrl(principal: ClientPrincipal | null): string {
 
 export function hasRole(principal: ClientPrincipal | null, role: string): boolean {
 	return !!principal?.userRoles?.includes(role);
+}
+
+/**
+ * GET /api/profiles → returns the public profiles directory (excludes the
+ * current user). Throws on non-OK status.
+ */
+export async function getPublicProfiles(): Promise<Profile[]> {
+	const res = await fetch('/api/profiles');
+	if (!res.ok) {
+		throw new Error(`profiles ${res.status}`);
+	}
+	const data = await res.json();
+	return data?.profiles ?? [];
+}
+
+/**
+ * Avatar URL for a directory profile. Falls back to a per-id placeholder if
+ * the profile predates `githubUsername` (set server-side since #24).
+ */
+export function getProfileAvatarUrl(profile: Pick<Profile, 'githubUsername' | 'id'>): string {
+	if (profile.githubUsername) {
+		return `https://github.com/${encodeURIComponent(profile.githubUsername)}.png`;
+	}
+	return '';
 }
 
 /**

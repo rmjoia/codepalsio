@@ -1,0 +1,194 @@
+---
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Find CodePals - Discover the community</title>
+	</head>
+	<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
+		<Header />
+
+		<!-- Loading -->
+		<div id="loading-state" class="flex justify-center items-center min-h-[60vh]">
+			<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+		</div>
+
+		<!-- Error -->
+		<div id="error-state" class="hidden mx-auto max-w-2xl px-4 py-16 text-center">
+			<h1 class="text-2xl font-bold text-red-700 mb-2">Couldn't load the directory</h1>
+			<p class="text-slate-600 mb-6">Something went wrong. Please refresh the page and try again.</p>
+			<button
+				onclick="window.location.reload()"
+				class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+			>
+				Refresh
+			</button>
+		</div>
+
+		<!-- Directory -->
+		<main id="directory-main" class="hidden mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
+			<div class="mb-8">
+				<h1 class="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">Find CodePals</h1>
+				<p class="text-slate-600">
+					Browse public profiles in the CodePals community. Want to be listed?
+					<a href="/profile?edit=true" class="text-primary-500 hover:underline">Make your profile public</a>
+					in your profile settings.
+				</p>
+			</div>
+
+			<!-- Empty state (no public profiles yet) -->
+			<div id="empty-state" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center">
+				<div class="text-5xl mb-4">🌱</div>
+				<h2 class="text-xl font-bold text-slate-900 mb-2">No public profiles yet</h2>
+				<p class="text-slate-600 mb-6">
+					Be the first! Make your profile public so other CodePals can find you.
+				</p>
+				<a
+					href="/profile?edit=true"
+					class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+				>
+					Edit my profile
+				</a>
+			</div>
+
+			<!-- Card grid -->
+			<div id="directory-grid" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+		</main>
+
+		<Footer />
+
+		<script>
+			import { getPublicProfiles, getProfileAvatarUrl, type Profile } from '../services/api';
+
+			function availabilityBadge(availability: Profile['availability']): { label: string; cls: string } {
+				switch (availability) {
+					case 'active':
+						return { label: '🟢 Active', cls: 'bg-green-100 text-green-700' };
+					case 'casual':
+						return { label: '🟡 Casual', cls: 'bg-amber-100 text-amber-700' };
+					case 'unavailable':
+						return { label: '⚪ Not available', cls: 'bg-slate-100 text-slate-600' };
+				}
+			}
+
+			function buildCard(profile: Profile): HTMLElement {
+				const card = document.createElement('article');
+				card.className = 'bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col hover:shadow-md transition-shadow';
+
+				// Header row: avatar + name
+				const header = document.createElement('div');
+				header.className = 'flex items-center gap-3 mb-4';
+
+				const avatarUrl = getProfileAvatarUrl(profile);
+				if (avatarUrl) {
+					const img = document.createElement('img');
+					img.src = avatarUrl;
+					img.alt = profile.displayName;
+					img.className = 'w-12 h-12 rounded-full border-2 border-primary-100 flex-shrink-0';
+					header.appendChild(img);
+				} else {
+					const placeholder = document.createElement('div');
+					placeholder.className = 'w-12 h-12 rounded-full bg-primary-500 text-white flex items-center justify-center font-semibold flex-shrink-0';
+					placeholder.textContent = (profile.displayName || '?').charAt(0).toUpperCase();
+					header.appendChild(placeholder);
+				}
+
+				const nameWrap = document.createElement('div');
+				nameWrap.className = 'min-w-0';
+				const name = document.createElement('h3');
+				name.className = 'font-semibold text-slate-900 truncate';
+				name.textContent = profile.displayName;
+				nameWrap.appendChild(name);
+				if (profile.githubUsername) {
+					const handle = document.createElement('p');
+					handle.className = 'text-xs text-slate-500 truncate';
+					handle.textContent = '@' + profile.githubUsername;
+					nameWrap.appendChild(handle);
+				}
+				header.appendChild(nameWrap);
+
+				const avail = availabilityBadge(profile.availability);
+				const availSpan = document.createElement('span');
+				availSpan.className = `ml-auto text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${avail.cls}`;
+				availSpan.textContent = avail.label;
+				header.appendChild(availSpan);
+
+				card.appendChild(header);
+
+				// Bio
+				const bio = document.createElement('p');
+				bio.className = 'text-sm text-slate-700 mb-4 line-clamp-3';
+				bio.textContent = profile.bio;
+				card.appendChild(bio);
+
+				// Skills (cap at 5 chips, +N more if over)
+				if (profile.skills.length > 0) {
+					const skills = document.createElement('div');
+					skills.className = 'flex flex-wrap gap-1.5 mb-3';
+					profile.skills.slice(0, 5).forEach((skill) => {
+						const chip = document.createElement('span');
+						chip.className = 'px-2 py-0.5 text-xs bg-primary-50 text-primary-700 rounded-full';
+						chip.textContent = skill;
+						skills.appendChild(chip);
+					});
+					if (profile.skills.length > 5) {
+						const more = document.createElement('span');
+						more.className = 'px-2 py-0.5 text-xs text-slate-500';
+						more.textContent = `+${profile.skills.length - 5} more`;
+						skills.appendChild(more);
+					}
+					card.appendChild(skills);
+				}
+
+				// Footer: location + timezone
+				const meta: string[] = [];
+				if (profile.location) meta.push(profile.location);
+				if (profile.timezone) meta.push(profile.timezone);
+				if (meta.length > 0) {
+					const footer = document.createElement('p');
+					footer.className = 'mt-auto text-xs text-slate-500 pt-3 border-t border-slate-100';
+					footer.textContent = meta.join(' · ');
+					card.appendChild(footer);
+				}
+
+				return card;
+			}
+
+			async function init() {
+				const loading = document.getElementById('loading-state');
+				const error = document.getElementById('error-state');
+				const main = document.getElementById('directory-main');
+				const grid = document.getElementById('directory-grid');
+				const empty = document.getElementById('empty-state');
+
+				try {
+					const profiles = await getPublicProfiles();
+
+					loading?.classList.add('hidden');
+					main?.classList.remove('hidden');
+
+					if (profiles.length === 0) {
+						empty?.classList.remove('hidden');
+						return;
+					}
+
+					if (grid) {
+						profiles.forEach((p) => grid.appendChild(buildCard(p)));
+						grid.classList.remove('hidden');
+					}
+				} catch (err) {
+					console.error('Directory load failed:', err);
+					loading?.classList.add('hidden');
+					error?.classList.remove('hidden');
+				}
+			}
+
+			init();
+		</script>
+	</body>
+</html>

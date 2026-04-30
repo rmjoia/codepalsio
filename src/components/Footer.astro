@@ -1,5 +1,6 @@
 ---
 // Footer component
+const currentYear = new Date().getFullYear();
 ---
 
 <footer class="bg-slate-900 text-slate-400 py-12">
@@ -103,7 +104,7 @@
 		<!-- Bottom Section -->
 		<div class="flex flex-col md:flex-row items-center justify-between">
 			<p class="text-sm text-slate-500 mb-4 md:mb-0">
-				© 2025 CodePals.io. Connected by our ❤️ for code, a shared vision and purpose.
+				© {currentYear} CodePals.io. Connected by our ❤️ for code, a shared vision and purpose.
 			</p>
 
 			<!-- Social Links -->

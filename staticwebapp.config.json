@@ -40,6 +40,10 @@
 			"allowedRoles": ["authenticated"]
 		},
 		{
+			"route": "/api/profiles",
+			"allowedRoles": ["authenticated"]
+		},
+		{
 			"route": "/api/account-delete",
 			"allowedRoles": ["authenticated"]
 		},
