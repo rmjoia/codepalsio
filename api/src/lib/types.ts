@@ -23,6 +23,13 @@ export interface ClientPrincipal {
 export const AVAILABILITY_VALUES = ['active', 'casual', 'unavailable'] as const;
 export type Availability = (typeof AVAILABILITY_VALUES)[number];
 
+/**
+ * Profile visibility — controls whether the profile appears in the public
+ * directory at /find. Defaults to 'private' on save (opt-in to discovery).
+ */
+export const PROFILE_VISIBILITY_VALUES = ['public', 'private'] as const;
+export type ProfileVisibility = (typeof PROFILE_VISIBILITY_VALUES)[number];
+
 export interface Profile {
 	id: string;
 	userId: string;
@@ -31,6 +38,7 @@ export interface Profile {
 	skills: string[];
 	interests: string[];
 	availability: Availability;
+	profileVisibility: ProfileVisibility;
 	location?: string;
 	timezone?: string;
 	githubUrl?: string;
@@ -38,6 +46,5 @@ export interface Profile {
 	websiteUrl?: string;
 	preferredLanguages?: string[];
 	yearsOfExperience?: number;
-	profileVisibility?: 'public' | 'private';
 	updatedAt?: string;
 }

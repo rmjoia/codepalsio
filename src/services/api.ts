@@ -21,6 +21,7 @@ export interface ClientPrincipal {
 }
 
 export type Availability = 'active' | 'casual' | 'unavailable';
+export type ProfileVisibility = 'public' | 'private';
 
 export interface Profile {
 	id: string;
@@ -30,6 +31,7 @@ export interface Profile {
 	skills: string[];
 	interests: string[];
 	availability: Availability;
+	profileVisibility: ProfileVisibility;
 	location?: string;
 	timezone?: string;
 	githubUrl?: string;
@@ -37,7 +39,6 @@ export interface Profile {
 	websiteUrl?: string;
 	preferredLanguages?: string[];
 	yearsOfExperience?: number;
-	profileVisibility?: 'public' | 'private';
 	updatedAt?: string;
 }
 
@@ -47,6 +48,7 @@ export interface ProfileInput {
 	skills: string[];
 	interests: string[];
 	availability?: Availability;
+	profileVisibility?: ProfileVisibility;
 	location?: string;
 	timezone?: string;
 	githubUrl?: string;

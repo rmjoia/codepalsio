@@ -322,6 +322,80 @@ describe('Profile Domain Model', () => {
 			);
 		});
 
+		it('should default profileVisibility to private when not provided', () => {
+			const profile = Profile.create({
+				userId: 'user-123',
+				displayName: 'John Doe',
+				bio: 'Developer',
+				skills: ['TypeScript'],
+				interests: ['Coding'],
+				availability: 'active',
+			});
+
+			expect(profile.profileVisibility).toBe('private');
+		});
+
+		it('should accept explicit public profileVisibility', () => {
+			const profile = Profile.create({
+				userId: 'user-123',
+				displayName: 'John Doe',
+				bio: 'Developer',
+				skills: ['TypeScript'],
+				interests: ['Coding'],
+				availability: 'active',
+				profileVisibility: 'public',
+			});
+
+			expect(profile.profileVisibility).toBe('public');
+		});
+
+		it('should toggle profileVisibility via updateVisibility', () => {
+			const profile = Profile.create({
+				userId: 'user-123',
+				displayName: 'John Doe',
+				bio: 'Developer',
+				skills: ['TypeScript'],
+				interests: ['Coding'],
+				availability: 'active',
+			});
+
+			expect(profile.profileVisibility).toBe('private');
+			profile.updateVisibility('public');
+			expect(profile.profileVisibility).toBe('public');
+			profile.updateVisibility('private');
+			expect(profile.profileVisibility).toBe('private');
+		});
+
+		it('fromJSON should default profileVisibility to private for legacy docs missing the field', () => {
+			const legacyDoc = {
+				id: 'profile-legacy',
+				userId: 'user-123',
+				displayName: 'John Doe',
+				bio: 'Developer',
+				skills: ['TypeScript'],
+				interests: ['Coding'],
+				availability: 'active' as const,
+				// no profileVisibility — pre-feature data
+			};
+
+			const profile = Profile.fromJSON(legacyDoc);
+			expect(profile.profileVisibility).toBe('private');
+		});
+
+		it('toJSON should include profileVisibility', () => {
+			const profile = Profile.create({
+				userId: 'user-123',
+				displayName: 'John Doe',
+				bio: 'Developer',
+				skills: ['TypeScript'],
+				interests: ['Coding'],
+				availability: 'active',
+				profileVisibility: 'public',
+			});
+
+			expect(profile.toJSON()).toMatchObject({ profileVisibility: 'public' });
+		});
+
 		it('should check if profile is complete', () => {
 			const incompleteProfile = Profile.create({
 				userId: 'user-123',

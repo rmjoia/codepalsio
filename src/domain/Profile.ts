@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 
 export type Availability = 'active' | 'casual' | 'unavailable';
+export type ProfileVisibility = 'public' | 'private';
 
 export interface ProfileProps {
 	userId: string;
@@ -17,6 +18,11 @@ export interface ProfileProps {
 	websiteUrl?: string;
 	preferredLanguages?: string[];
 	yearsOfExperience?: number;
+	/**
+	 * Discoverability in the public directory at /find. Defaults to 'private' —
+	 * users opt in to being listed, not out.
+	 */
+	profileVisibility?: ProfileVisibility;
 }
 
 /**
@@ -32,6 +38,7 @@ export class Profile {
 		public readonly skills: string[],
 		public readonly interests: string[],
 		public availability: Availability,
+		public profileVisibility: ProfileVisibility,
 		public location?: string,
 		public timezone?: string,
 		public githubUrl?: string,
@@ -80,6 +87,7 @@ export class Profile {
 			[...props.skills], // Copy to prevent external mutation
 			[...props.interests], // Copy to prevent external mutation
 			props.availability,
+			props.profileVisibility ?? 'private',
 			props.location,
 			props.timezone,
 			props.githubUrl,
@@ -91,7 +99,8 @@ export class Profile {
 	}
 
 	/**
-	 * Reconstruct Profile from database/JSON
+	 * Reconstruct Profile from database/JSON. Defaults profileVisibility to
+	 * 'private' for legacy documents that predate the field — fail safely.
 	 */
 	static fromJSON(data: ProfileProps & { id: string }): Profile {
 		return new Profile(
@@ -102,6 +111,7 @@ export class Profile {
 			[...data.skills],
 			[...data.interests],
 			data.availability,
+			data.profileVisibility ?? 'private',
 			data.location,
 			data.timezone,
 			data.githubUrl,
@@ -132,6 +142,13 @@ export class Profile {
 	 */
 	updateAvailability(availability: Availability): void {
 		Object.assign(this, { availability });
+	}
+
+	/**
+	 * Update profile visibility (public = listed in /find, private = hidden).
+	 */
+	updateVisibility(visibility: ProfileVisibility): void {
+		Object.assign(this, { profileVisibility: visibility });
 	}
 
 	/**
@@ -206,6 +223,7 @@ export class Profile {
 			skills: [...this.skills],
 			interests: [...this.interests],
 			availability: this.availability,
+			profileVisibility: this.profileVisibility,
 			location: this.location,
 			timezone: this.timezone,
 			githubUrl: this.githubUrl,
