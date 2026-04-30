@@ -4,6 +4,21 @@ import { getContainer, getCosmosConfig } from './lib/cosmos';
 import type { Profile } from './lib/types';
 
 /**
+ * Subset of Profile returned to the directory client. Internal identifiers
+ * (userId) and metadata used only for filtering (profileVisibility) stay
+ * server-side — the cards don't need them and we don't want to leak them.
+ */
+type DirectoryProfile = Pick<
+	Profile,
+	'id' | 'githubUsername' | 'displayName' | 'bio' | 'skills' | 'availability' | 'location' | 'timezone' | 'updatedAt'
+>;
+
+/** Hard cap on how many public profiles the directory returns in one shot.
+ * Prevents unbounded RU/response-size growth as the community grows. The UI
+ * doesn't paginate yet; when it does, we'll add a continuation token here. */
+const DIRECTORY_PAGE_SIZE = 100;
+
+/**
  * GET /api/profiles → returns the public profiles directory.
  *
  * Filtering is done **server-side** in the Cosmos query — private profiles
@@ -31,9 +46,8 @@ app.http('profiles', {
 		try {
 			const container = getContainer(cfg.connectionString, cfg.database, 'profiles');
 			const { resources } = await container.items
-				.query<Profile>({
-					query:
-						"SELECT c.id, c.userId, c.githubUsername, c.displayName, c.bio, c.skills, c.interests, c.availability, c.location, c.timezone, c.profileVisibility, c.updatedAt FROM c WHERE c.profileVisibility = 'public' AND c.userId != @currentUserId ORDER BY c.updatedAt DESC",
+				.query<DirectoryProfile>({
+					query: `SELECT TOP ${DIRECTORY_PAGE_SIZE} c.id, c.githubUsername, c.displayName, c.bio, c.skills, c.availability, c.location, c.timezone, c.updatedAt FROM c WHERE c.profileVisibility = 'public' AND c.userId != @currentUserId ORDER BY c.updatedAt DESC`,
 					parameters: [{ name: '@currentUserId', value: principal.userId }],
 				})
 				.fetchAll();

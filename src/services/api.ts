@@ -97,10 +97,28 @@ export function hasRole(principal: ClientPrincipal | null, role: string): boolea
 }
 
 /**
+ * Subset of Profile returned by GET /api/profiles. The directory endpoint
+ * intentionally projects only the fields the cards render — no userId,
+ * no profileVisibility — to minimise data exposure.
+ */
+export type DirectoryProfile = Pick<
+	Profile,
+	| 'id'
+	| 'githubUsername'
+	| 'displayName'
+	| 'bio'
+	| 'skills'
+	| 'availability'
+	| 'location'
+	| 'timezone'
+	| 'updatedAt'
+>;
+
+/**
  * GET /api/profiles → returns the public profiles directory (excludes the
  * current user). Throws on non-OK status.
  */
-export async function getPublicProfiles(): Promise<Profile[]> {
+export async function getPublicProfiles(): Promise<DirectoryProfile[]> {
 	const res = await fetch('/api/profiles');
 	if (!res.ok) {
 		throw new Error(`profiles ${res.status}`);
@@ -110,8 +128,10 @@ export async function getPublicProfiles(): Promise<Profile[]> {
 }
 
 /**
- * Avatar URL for a directory profile. Falls back to a per-id placeholder if
- * the profile predates `githubUsername` (set server-side since #24).
+ * Avatar URL for a directory profile. Returns the GitHub profile picture
+ * for users with a stored `githubUsername`, or an empty string for legacy
+ * docs that predate the field — callers should fall back to their own
+ * placeholder (e.g., the user's initial in a coloured circle).
  */
 export function getProfileAvatarUrl(profile: Pick<Profile, 'githubUsername' | 'id'>): string {
 	if (profile.githubUsername) {

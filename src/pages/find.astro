@@ -63,9 +63,9 @@ import Footer from '../components/Footer.astro';
 		<Footer />
 
 		<script>
-			import { getPublicProfiles, getProfileAvatarUrl, type Profile } from '../services/api';
+			import { getPublicProfiles, getProfileAvatarUrl, type DirectoryProfile } from '../services/api';
 
-			function availabilityBadge(availability: Profile['availability']): { label: string; cls: string } {
+			function availabilityBadge(availability: DirectoryProfile['availability']): { label: string; cls: string } {
 				switch (availability) {
 					case 'active':
 						return { label: '🟢 Active', cls: 'bg-green-100 text-green-700' };
@@ -73,12 +73,23 @@ import Footer from '../components/Footer.astro';
 						return { label: '🟡 Casual', cls: 'bg-amber-100 text-amber-700' };
 					case 'unavailable':
 						return { label: '⚪ Not available', cls: 'bg-slate-100 text-slate-600' };
+					default:
+						// Defensive: future enum value or corrupt data shouldn't throw
+						// downstream on `.cls` access. Render a neutral fallback.
+						return { label: '⚪ Unknown', cls: 'bg-slate-100 text-slate-600' };
 				}
 			}
 
-			function buildCard(profile: Profile): HTMLElement {
-				const card = document.createElement('article');
-				card.className = 'bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col hover:shadow-md transition-shadow';
+			function buildCard(profile: DirectoryProfile): HTMLElement {
+				// Card is a link to the (future) profile detail page. Today the URL
+				// 404s — that's intentional placeholder behavior; when /find/[user]
+				// lands, the link starts working without touching this code.
+				const card = document.createElement('a');
+				card.href = profile.githubUsername
+					? `/find/${encodeURIComponent(profile.githubUsername)}`
+					: `/find/${encodeURIComponent(profile.id)}`;
+				card.className =
+					'bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col hover:shadow-md transition-shadow no-underline text-current focus:outline-none focus:ring-2 focus:ring-primary-500';
 
 				// Header row: avatar + name
 				const header = document.createElement('div');
