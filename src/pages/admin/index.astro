@@ -56,6 +56,57 @@ import Footer from '../../components/Footer.astro';
 				</div>
 			</div>
 
+			<!-- Manage admins -->
+			<div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+				<div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+					<div>
+						<h2 class="font-semibold text-slate-900">Manage admins</h2>
+						<p class="text-xs text-slate-500 mt-0.5">
+							Add or remove admin access by GitHub username. The first admin is bootstrapped from the <code class="text-xs">ADMIN_GITHUB_LOGINS</code> env var; from then on this list is the source of truth.
+						</p>
+					</div>
+				</div>
+				<form id="admin-grant-form" class="px-5 py-4 border-b border-slate-200 flex items-end gap-3">
+					<div class="flex-1">
+						<label for="admin-grant-input" class="block text-xs font-medium text-slate-700 mb-1">
+							GitHub username
+						</label>
+						<input
+							id="admin-grant-input"
+							type="text"
+							required
+							placeholder="e.g. octocat"
+							autocomplete="off"
+							class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+						/>
+					</div>
+					<button
+						type="submit"
+						id="admin-grant-submit"
+						class="px-4 py-2 bg-primary-500 text-white text-sm font-medium rounded-md hover:bg-primary-600 transition-colors"
+					>
+						Grant admin
+					</button>
+				</form>
+				<p id="admin-grant-status" class="hidden px-5 py-2 text-xs"></p>
+				<div class="overflow-x-auto">
+					<table class="w-full text-sm">
+						<thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+							<tr>
+								<th class="text-left px-5 py-3 font-medium">GitHub</th>
+								<th class="text-left px-5 py-3 font-medium">Granted by</th>
+								<th class="text-left px-5 py-3 font-medium">Granted at</th>
+								<th class="text-right px-5 py-3 font-medium">Actions</th>
+							</tr>
+						</thead>
+						<tbody id="admins-tbody" class="divide-y divide-slate-100"></tbody>
+					</table>
+				</div>
+				<div id="admins-empty" class="hidden p-8 text-center text-slate-500 text-sm">
+					No admins yet — add one above.
+				</div>
+			</div>
+
 			<!-- Users table -->
 			<div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
 				<div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
@@ -86,7 +137,15 @@ import Footer from '../../components/Footer.astro';
 		<Footer />
 
 		<script>
-			import { getAdminUsers, ApiError, type AdminProfileRow } from '../../services/api';
+			import {
+				getAdminUsers,
+				listAdmins,
+				grantAdmin,
+				revokeAdmin,
+				ApiError,
+				type AdminProfileRow,
+				type AdminListEntry,
+			} from '../../services/api';
 
 			function setText(id: string, value: string | number): void {
 				const el = document.getElementById(id);
@@ -242,8 +301,137 @@ import Footer from '../../components/Footer.astro';
 				}
 			}
 
+			// ─── Manage admins section ──────────────────────────────────────
+
+			function formatDate(iso: string | undefined): string {
+				if (!iso) return '—';
+				const d = new Date(iso);
+				return isNaN(d.getTime()) ? iso : d.toISOString().slice(0, 10);
+			}
+
+			function showGrantStatus(message: string, kind: 'ok' | 'error'): void {
+				const el = document.getElementById('admin-grant-status');
+				if (!el) return;
+				el.textContent = message;
+				el.className =
+					kind === 'ok'
+						? 'px-5 py-2 text-xs text-green-700 bg-green-50'
+						: 'px-5 py-2 text-xs text-red-700 bg-red-50';
+				el.classList.remove('hidden');
+			}
+
+			function hideGrantStatus(): void {
+				document.getElementById('admin-grant-status')?.classList.add('hidden');
+			}
+
+			function buildAdminRow(entry: AdminListEntry): HTMLTableRowElement {
+				const tr = document.createElement('tr');
+				tr.className = 'hover:bg-slate-50';
+
+				const ghCell = document.createElement('td');
+				ghCell.className = 'px-5 py-3 font-medium text-slate-900';
+				const a = document.createElement('a');
+				a.href = `https://github.com/${encodeURIComponent(entry.githubUsername)}`;
+				a.target = '_blank';
+				a.rel = 'noopener noreferrer';
+				a.className = 'hover:underline';
+				a.textContent = '@' + entry.githubUsername;
+				ghCell.appendChild(a);
+				tr.appendChild(ghCell);
+
+				const granterCell = document.createElement('td');
+				granterCell.className = 'px-5 py-3 text-slate-600';
+				granterCell.textContent = entry.grantedBy ?? '—';
+				tr.appendChild(granterCell);
+
+				const dateCell = document.createElement('td');
+				dateCell.className = 'px-5 py-3 text-slate-500 whitespace-nowrap';
+				dateCell.textContent = formatDate(entry.grantedAt);
+				tr.appendChild(dateCell);
+
+				const actionsCell = document.createElement('td');
+				actionsCell.className = 'px-5 py-3 text-right';
+				const revokeBtn = document.createElement('button');
+				revokeBtn.type = 'button';
+				revokeBtn.className =
+					'text-xs font-medium px-3 py-1.5 rounded-md text-red-700 hover:bg-red-50 border border-red-200';
+				revokeBtn.textContent = 'Revoke';
+				revokeBtn.addEventListener('click', () => onRevokeClick(entry.githubUsername));
+				actionsCell.appendChild(revokeBtn);
+				tr.appendChild(actionsCell);
+
+				return tr;
+			}
+
+			async function refreshAdminsList(): Promise<void> {
+				const tbody = document.getElementById('admins-tbody');
+				const empty = document.getElementById('admins-empty');
+				if (!tbody || !empty) return;
+				try {
+					const admins = await listAdmins();
+					tbody.replaceChildren();
+					admins.forEach((a) => tbody.appendChild(buildAdminRow(a)));
+					empty.classList.toggle('hidden', admins.length > 0);
+				} catch (err) {
+					console.error('admins list failed:', err);
+					showGrantStatus('Failed to load admins list.', 'error');
+				}
+			}
+
+			async function onGrantSubmit(e: SubmitEvent): Promise<void> {
+				e.preventDefault();
+				const input = document.getElementById('admin-grant-input') as HTMLInputElement | null;
+				const submit = document.getElementById('admin-grant-submit') as HTMLButtonElement | null;
+				if (!input || !submit) return;
+				const username = input.value.trim();
+				if (!username) return;
+
+				submit.disabled = true;
+				hideGrantStatus();
+				try {
+					await grantAdmin(username);
+					input.value = '';
+					showGrantStatus(`@${username} is now an admin.`, 'ok');
+					await refreshAdminsList();
+				} catch (err) {
+					if (err instanceof ApiError) {
+						const msg =
+							typeof err.body === 'object' && err.body && 'error' in err.body
+								? String((err.body as { error: unknown }).error)
+								: `Request failed (${err.status})`;
+						showGrantStatus(msg, 'error');
+					} else {
+						showGrantStatus('Network error — try again.', 'error');
+					}
+				} finally {
+					submit.disabled = false;
+				}
+			}
+
+			async function onRevokeClick(username: string): Promise<void> {
+				if (!confirm(`Revoke admin access for @${username}?`)) return;
+				hideGrantStatus();
+				try {
+					await revokeAdmin(username);
+					showGrantStatus(`Revoked admin access for @${username}.`, 'ok');
+					await refreshAdminsList();
+				} catch (err) {
+					if (err instanceof ApiError) {
+						const msg =
+							typeof err.body === 'object' && err.body && 'error' in err.body
+								? String((err.body as { error: unknown }).error)
+								: `Revoke failed (${err.status})`;
+						showGrantStatus(msg, 'error');
+					} else {
+						showGrantStatus('Network error — try again.', 'error');
+					}
+				}
+			}
+
+			document.getElementById('admin-grant-form')?.addEventListener('submit', onGrantSubmit);
 			document.getElementById('admin-refresh-btn')?.addEventListener('click', () => window.location.reload());
-			init();
+
+			init().then(() => refreshAdminsList());
 		</script>
 	</body>
 </html>

@@ -1,36 +1,23 @@
 import { app, type HttpRequest, type InvocationContext, type HttpResponseInit } from '@azure/functions';
+import { getCosmosConfig } from './lib/cosmos';
+import { createUserRepository } from './lib/users';
+import { parseAdminLogins, resolveRoles } from './lib/roles';
 
 /**
  * SWA `rolesSource` endpoint.
  *
- * Configured in staticwebapp.config.json `auth.rolesSource = '/api/get-roles'`.
- * SWA POSTs here once per login with the in-progress principal in the body;
- * whatever roles[] we return get attached to the user's session principal
- * for the rest of the auth lifetime.
+ * Configured via staticwebapp.config.json `auth.rolesSource = '/api/get-roles'`.
+ * SWA POSTs here once per sign-in with the in-progress principal in the
+ * body; whatever roles[] we return get attached to the user's session
+ * principal for the rest of the auth lifetime.
  *
- * This is how `admin` is granted: the user's GitHub login is checked
- * against the comma-separated `ADMIN_GITHUB_LOGINS` env var. To make
- * yourself admin: Azure Portal → Static Web App → Configuration → add
- * `ADMIN_GITHUB_LOGINS=rmjoia` (or whatever your login is), Save, log out
- * and back in. The role appears in `principal.userRoles` on next sign-in
- * and the Admin link in the header lights up.
+ * This handler is intentionally thin: parse → guard against probing →
+ * delegate to resolveRoles. All policy lives in lib/roles.ts.
  *
- * Anti-probing: we only return non-empty roles when the request body
- * looks like a real SWA rolesSource invocation (identityProvider,
- * non-empty userId, claims array, accessToken). Anonymous callers who
- * curl this with just `{userDetails: 'someone'}` always get `[]` back,
- * so the endpoint can't be used to enumerate which logins are admins.
+ * Anti-probing: anonymous callers POSTing partial payloads always get
+ * `{roles: []}` regardless of ADMIN_GITHUB_LOGINS contents, so this
+ * endpoint can't be used to enumerate which logins are admins.
  */
-
-function parseAdminLogins(): Set<string> {
-	const raw = process.env.ADMIN_GITHUB_LOGINS ?? '';
-	return new Set(
-		raw
-			.split(',')
-			.map((s) => s.trim().toLowerCase())
-			.filter(Boolean)
-	);
-}
 
 interface RolesSourcePayload {
 	identityProvider?: string;
@@ -42,9 +29,9 @@ interface RolesSourcePayload {
 
 /**
  * Heuristic: is this body shaped like a real SWA rolesSource POST?
- * SWA always sends all four — identityProvider, userId, userDetails,
- * claims (array), accessToken (non-empty string). Probing requests from
- * an anonymous curl typically miss one or more.
+ * SWA always sends all of these — identityProvider, userId, userDetails,
+ * a claims array, and a non-empty accessToken. Anonymous probing
+ * requests typically miss one or more.
  */
 function looksLikeRolesSourceCall(body: RolesSourcePayload): boolean {
 	return (
@@ -61,7 +48,7 @@ function looksLikeRolesSourceCall(body: RolesSourcePayload): boolean {
 
 export async function getRolesHandler(
 	request: HttpRequest,
-	_context: InvocationContext
+	context: InvocationContext
 ): Promise<HttpResponseInit> {
 	let body: RolesSourcePayload = {};
 	try {
@@ -73,24 +60,34 @@ export async function getRolesHandler(
 		// Body wasn't JSON or was empty — fall through with empty body.
 	}
 
-	// Always 200 with `{ roles: [...] }`. Empty roles for anything that
-	// doesn't look like a legitimate SWA rolesSource invocation.
 	if (!looksLikeRolesSourceCall(body)) {
 		return { status: 200, jsonBody: { roles: [] } };
 	}
 
-	const roles: string[] = [];
-	const admins = parseAdminLogins();
-
-	if (
-		body.identityProvider === 'github' &&
-		typeof body.userDetails === 'string' &&
-		admins.has(body.userDetails.toLowerCase())
-	) {
-		roles.push('admin');
+	const cfg = getCosmosConfig();
+	if (!cfg) {
+		// Fail closed: if Cosmos isn't configured, no one is admin. Better
+		// than crashing the auth flow with a 500.
+		context.error('get-roles: missing COSMOS_DB_CONNECTION_STRING or COSMOS_DB_DATABASE_NAME');
+		return { status: 200, jsonBody: { roles: [] } };
 	}
 
-	return { status: 200, jsonBody: { roles } };
+	try {
+		const repo = createUserRepository(cfg.connectionString, cfg.database);
+		const roles = await resolveRoles(
+			{
+				swaUserId: body.userId!,
+				githubUsername: body.userDetails!,
+				identityProvider: body.identityProvider!,
+			},
+			{ repo, bootstrapLogins: parseAdminLogins(process.env.ADMIN_GITHUB_LOGINS) }
+		);
+		return { status: 200, jsonBody: { roles } };
+	} catch (error) {
+		// Fail closed on Cosmos errors too — never grant a role we can't verify.
+		context.error('get-roles failed:', error);
+		return { status: 200, jsonBody: { roles: [] } };
+	}
 }
 
 app.http('get-roles', {

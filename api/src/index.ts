@@ -11,3 +11,6 @@ import './profiles-list';
 import './account-delete';
 import './get-roles';
 import './admin-users';
+import './admins-list';
+import './admins-grant';
+import './admins-revoke';
