@@ -54,8 +54,17 @@ export async function adminsRevokeHandler(
 			return { status: 404, jsonBody: { error: 'Not an admin' } };
 		}
 
-		// Last-admin guard: refuse to remove the only remaining admin. Locks
-		// nobody out of /admin and out of further role management.
+		// Last-admin guard: refuse to remove the only remaining admin.
+		// Without this the operator would lose access to /admin and have no
+		// path to grant another admin — the system becomes unmanageable.
+		//
+		// Concurrency caveat: countByRole + upsert here are NOT atomic. Two
+		// admins concurrently revoking different "second-to-last" admins
+		// could both observe adminCount > 1 and both succeed, leaving zero
+		// admins. Truly closing that race requires a single roster document
+		// with optimistic concurrency / etag — significant architectural
+		// change. In practice this system has 1–3 admins and concurrent
+		// admin operations are very rare; tracked as a future enhancement.
 		const adminCount = await repo.countByRole('admin');
 		if (adminCount <= 1) {
 			return { status: 409, jsonBody: { error: 'Cannot revoke the last remaining admin' } };

@@ -68,9 +68,13 @@ class CosmosUserRepository implements UserRepository {
 	}
 
 	async listByRole(role: string): Promise<UserRecord[]> {
+		// ORDER BY grantedAt DESC so the admins list renders most-recently-granted
+		// first — deterministic order makes the UI stable across reloads and
+		// makes new additions visually pop.
 		const { resources } = await this.container.items
 			.query<UserRecord>({
-				query: 'SELECT * FROM c WHERE ARRAY_CONTAINS(c.roles, @role)',
+				query:
+					'SELECT * FROM c WHERE ARRAY_CONTAINS(c.roles, @role) ORDER BY c.grantedAt DESC',
 				parameters: [{ name: '@role', value: role }],
 			})
 			.fetchAll();

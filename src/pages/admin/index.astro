@@ -255,7 +255,7 @@ import Footer from '../../components/Footer.astro';
 				return tr;
 			}
 
-			async function init() {
+			async function init(): Promise<boolean> {
 				const loading = document.getElementById('loading-state');
 				const main = document.getElementById('admin-main');
 				const errorState = document.getElementById('error-state');
@@ -282,6 +282,7 @@ import Footer from '../../components/Footer.astro';
 
 					loading?.classList.add('hidden');
 					main?.classList.remove('hidden');
+					return true;
 				} catch (err) {
 					console.error('admin init failed:', err);
 					if (err instanceof ApiError) {
@@ -298,6 +299,7 @@ import Footer from '../../components/Footer.astro';
 					}
 					loading?.classList.add('hidden');
 					errorState?.classList.remove('hidden');
+					return false;
 				}
 			}
 
@@ -431,7 +433,11 @@ import Footer from '../../components/Footer.astro';
 			document.getElementById('admin-grant-form')?.addEventListener('submit', onGrantSubmit);
 			document.getElementById('admin-refresh-btn')?.addEventListener('click', () => window.location.reload());
 
-			init().then(() => refreshAdminsList());
+			// Only fetch the admins list if the main admin view actually loaded
+			// (avoids an extra failing request + console noise on 401/403).
+			init().then((ok) => {
+				if (ok) refreshAdminsList();
+			});
 		</script>
 	</body>
 </html>
