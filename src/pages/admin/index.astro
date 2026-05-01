@@ -86,7 +86,7 @@ import Footer from '../../components/Footer.astro';
 		<Footer />
 
 		<script>
-			import { getAdminUsers, type AdminProfileRow } from '../../services/api';
+			import { getAdminUsers, ApiError, type AdminProfileRow } from '../../services/api';
 
 			function setText(id: string, value: string | number): void {
 				const el = document.getElementById(id);
@@ -225,12 +225,17 @@ import Footer from '../../components/Footer.astro';
 					main?.classList.remove('hidden');
 				} catch (err) {
 					console.error('admin init failed:', err);
-					const msg = err instanceof Error ? err.message : '';
-					if (msg.includes('admin-users 403')) {
-						if (errorTitle) errorTitle.textContent = 'Forbidden';
-						if (errorMessage)
-							errorMessage.textContent =
-								"You don't have the admin role. Ask the operator to add your GitHub login to ADMIN_GITHUB_LOGINS, then sign out and back in.";
+					if (err instanceof ApiError) {
+						if (err.status === 403) {
+							if (errorTitle) errorTitle.textContent = 'Forbidden';
+							if (errorMessage)
+								errorMessage.textContent =
+									"You don't have the admin role. Ask the operator to add your GitHub login to ADMIN_GITHUB_LOGINS, then sign out and back in.";
+						} else if (err.status === 401) {
+							if (errorTitle) errorTitle.textContent = 'Sign in required';
+							if (errorMessage)
+								errorMessage.textContent = 'Please sign in to access the admin view.';
+						}
 					}
 					loading?.classList.add('hidden');
 					errorState?.classList.remove('hidden');

@@ -12,6 +12,30 @@
  * cache is shared.
  */
 
+/**
+ * Structured error thrown by every helper here on non-OK status. Pages can
+ * `instanceof` check + switch on `.status` instead of brittle string
+ * matching against `.message`.
+ */
+export class ApiError extends Error {
+	constructor(
+		public readonly status: number,
+		public readonly endpoint: string,
+		public readonly body?: unknown
+	) {
+		super(`${endpoint} ${status}`);
+		this.name = 'ApiError';
+	}
+}
+
+async function safeJson(res: Response): Promise<unknown> {
+	try {
+		return await res.json();
+	} catch {
+		return undefined;
+	}
+}
+
 export interface ClientPrincipal {
 	identityProvider: string;
 	userId: string;
@@ -121,7 +145,7 @@ export type DirectoryProfile = Pick<
 export async function getPublicProfiles(): Promise<DirectoryProfile[]> {
 	const res = await fetch('/api/profiles');
 	if (!res.ok) {
-		throw new Error(`profiles ${res.status}`);
+		throw new ApiError(res.status, 'profiles', await safeJson(res));
 	}
 	const data = await res.json();
 	return data?.profiles ?? [];
@@ -148,7 +172,7 @@ export async function getProfile(): Promise<Profile | null> {
 	const res = await fetch('/api/profile-get');
 	if (!res.ok) {
 		if (res.status === 404) return null;
-		throw new Error(`profile-get ${res.status}`);
+		throw new ApiError(res.status, 'profile-get', await safeJson(res));
 	}
 	const data = await res.json();
 	return data?.profile ?? null;
@@ -165,8 +189,9 @@ export async function saveProfile(input: ProfileInput): Promise<Profile> {
 		body: JSON.stringify(input),
 	});
 	if (!res.ok) {
-		const err = await res.json().catch(() => ({}));
-		throw new Error(err?.error || `profile-save ${res.status}`);
+		const body = await safeJson(res);
+		const err: { error?: string } | undefined = body && typeof body === 'object' ? (body as { error?: string }) : undefined;
+		throw new ApiError(res.status, err?.error ?? 'profile-save', body);
 	}
 	const data = await res.json();
 	return data.profile;
@@ -178,7 +203,7 @@ export async function saveProfile(input: ProfileInput): Promise<Profile> {
 export async function deleteAccount(): Promise<void> {
 	const res = await fetch('/api/account-delete', { method: 'POST' });
 	if (!res.ok) {
-		throw new Error(`account-delete ${res.status}`);
+		throw new ApiError(res.status, 'account-delete', await safeJson(res));
 	}
 }
 
@@ -220,7 +245,7 @@ export interface AdminUsersResponse {
 export async function getAdminUsers(): Promise<AdminUsersResponse> {
 	const res = await fetch('/api/admin-users');
 	if (!res.ok) {
-		throw new Error(`admin-users ${res.status}`);
+		throw new ApiError(res.status, 'admin-users', await safeJson(res));
 	}
 	return await res.json();
 }

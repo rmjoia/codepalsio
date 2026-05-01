@@ -15,10 +15,11 @@ import { app, type HttpRequest, type InvocationContext, type HttpResponseInit } 
  * and back in. The role appears in `principal.userRoles` on next sign-in
  * and the Admin link in the header lights up.
  *
- * Security note: this endpoint is reachable publicly, but POSTing to it
- * directly does NOT grant admin to the caller — it just returns JSON.
- * SWA is the only consumer that turns the response into actual roles, and
- * it only does so for the in-progress login it initiated.
+ * Anti-probing: we only return non-empty roles when the request body
+ * looks like a real SWA rolesSource invocation (identityProvider,
+ * non-empty userId, claims array, accessToken). Anonymous callers who
+ * curl this with just `{userDetails: 'someone'}` always get `[]` back,
+ * so the endpoint can't be used to enumerate which logins are admins.
  */
 
 function parseAdminLogins(): Set<string> {
@@ -31,18 +32,51 @@ function parseAdminLogins(): Set<string> {
 	);
 }
 
+interface RolesSourcePayload {
+	identityProvider?: string;
+	userId?: string;
+	userDetails?: string;
+	claims?: unknown;
+	accessToken?: string;
+}
+
+/**
+ * Heuristic: is this body shaped like a real SWA rolesSource POST?
+ * SWA always sends all four — identityProvider, userId, userDetails,
+ * claims (array), accessToken (non-empty string). Probing requests from
+ * an anonymous curl typically miss one or more.
+ */
+function looksLikeRolesSourceCall(body: RolesSourcePayload): boolean {
+	return (
+		typeof body.identityProvider === 'string' &&
+		typeof body.userId === 'string' &&
+		body.userId.length > 0 &&
+		typeof body.userDetails === 'string' &&
+		body.userDetails.length > 0 &&
+		Array.isArray(body.claims) &&
+		typeof body.accessToken === 'string' &&
+		body.accessToken.length > 0
+	);
+}
+
 export async function getRolesHandler(
 	request: HttpRequest,
-	context: InvocationContext
+	_context: InvocationContext
 ): Promise<HttpResponseInit> {
-	let body: { identityProvider?: string; userDetails?: string } = {};
+	let body: RolesSourcePayload = {};
 	try {
 		const parsed = await request.json();
 		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-			body = parsed as typeof body;
+			body = parsed as RolesSourcePayload;
 		}
 	} catch {
 		// Body wasn't JSON or was empty — fall through with empty body.
+	}
+
+	// Always 200 with `{ roles: [...] }`. Empty roles for anything that
+	// doesn't look like a legitimate SWA rolesSource invocation.
+	if (!looksLikeRolesSourceCall(body)) {
+		return { status: 200, jsonBody: { roles: [] } };
 	}
 
 	const roles: string[] = [];
@@ -56,7 +90,6 @@ export async function getRolesHandler(
 		roles.push('admin');
 	}
 
-	context.log(`get-roles: ${body.userDetails ?? '<unknown>'} -> [${roles.join(', ')}]`);
 	return { status: 200, jsonBody: { roles } };
 }
 
