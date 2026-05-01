@@ -23,7 +23,7 @@ import Footer from '../../components/Footer.astro';
 			<h1 class="text-2xl font-bold text-red-700 mb-2">Couldn't load your profile</h1>
 			<p class="text-slate-600 mb-6">Something went wrong. Please refresh the page and try again.</p>
 			<button
-				onclick="window.location.reload()"
+				id="error-refresh-btn"
 				class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
 			>
 				Refresh
@@ -516,6 +516,7 @@ import Footer from '../../components/Footer.astro';
 			document.getElementById('cancel-btn')?.addEventListener('click', showViewMode);
 			document.getElementById('complete-profile-btn')?.addEventListener('click', showEditMode);
 			document.getElementById('form-cancel-btn')?.addEventListener('click', showViewMode);
+			document.getElementById('error-refresh-btn')?.addEventListener('click', () => window.location.reload());
 
 			// Bio character counter
 			document.getElementById('bio')?.addEventListener('input', (e) => {

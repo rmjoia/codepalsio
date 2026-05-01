@@ -30,7 +30,7 @@ const currentYear = new Date().getFullYear();
 					<li>
 						<button
 							class="hover:text-primary-400 transition-colors text-left"
-							onclick="toggleModal('sponsorship-modal')"
+							data-modal-open="sponsorship-modal"
 						>
 							Support Us
 						</button>
@@ -73,7 +73,7 @@ const currentYear = new Date().getFullYear();
 					<li>
 						<button
 							class="hover:text-primary-400 transition-colors text-left"
-							onclick="toggleModal('privacy-modal')"
+							data-modal-open="privacy-modal"
 						>
 							Privacy Policy
 						</button>
@@ -81,7 +81,7 @@ const currentYear = new Date().getFullYear();
 					<li>
 						<button
 							class="hover:text-primary-400 transition-colors text-left"
-							onclick="toggleModal('terms-modal')"
+							data-modal-open="terms-modal"
 						>
 							Terms of Service
 						</button>
@@ -89,7 +89,7 @@ const currentYear = new Date().getFullYear();
 					<li>
 						<button
 							class="hover:text-primary-400 transition-colors text-left"
-							onclick="toggleModal('coc-modal')"
+							data-modal-open="coc-modal"
 						>
 							Code of Conduct
 						</button>
@@ -138,11 +138,7 @@ const currentYear = new Date().getFullYear();
 	</div>
 </footer>
 
-<script is:inline>
-	function toggleModal(modalId) {
-		const modal = document.getElementById(modalId);
-		if (modal) {
-			modal.classList.toggle('hidden');
-		}
-	}
+<script>
+	import { setupModalDelegation } from '../lib/modals';
+	setupModalDelegation();
 </script>

@@ -1,10 +1,17 @@
 ---
-// Client-side redirect — Astro.redirect() is not available in static mode
+// Stub page that redirects to /profile?edit=true. Astro.redirect() isn't
+// available in static mode, so we use a meta-refresh — works without JS,
+// stays valid under strict CSP.
 ---
+<!DOCTYPE html>
 <html>
 	<head>
 		<meta http-equiv="refresh" content="0;url=/profile?edit=true" />
-		<script is:inline>window.location.replace('/profile?edit=true');</script>
+		<title>Redirecting…</title>
 	</head>
-	<body></body>
+	<body>
+		<noscript>
+			Redirecting to <a href="/profile?edit=true">profile setup</a>.
+		</noscript>
+	</body>
 </html>
