@@ -181,3 +181,46 @@ export async function deleteAccount(): Promise<void> {
 		throw new Error(`account-delete ${res.status}`);
 	}
 }
+
+// ─────────────────────────── Admin ────────────────────────────────
+
+export interface AdminProfileRow {
+	id: string;
+	userId: string;
+	githubUsername?: string;
+	displayName: string;
+	profileVisibility: ProfileVisibility;
+	availability: Availability;
+	bioLength: number;
+	skillsCount: number;
+	interestsCount: number;
+	hasLocation: boolean;
+	hasTimezone: boolean;
+	complete: boolean;
+	updatedAt?: string;
+}
+
+export interface AdminKpis {
+	totalProfiles: number;
+	publicProfiles: number;
+	privateProfiles: number;
+	completeProfiles: number;
+}
+
+export interface AdminUsersResponse {
+	profiles: AdminProfileRow[];
+	kpis: AdminKpis;
+}
+
+/**
+ * GET /api/admin-users → admin-only KPIs + per-user moderation table.
+ * SWA route gate enforces the `admin` role; the backend handler also
+ * checks the principal's roles for defense in depth.
+ */
+export async function getAdminUsers(): Promise<AdminUsersResponse> {
+	const res = await fetch('/api/admin-users');
+	if (!res.ok) {
+		throw new Error(`admin-users ${res.status}`);
+	}
+	return await res.json();
+}

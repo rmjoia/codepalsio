@@ -2,6 +2,9 @@
 	"platform": {
 		"apiRuntime": "node:20"
 	},
+	"auth": {
+		"rolesSource": "/api/get-roles"
+	},
 	"routes": [
 		{
 			"route": "/login",
@@ -50,6 +53,10 @@
 		{
 			"route": "/api/admin-users",
 			"allowedRoles": ["admin"]
+		},
+		{
+			"route": "/api/get-roles",
+			"allowedRoles": ["anonymous", "authenticated"]
 		},
 		{
 			"route": "/api/*",

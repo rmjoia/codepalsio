@@ -1,0 +1,244 @@
+---
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+---
+
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Admin · CodePals</title>
+	</head>
+	<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
+		<Header />
+
+		<!-- Loading -->
+		<div id="loading-state" class="flex justify-center items-center min-h-[60vh]">
+			<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+		</div>
+
+		<!-- Forbidden (route gate fired) / error -->
+		<div id="error-state" class="hidden mx-auto max-w-2xl px-4 py-16 text-center">
+			<h1 id="error-title" class="text-2xl font-bold text-red-700 mb-2">Couldn't load admin view</h1>
+			<p id="error-message" class="text-slate-600 mb-6">Something went wrong. Please refresh and try again.</p>
+			<button
+				id="admin-refresh-btn"
+				class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+			>
+				Refresh
+			</button>
+		</div>
+
+		<main id="admin-main" class="hidden mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
+			<div class="mb-8">
+				<h1 class="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">Admin</h1>
+				<p class="text-slate-600">Moderation view: profile completeness + visibility across the community.</p>
+			</div>
+
+			<!-- KPI cards -->
+			<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+				<div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+					<p class="text-xs uppercase tracking-wide text-slate-500 mb-1">Total profiles</p>
+					<p id="kpi-total" class="text-3xl font-bold text-slate-900">—</p>
+				</div>
+				<div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+					<p class="text-xs uppercase tracking-wide text-slate-500 mb-1">Public</p>
+					<p id="kpi-public" class="text-3xl font-bold text-green-700">—</p>
+				</div>
+				<div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+					<p class="text-xs uppercase tracking-wide text-slate-500 mb-1">Private</p>
+					<p id="kpi-private" class="text-3xl font-bold text-slate-700">—</p>
+				</div>
+				<div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+					<p class="text-xs uppercase tracking-wide text-slate-500 mb-1">Complete</p>
+					<p id="kpi-complete" class="text-3xl font-bold text-primary-600">—</p>
+				</div>
+			</div>
+
+			<!-- Users table -->
+			<div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+				<div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+					<h2 class="font-semibold text-slate-900">Users</h2>
+					<span id="users-count" class="text-sm text-slate-500"></span>
+				</div>
+				<div class="overflow-x-auto">
+					<table class="w-full text-sm">
+						<thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+							<tr>
+								<th class="text-left px-5 py-3 font-medium">Display name</th>
+								<th class="text-left px-5 py-3 font-medium">GitHub</th>
+								<th class="text-left px-5 py-3 font-medium">Visibility</th>
+								<th class="text-left px-5 py-3 font-medium">Availability</th>
+								<th class="text-left px-5 py-3 font-medium">Completeness</th>
+								<th class="text-left px-5 py-3 font-medium">Updated</th>
+							</tr>
+						</thead>
+						<tbody id="users-tbody" class="divide-y divide-slate-100"></tbody>
+					</table>
+				</div>
+				<div id="users-empty" class="hidden p-8 text-center text-slate-500 text-sm">
+					No profiles yet.
+				</div>
+			</div>
+		</main>
+
+		<Footer />
+
+		<script>
+			import { getAdminUsers, type AdminProfileRow } from '../../services/api';
+
+			function setText(id: string, value: string | number): void {
+				const el = document.getElementById(id);
+				if (el) el.textContent = String(value);
+			}
+
+			function badge(text: string, cls: string): HTMLElement {
+				const span = document.createElement('span');
+				span.className = `inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${cls}`;
+				span.textContent = text;
+				return span;
+			}
+
+			function visibilityBadge(v: AdminProfileRow['profileVisibility']): HTMLElement {
+				return v === 'public'
+					? badge('🌍 Public', 'bg-green-100 text-green-700')
+					: badge('🔒 Private', 'bg-slate-100 text-slate-600');
+			}
+
+			function availabilityBadge(a: AdminProfileRow['availability']): HTMLElement {
+				switch (a) {
+					case 'active':
+						return badge('Active', 'bg-green-100 text-green-700');
+					case 'casual':
+						return badge('Casual', 'bg-amber-100 text-amber-700');
+					case 'unavailable':
+						return badge('Unavailable', 'bg-slate-100 text-slate-600');
+					default:
+						return badge('Unknown', 'bg-slate-100 text-slate-600');
+				}
+			}
+
+			function completenessCell(row: AdminProfileRow): HTMLElement {
+				const wrap = document.createElement('div');
+				wrap.className = 'flex items-center gap-2';
+				wrap.appendChild(
+					badge(
+						row.complete ? 'Complete' : 'Incomplete',
+						row.complete ? 'bg-primary-100 text-primary-700' : 'bg-amber-100 text-amber-700'
+					)
+				);
+				const detail = document.createElement('span');
+				detail.className = 'text-xs text-slate-500';
+				const parts: string[] = [];
+				if (row.bioLength < 50) parts.push(`bio ${row.bioLength}/50`);
+				if (row.skillsCount < 2) parts.push(`skills ${row.skillsCount}/2`);
+				if (row.interestsCount < 2) parts.push(`interests ${row.interestsCount}/2`);
+				if (!row.hasLocation) parts.push('no location');
+				if (!row.hasTimezone) parts.push('no timezone');
+				detail.textContent = parts.length > 0 ? `(${parts.join(', ')})` : '';
+				wrap.appendChild(detail);
+				return wrap;
+			}
+
+			function formatUpdatedAt(iso: string | undefined): string {
+				if (!iso) return '—';
+				const d = new Date(iso);
+				if (isNaN(d.getTime())) return iso;
+				return d.toISOString().slice(0, 10);
+			}
+
+			function buildRow(row: AdminProfileRow): HTMLTableRowElement {
+				const tr = document.createElement('tr');
+				tr.className = 'hover:bg-slate-50';
+
+				const td = (cls = 'px-5 py-3') => {
+					const c = document.createElement('td');
+					c.className = cls;
+					return c;
+				};
+
+				const nameCell = td();
+				nameCell.className = 'px-5 py-3 font-medium text-slate-900';
+				nameCell.textContent = row.displayName;
+				tr.appendChild(nameCell);
+
+				const ghCell = td('px-5 py-3 text-slate-600');
+				if (row.githubUsername) {
+					const a = document.createElement('a');
+					a.href = `https://github.com/${encodeURIComponent(row.githubUsername)}`;
+					a.target = '_blank';
+					a.rel = 'noopener noreferrer';
+					a.className = 'hover:underline';
+					a.textContent = '@' + row.githubUsername;
+					ghCell.appendChild(a);
+				} else {
+					ghCell.textContent = '—';
+				}
+				tr.appendChild(ghCell);
+
+				const visCell = td();
+				visCell.appendChild(visibilityBadge(row.profileVisibility));
+				tr.appendChild(visCell);
+
+				const availCell = td();
+				availCell.appendChild(availabilityBadge(row.availability));
+				tr.appendChild(availCell);
+
+				const completeCell = td();
+				completeCell.appendChild(completenessCell(row));
+				tr.appendChild(completeCell);
+
+				const dateCell = td('px-5 py-3 text-slate-500 whitespace-nowrap');
+				dateCell.textContent = formatUpdatedAt(row.updatedAt);
+				tr.appendChild(dateCell);
+
+				return tr;
+			}
+
+			async function init() {
+				const loading = document.getElementById('loading-state');
+				const main = document.getElementById('admin-main');
+				const errorState = document.getElementById('error-state');
+				const errorTitle = document.getElementById('error-title');
+				const errorMessage = document.getElementById('error-message');
+				const tbody = document.getElementById('users-tbody');
+				const empty = document.getElementById('users-empty');
+
+				try {
+					const { profiles, kpis } = await getAdminUsers();
+
+					setText('kpi-total', kpis.totalProfiles);
+					setText('kpi-public', kpis.publicProfiles);
+					setText('kpi-private', kpis.privateProfiles);
+					setText('kpi-complete', kpis.completeProfiles);
+					setText('users-count', `${profiles.length} ${profiles.length === 1 ? 'profile' : 'profiles'}`);
+
+					if (tbody) {
+						tbody.replaceChildren();
+						profiles.forEach((p) => tbody.appendChild(buildRow(p)));
+					}
+
+					if (profiles.length === 0) empty?.classList.remove('hidden');
+
+					loading?.classList.add('hidden');
+					main?.classList.remove('hidden');
+				} catch (err) {
+					console.error('admin init failed:', err);
+					const msg = err instanceof Error ? err.message : '';
+					if (msg.includes('admin-users 403')) {
+						if (errorTitle) errorTitle.textContent = 'Forbidden';
+						if (errorMessage)
+							errorMessage.textContent =
+								"You don't have the admin role. Ask the operator to add your GitHub login to ADMIN_GITHUB_LOGINS, then sign out and back in.";
+					}
+					loading?.classList.add('hidden');
+					errorState?.classList.remove('hidden');
+				}
+			}
+
+			document.getElementById('admin-refresh-btn')?.addEventListener('click', () => window.location.reload());
+			init();
+		</script>
+	</body>
+</html>
