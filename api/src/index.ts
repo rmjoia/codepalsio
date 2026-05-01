@@ -9,3 +9,5 @@ import './profile-get';
 import './profile-save';
 import './profiles-list';
 import './account-delete';
+import './get-roles';
+import './admin-users';
