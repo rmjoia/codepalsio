@@ -1,6 +1,7 @@
 import { app, type HttpRequest, type InvocationContext, type HttpResponseInit } from '@azure/functions';
 import { getCosmosConfig } from './lib/cosmos';
 import { createUserRepository } from './lib/users';
+import { createAdminRosterRepository } from './lib/admin-roster';
 import { parseAdminLogins, resolveRoles } from './lib/roles';
 
 /**
@@ -74,13 +75,14 @@ export async function getRolesHandler(
 
 	try {
 		const repo = createUserRepository(cfg.connectionString, cfg.database);
+		const roster = createAdminRosterRepository(cfg.connectionString, cfg.database);
 		const roles = await resolveRoles(
 			{
 				swaUserId: body.userId!,
 				githubUsername: body.userDetails!,
 				identityProvider: body.identityProvider!,
 			},
-			{ repo, bootstrapLogins: parseAdminLogins(process.env.ADMIN_GITHUB_LOGINS) }
+			{ repo, roster, bootstrapLogins: parseAdminLogins(process.env.ADMIN_GITHUB_LOGINS) }
 		);
 		return { status: 200, jsonBody: { roles } };
 	} catch (error) {

@@ -4,6 +4,7 @@ import type { HttpRequest, InvocationContext } from '@azure/functions';
 const mocks = vi.hoisted(() => ({
 	getCosmosConfigMock: vi.fn(),
 	createUserRepositoryMock: vi.fn(),
+	createAdminRosterRepositoryMock: vi.fn(),
 }));
 
 vi.mock('@azure/functions', () => ({ app: { http: vi.fn() } }));
@@ -19,9 +20,17 @@ vi.mock('./lib/users', async () => {
 		createUserRepository: mocks.createUserRepositoryMock,
 	};
 });
+vi.mock('./lib/admin-roster', async () => {
+	const actual = await vi.importActual<typeof import('./lib/admin-roster')>('./lib/admin-roster');
+	return {
+		...actual,
+		createAdminRosterRepository: mocks.createAdminRosterRepositoryMock,
+	};
+});
 
 import { getRolesHandler } from './get-roles';
 import { FakeUserRepository } from './lib/users.fake';
+import { FakeAdminRosterRepository } from './lib/admin-roster.fake';
 import { userIdForGithub } from './lib/users';
 
 const fakeContext = { error: vi.fn(), log: vi.fn() } as unknown as InvocationContext;
@@ -44,13 +53,17 @@ function swaPayload(userDetails: string, identityProvider = 'github'): Record<st
 describe('POST /api/get-roles', () => {
 	const originalEnv = process.env.ADMIN_GITHUB_LOGINS;
 	let repo: FakeUserRepository;
+	let roster: FakeAdminRosterRepository;
 
 	beforeEach(() => {
 		repo = new FakeUserRepository();
+		roster = new FakeAdminRosterRepository();
 		mocks.getCosmosConfigMock.mockReset();
 		mocks.getCosmosConfigMock.mockReturnValue({ connectionString: 'cs', database: 'db' });
 		mocks.createUserRepositoryMock.mockReset();
 		mocks.createUserRepositoryMock.mockReturnValue(repo);
+		mocks.createAdminRosterRepositoryMock.mockReset();
+		mocks.createAdminRosterRepositoryMock.mockReturnValue(roster);
 		delete process.env.ADMIN_GITHUB_LOGINS;
 	});
 

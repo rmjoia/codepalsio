@@ -1,23 +1,26 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { resolveRoles, parseAdminLogins } from './roles';
 import { FakeUserRepository } from './users.fake';
+import { FakeAdminRosterRepository } from './admin-roster.fake';
 import { userIdForGithub } from './users';
 
 const FROZEN_NOW = '2026-01-01T00:00:00.000Z';
 
 describe('resolveRoles', () => {
 	let repo: FakeUserRepository;
+	let roster: FakeAdminRosterRepository;
 	const now = () => FROZEN_NOW;
 
 	beforeEach(() => {
 		repo = new FakeUserRepository();
+		roster = new FakeAdminRosterRepository();
 	});
 
 	describe('non-GitHub providers', () => {
 		it('returns [] for any non-github identity provider', async () => {
 			const roles = await resolveRoles(
 				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'aad' },
-				{ repo, bootstrapLogins: new Set(['rmjoia']), now }
+				{ repo, roster, bootstrapLogins: new Set(['rmjoia']), now }
 			);
 			expect(roles).toEqual([]);
 			expect(await repo.countByRole('admin')).toBe(0); // didn't seed
@@ -35,7 +38,7 @@ describe('resolveRoles', () => {
 			});
 			const roles = await resolveRoles(
 				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
-				{ repo, bootstrapLogins: new Set(['someone-else']), now }
+				{ repo, roster, bootstrapLogins: new Set(['someone-else']), now }
 			);
 			expect(roles).toEqual(['admin']);
 		});
@@ -51,7 +54,7 @@ describe('resolveRoles', () => {
 			const roles = await resolveRoles(
 				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
 				// Even if env var lists them, DB record (with empty roles) wins.
-				{ repo, bootstrapLogins: new Set(['rmjoia']), now }
+				{ repo, roster, bootstrapLogins: new Set(['rmjoia']), now }
 			);
 			expect(roles).toEqual([]);
 		});
@@ -66,7 +69,7 @@ describe('resolveRoles', () => {
 			});
 			await resolveRoles(
 				{ swaUserId: 'u-new', githubUsername: 'newadmin', identityProvider: 'github' },
-				{ repo, bootstrapLogins: new Set(), now }
+				{ repo, roster, bootstrapLogins: new Set(), now }
 			);
 			const after = await repo.findByGithubUsername('newadmin');
 			expect(after?.swaUserId).toBe('u-new');
@@ -82,7 +85,7 @@ describe('resolveRoles', () => {
 			});
 			await resolveRoles(
 				{ swaUserId: 'new-id', githubUsername: 'rmjoia', identityProvider: 'github' },
-				{ repo, bootstrapLogins: new Set(), now }
+				{ repo, roster, bootstrapLogins: new Set(), now }
 			);
 			const after = await repo.findByGithubUsername('rmjoia');
 			expect(after?.swaUserId).toBe('new-id');
@@ -98,7 +101,7 @@ describe('resolveRoles', () => {
 			});
 			const roles = await resolveRoles(
 				{ swaUserId: 'u1', githubUsername: 'RMJOIA', identityProvider: 'github' },
-				{ repo, bootstrapLogins: new Set(), now }
+				{ repo, roster, bootstrapLogins: new Set(), now }
 			);
 			expect(roles).toEqual(['admin']);
 		});
@@ -108,7 +111,7 @@ describe('resolveRoles', () => {
 		it('grants admin when user is in ADMIN_GITHUB_LOGINS and creates the seed record', async () => {
 			const roles = await resolveRoles(
 				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
-				{ repo, bootstrapLogins: new Set(['rmjoia']), now }
+				{ repo, roster, bootstrapLogins: new Set(['rmjoia']), now }
 			);
 			expect(roles).toEqual(['admin']);
 			const created = await repo.findByGithubUsername('rmjoia');
@@ -126,7 +129,7 @@ describe('resolveRoles', () => {
 		it('returns [] when user is not in ADMIN_GITHUB_LOGINS', async () => {
 			const roles = await resolveRoles(
 				{ swaUserId: 'u1', githubUsername: 'mallory', identityProvider: 'github' },
-				{ repo, bootstrapLogins: new Set(['rmjoia']), now }
+				{ repo, roster, bootstrapLogins: new Set(['rmjoia']), now }
 			);
 			expect(roles).toEqual([]);
 			expect(await repo.countByRole('admin')).toBe(0);
@@ -136,12 +139,12 @@ describe('resolveRoles', () => {
 			// First login → bootstrap creates record
 			await resolveRoles(
 				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
-				{ repo, bootstrapLogins: new Set(['rmjoia']), now }
+				{ repo, roster, bootstrapLogins: new Set(['rmjoia']), now }
 			);
 			// Second login → with env var EMPTIED. Should still be admin (DB record wins).
 			const roles = await resolveRoles(
 				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
-				{ repo, bootstrapLogins: new Set(), now }
+				{ repo, roster, bootstrapLogins: new Set(), now }
 			);
 			expect(roles).toEqual(['admin']);
 		});
@@ -159,7 +162,7 @@ describe('resolveRoles', () => {
 			// Operator removed env var entry, but DB still says admin
 			const roles = await resolveRoles(
 				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
-				{ repo, bootstrapLogins: new Set(), now }
+				{ repo, roster, bootstrapLogins: new Set(), now }
 			);
 			expect(roles).toEqual(['admin']);
 		});
@@ -167,7 +170,7 @@ describe('resolveRoles', () => {
 		it('bootstrap path is case-insensitive against env var', async () => {
 			const roles = await resolveRoles(
 				{ swaUserId: 'u1', githubUsername: 'RmJoIa', identityProvider: 'github' },
-				{ repo, bootstrapLogins: new Set(['rmjoia']), now }
+				{ repo, roster, bootstrapLogins: new Set(['rmjoia']), now }
 			);
 			expect(roles).toEqual(['admin']);
 		});
@@ -177,9 +180,62 @@ describe('resolveRoles', () => {
 		it('returns [] when githubUsername is empty', async () => {
 			const roles = await resolveRoles(
 				{ swaUserId: 'u1', githubUsername: '', identityProvider: 'github' },
-				{ repo, bootstrapLogins: new Set(['rmjoia']), now }
+				{ repo, roster, bootstrapLogins: new Set(['rmjoia']), now }
 			);
 			expect(roles).toEqual([]);
+		});
+	});
+
+	describe('bootstrap atomicity', () => {
+		// If the user record were written before the roster, a failed
+		// roster write would leave a UserRecord with `roles: ['admin']`
+		// but no roster entry. On the next login, `existing` becomes
+		// truthy → bootstrap branch is skipped → the user is NEVER added
+		// to the roster → resolveRoles returns []. The intended first
+		// admin is permanently locked out.
+		//
+		// Roster-first ensures: roster-write failure → no record created
+		// → next login retries bootstrap cleanly. Record-write failure
+		// after roster-write → next login takes the rebuild branch
+		// ('isAdminPerRoster && !existing') → record gets recreated.
+		it('does not create a user record when the roster write fails', async () => {
+			const failingRoster = {
+				read: async () => ({ id: 'roster' as const, admins: [], updatedAt: FROZEN_NOW, _etag: 'e1' }),
+				write: async () => {
+					throw new Error('cosmos down');
+				},
+			};
+
+			await expect(
+				resolveRoles(
+					{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+					{ repo, roster: failingRoster, bootstrapLogins: new Set(['rmjoia']), now }
+				)
+			).rejects.toThrow();
+
+			// Critical assertion: the user record was NOT created. Without
+			// roster-first, this would have written the record and locked
+			// the user out forever.
+			expect(await repo.findByGithubUsername('rmjoia')).toBeNull();
+		});
+
+		it('rebuilds a missing user record on next login when roster says admin (record-write failure recovery)', async () => {
+			// Simulates: prior bootstrap attempt wrote roster, then crashed
+			// before writing the user record. Roster has [rmjoia], no record.
+			roster.seed([userIdForGithub('rmjoia')]);
+
+			const roles = await resolveRoles(
+				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+				{ repo, roster, bootstrapLogins: new Set(), now }
+			);
+			expect(roles).toEqual(['admin']);
+			// Record was rebuilt
+			const rebuilt = await repo.findByGithubUsername('rmjoia');
+			expect(rebuilt).toMatchObject({
+				githubUsername: 'rmjoia',
+				roles: ['admin'],
+				swaUserId: 'u1',
+			});
 		});
 	});
 });
