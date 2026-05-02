@@ -100,6 +100,19 @@ export async function resolveRoles(
 
 	if (deps.bootstrapLogins.has(username)) {
 		const stamp = now();
+		// Roster FIRST, then user record. If the roster write fails, no
+		// user record is created — the next login retries the bootstrap
+		// path cleanly. Writing the user record first would risk leaving
+		// `existing` truthy for next time while the user is still missing
+		// from the roster, locking them out permanently. If the roster
+		// write succeeds and the user-record write fails, the rebuild
+		// branch above ("isAdminPerRoster && !existing") handles it on
+		// the next login.
+		await deps.roster.write({
+			...roster,
+			admins: Array.from(new Set([...roster.admins, targetId])),
+			updatedAt: stamp,
+		});
 		const record: UserRecord = {
 			id: targetId,
 			githubUsername: username,
@@ -110,14 +123,6 @@ export async function resolveRoles(
 			updatedAt: stamp,
 		};
 		await deps.repo.upsert(record);
-		// Add to roster too. Unconditional write (no IfMatch retry needed
-		// for bootstrap — concurrent bootstrap of the same user is benign,
-		// and the seed already gave us an etag-bearing roster).
-		await deps.roster.write({
-			...roster,
-			admins: Array.from(new Set([...roster.admins, targetId])),
-			updatedAt: stamp,
-		});
 		return ['admin'];
 	}
 

@@ -98,21 +98,38 @@ export async function adminsGrantHandler(
 		const existing = await repos.users.findByGithubUsername(username);
 
 		if (rosterDecision.alreadyAdmin) {
-			// Defensive: roster says yes but user record missing → create it
-			// so future reads (admins-list, resolveRoles backfill) are clean.
-			if (existing) {
-				return { status: 200, jsonBody: { admin: toPublic(existing) } };
+			// Roster already lists them as admin. Make sure the user record
+			// agrees — without this, a prior partial failure (roster wrote,
+			// user record didn't) would never self-heal: the next grant just
+			// returns the stale record and the inconsistency persists forever.
+			if (!existing) {
+				const seeded: UserRecord = {
+					id: targetId,
+					githubUsername: username,
+					roles: ['admin'],
+					grantedBy: granterId,
+					grantedAt: now,
+					updatedAt: now,
+				};
+				const saved = await repos.users.upsert(seeded);
+				return { status: 200, jsonBody: { admin: toPublic(saved) } };
 			}
-			const seeded: UserRecord = {
-				id: targetId,
-				githubUsername: username,
-				roles: ['admin'],
-				grantedBy: granterId,
-				grantedAt: now,
-				updatedAt: now,
-			};
-			const saved = await repos.users.upsert(seeded);
-			return { status: 200, jsonBody: { admin: toPublic(saved) } };
+			if (!existing.roles?.includes('admin')) {
+				// Stale record (roster says admin, record doesn't). Repair it.
+				// Use the current granter for grantedBy since the original
+				// intent isn't recoverable.
+				const repaired: UserRecord = {
+					...existing,
+					roles: Array.from(new Set([...(existing.roles ?? []), 'admin'])),
+					grantedBy: granterId,
+					grantedAt: now,
+					updatedAt: now,
+				};
+				const saved = await repos.users.upsert(repaired);
+				return { status: 200, jsonBody: { admin: toPublic(saved) } };
+			}
+			// Truly idempotent — both roster and record already consistent.
+			return { status: 200, jsonBody: { admin: toPublic(existing) } };
 		}
 
 		const record: UserRecord = existing

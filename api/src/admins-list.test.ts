@@ -113,4 +113,28 @@ describe('GET /api/admins-list', () => {
 		const body = res.jsonBody as { admins: Array<{ githubUsername: string }> };
 		expect(body.admins).toEqual([{ githubUsername: 'alice', roles: ['admin'], updatedAt: '' }]);
 	});
+
+	it("ensures 'admin' is in the response roles even when the user record's roles is stale", async () => {
+		// Roster says alice is admin (source of truth) but the user
+		// record's roles array is stale — e.g. a prior revoke wrote the
+		// roster, then the user-record cleanup failed, leaving a record
+		// with no admin role. Without the fix, admins-list would return
+		// alice in the admins array but with `roles: []`, contradicting
+		// its own source of truth and confusing any client that inspects
+		// the field.
+		roster.seed([userIdForGithub('alice')]);
+		await users.upsert({
+			id: userIdForGithub('alice'),
+			githubUsername: 'alice',
+			roles: ['moderator'], // 'admin' missing — stale
+			grantedAt: '2026-01-01T00:00:00Z',
+			updatedAt: '2026-01-01T00:00:00Z',
+		});
+		const res = await adminsListHandler(fakeRequest, fakeContext, { users, roster });
+		expect(res.status).toBe(200);
+		const body = res.jsonBody as { admins: Array<{ githubUsername: string; roles: string[] }> };
+		expect(body.admins).toHaveLength(1);
+		expect(body.admins[0].githubUsername).toBe('alice');
+		expect(body.admins[0].roles.sort()).toEqual(['admin', 'moderator']);
+	});
 });

@@ -167,18 +167,47 @@ describe('POST /api/admins-revoke', () => {
 			]);
 		});
 
-		it('two concurrent revokes of different second-to-last admins cannot both succeed', async () => {
-			// Two admins exist; two simultaneous revokes target different
-			// admins. Without CAS, both would see count=2, both pass guard,
-			// both write — leaving zero admins. With CAS, the second write
-			// fails 412, retries, sees count=1, and trips the guard.
+		it('a stale-etag retry that lands on a one-admin roster trips the last-admin guard with 409', async () => {
+			// THIS is the regression this PR exists to prevent.
+			//
+			// Setup: roster has [rmjoia, alice]. The handler is about to
+			// revoke 'alice'. Right before its write commits, simulate a
+			// concurrent revoke of 'rmjoia' — the stored roster becomes
+			// [alice] with a new etag.
+			//
+			// Old behavior (count + upsert): count=2 was read up-front, the
+			// guard passed, and 'alice' would have been removed too —
+			// leaving zero admins.
+			//
+			// New behavior (CAS): the IfMatch write fails 412, mutateRoster
+			// re-reads ([alice], length 1), the mutator re-evaluates and
+			// returns abort:lastAdmin, the handler returns 409, and the
+			// roster is left exactly as the concurrent writer left it.
 			await seedAdmin(users, roster, 'rmjoia');
 			await seedAdmin(users, roster, 'alice');
 
-			// Sequential here is fine — JS is single-threaded; we're proving
-			// the RE-EVALUATION on retry trips the guard, not relying on
-			// "coincidental" interleaving. The first revoke succeeds; the
-			// second observes the post-write roster (1 admin) and 409s.
+			roster.injectBeforeNextWrite((current) => ({
+				...current!,
+				admins: current!.admins.filter((id) => id !== userIdForGithub('rmjoia')),
+			}));
+
+			const res = await adminsRevokeHandler(
+				reqWith({ githubUsername: 'alice' }),
+				fakeContext,
+				{ users, roster }
+			);
+			expect(res.status).toBe(409);
+			// Roster reflects only the concurrent revoke; no further mutation.
+			expect(roster.stored?.admins).toEqual([userIdForGithub('alice')]);
+		});
+
+		it('observed-after-the-fact: a second revoke against the post-write roster also 409s', async () => {
+			// Sanity check on top of the race-during-CAS test above. Two
+			// sequential calls; the second sees a one-admin roster and the
+			// guard trips on the very first attempt (no retry needed).
+			await seedAdmin(users, roster, 'rmjoia');
+			await seedAdmin(users, roster, 'alice');
+
 			const res1 = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
 			expect(res1.status).toBe(200);
 			expect(roster.stored?.admins).toEqual([userIdForGithub('rmjoia')]);

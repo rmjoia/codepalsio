@@ -77,9 +77,15 @@ class CosmosAdminRosterRepository implements AdminRosterRepository {
 	}
 
 	async write(roster: AdminRoster): Promise<AdminRoster> {
+		// Two preconditions, both surface as 412 → RosterStaleError:
+		//   - _etag set    → IfMatch (CAS update)
+		//   - _etag absent → IfNoneMatch:* (create-only; doc must not exist)
+		// The latter is what makes getOrSeedRoster lost-update-safe: a
+		// concurrent seeder that already created the roster will cause our
+		// seed write to fail, prompting a re-read of their version.
 		const accessCondition = roster._etag
 			? { type: 'IfMatch' as const, condition: roster._etag }
-			: undefined;
+			: { type: 'IfNoneMatch' as const, condition: '*' };
 		try {
 			const { resource } = await this.container.items.upsert<AdminRoster>(roster, {
 				accessCondition,
@@ -118,11 +124,14 @@ export function createAdminRosterRepository(
 
 /**
  * Read the roster, seeding it from existing admin user records if it
- * doesn't exist yet. Idempotent: if another worker seeded between our
- * read and our write, we'll observe the seeded version on retry.
+ * doesn't exist yet.
  *
- * The seed write is unconditional (no IfMatch); concurrent seeders may
- * both write but with identical content, so the result is consistent.
+ * The seed write uses create-only semantics (IfNoneMatch:*). If two
+ * requests race on a fresh deploy and one seeds first, the other's
+ * write fails with RosterStaleError; we re-read and return the winner's
+ * version. This avoids the lost-update window where an unconditional
+ * upsert would clobber a roster that the other request had already
+ * mutated.
  */
 export async function getOrSeedRoster(
 	rosterRepo: AdminRosterRepository,
@@ -132,16 +141,22 @@ export async function getOrSeedRoster(
 	const existing = await rosterRepo.read();
 	if (existing) return existing;
 
-	// Seed from current admin user records. If none exist, we still
-	// write an empty roster so subsequent operations have an etag to
-	// pin against.
 	const adminRecords = await userRepo.listByRole('admin');
 	const seed: AdminRoster = {
 		id: ROSTER_ID,
 		admins: adminRecords.map((r) => r.id),
 		updatedAt: now(),
 	};
-	return rosterRepo.write(seed);
+	try {
+		return await rosterRepo.write(seed);
+	} catch (e) {
+		if (e instanceof RosterStaleError) {
+			// Concurrent seeder won. Use their roster.
+			const fresh = await rosterRepo.read();
+			if (fresh) return fresh;
+		}
+		throw e;
+	}
 }
 
 /**

@@ -166,4 +166,42 @@ describe('POST /api/admins-grant', () => {
 			expect(res.status).toBe(503);
 		});
 	});
+
+	describe('idempotency repair (recovers from prior partial failures)', () => {
+		// Scenario: a previous grant succeeded at the roster step but
+		// failed before / during the user record upsert. State: roster
+		// has the user; record either is missing or has stale roles.
+		// A retry must converge to a consistent state, not just rubber-
+		// stamp the inconsistency.
+
+		it('creates a missing user record when the roster already lists the user as admin', async () => {
+			roster.seed([userIdForGithub('alice')]);
+			// No user record exists yet (prior upsert failed).
+			expect(await users.findByGithubUsername('alice')).toBeNull();
+
+			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			expect(res.status).toBe(200);
+			const stored = await users.findByGithubUsername('alice');
+			expect(stored?.roles).toEqual(['admin']);
+			expect(stored?.grantedBy).toBe(userIdForGithub('rmjoia'));
+		});
+
+		it("repairs a stale user record whose roles[] doesn't include 'admin'", async () => {
+			roster.seed([userIdForGithub('alice')]);
+			// Existing record has stale roles (prior upsert never landed
+			// the admin role, or the record predates roster integration).
+			await users.upsert({
+				id: userIdForGithub('alice'),
+				githubUsername: 'alice',
+				roles: ['moderator'],
+				updatedAt: '2025-12-01T00:00:00Z',
+			});
+
+			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			expect(res.status).toBe(200);
+			const stored = await users.findByGithubUsername('alice');
+			expect(stored?.roles?.sort()).toEqual(['admin', 'moderator']);
+			expect(stored?.grantedBy).toBe(userIdForGithub('rmjoia'));
+		});
+	});
 });

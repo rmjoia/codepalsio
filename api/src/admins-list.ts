@@ -25,10 +25,21 @@ export interface AdminRepos {
 	roster: AdminRosterRepository;
 }
 
+/**
+ * Project a UserRecord onto the public list shape, ensuring `roles`
+ * reflects the roster's truth: every entry surfaced by this endpoint
+ * is in the roster, so 'admin' must appear in the response regardless
+ * of what the user record's roles[] currently says. Without this, a
+ * partial failure (roster wrote, record didn't) would let the API
+ * contradict its own source of truth.
+ */
 function toListEntry(r: UserRecord): AdminListEntry {
+	const roles = r.roles?.includes('admin')
+		? r.roles
+		: [...(r.roles ?? []), 'admin'];
 	return {
 		githubUsername: r.githubUsername,
-		roles: r.roles,
+		roles,
 		grantedBy: r.grantedBy,
 		grantedAt: r.grantedAt,
 		updatedAt: r.updatedAt,

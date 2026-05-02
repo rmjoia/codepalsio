@@ -8,20 +8,30 @@ import {
 /**
  * In-memory roster with simulated Cosmos etag semantics.
  *
- * - `read()` returns a deep copy with the current etag.
- * - `write(roster)`:
- *     - if `roster._etag` is undefined → unconditional write (initial seed)
- *     - if `roster._etag` matches the stored etag → write succeeds, etag bumps
- *     - else → throws RosterStaleError (mirrors Cosmos 412)
+ * Write contract:
+ *   - `_etag === undefined` → "create only" (Cosmos IfNoneMatch:*).
+ *     If a roster doc already exists, throws RosterStaleError. Used by
+ *     getOrSeedRoster so a concurrent seeder can't overwrite a roster
+ *     that a different request has already mutated.
+ *   - `_etag` set → "compare-and-swap" (Cosmos IfMatch). Mismatch
+ *     throws RosterStaleError; match rotates the etag and persists.
  *
- * `simulateContentionOnce()` lets a test inject a single etag bump
- * between a caller's read and write to exercise the retry loop.
+ * Test injection hooks:
+ *   - simulateContention(N): bump the stored etag on the next N writes
+ *     so a caller's IfMatch fails. Use to drive retry paths.
+ *   - injectBeforeNextWrite(fn): right before the next write commits,
+ *     replace the stored doc with whatever `fn(stored)` returns and
+ *     bump the etag. Lets tests simulate a *concurrent mutation* (not
+ *     just an etag bump), e.g. another request revoking a different
+ *     admin between this caller's read and write — drives the
+ *     stale-etag → re-read → re-evaluate path.
  */
 export class FakeAdminRosterRepository implements AdminRosterRepository {
 	public stored: AdminRoster | null = null;
 	public writes = 0;
 	private etagCounter = 0;
 	private contentionPending = 0;
+	private mutationInjection: ((current: AdminRoster | null) => AdminRoster) | null = null;
 
 	async read(): Promise<AdminRoster | null> {
 		if (!this.stored) return null;
@@ -31,16 +41,38 @@ export class FakeAdminRosterRepository implements AdminRosterRepository {
 	async write(roster: AdminRoster): Promise<AdminRoster> {
 		this.writes++;
 
-		// Simulated concurrent writer: bump the stored etag so this caller's
-		// IfMatch fails. Mirrors the Cosmos race we're trying to defeat.
+		// Simulated concurrent writer: replace the stored doc with the
+		// injection's output. Fires whether `stored` is null or not so
+		// tests can model BOTH "another writer mutated the existing
+		// roster" AND "another writer seeded a roster that didn't exist
+		// when we read it" (the fresh-deploy race).
+		if (this.mutationInjection) {
+			const replacement = this.mutationInjection(this.stored);
+			this.mutationInjection = null;
+			this.etagCounter++;
+			this.stored = {
+				...replacement,
+				_etag: `etag-${this.etagCounter}`,
+			};
+		}
+
+		// Simulated concurrent writer (etag-only bump). Mirrors the cheaper
+		// "etag advanced, contents same" scenario.
 		if (this.contentionPending > 0 && this.stored) {
 			this.contentionPending--;
 			this.etagCounter++;
 			this.stored = { ...this.stored, _etag: `etag-${this.etagCounter}` };
 		}
 
-		if (this.stored && roster._etag !== undefined) {
-			if (roster._etag !== this.stored._etag) {
+		// "Create-only" semantic — caller is asserting the doc doesn't exist.
+		// If it does, fail (mirrors Cosmos IfNoneMatch:* → 412).
+		if (roster._etag === undefined && this.stored) {
+			throw new RosterStaleError();
+		}
+
+		// CAS — caller is asserting they read this exact etag.
+		if (roster._etag !== undefined) {
+			if (!this.stored || roster._etag !== this.stored._etag) {
 				throw new RosterStaleError();
 			}
 		}
@@ -63,6 +95,19 @@ export class FakeAdminRosterRepository implements AdminRosterRepository {
 	 */
 	simulateContention(times: number): void {
 		this.contentionPending = times;
+	}
+
+	/**
+	 * Replace the stored roster with `fn(current)` right before the next
+	 * write commits. `current` is null if no roster has been written yet
+	 * — useful for modeling a concurrent seeder on a fresh deploy.
+	 *
+	 * Otherwise simulates a concurrent mutation that invalidates the
+	 * etag AND changes the admin set, forcing the retrying caller to
+	 * re-evaluate against new state.
+	 */
+	injectBeforeNextWrite(fn: (current: AdminRoster | null) => AdminRoster): void {
+		this.mutationInjection = fn;
 	}
 
 	/** Pre-seed the roster directly (skips the seed-from-userRepo path). */

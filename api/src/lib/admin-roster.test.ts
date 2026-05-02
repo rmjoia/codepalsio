@@ -29,6 +29,17 @@ describe('FakeAdminRosterRepository (etag semantics)', () => {
 		expect((await roster.read())?._etag).toBe(written._etag);
 	});
 
+	it('"create-only" write (no _etag) throws RosterStaleError when the doc already exists', async () => {
+		// Mirrors Cosmos IfNoneMatch:* semantics. Without this, two
+		// concurrent first-time seeders could lose updates.
+		await roster.write({ id: ROSTER_ID, admins: ['gh-a'], updatedAt: FROZEN_NOW });
+		await expect(
+			roster.write({ id: ROSTER_ID, admins: ['gh-b'], updatedAt: FROZEN_NOW })
+		).rejects.toBeInstanceOf(RosterStaleError);
+		// The first write's contents are preserved.
+		expect((await roster.read())?.admins).toEqual(['gh-a']);
+	});
+
 	it('write with matching _etag succeeds and rotates the etag', async () => {
 		const seed = await roster.write({ id: ROSTER_ID, admins: ['gh-a'], updatedAt: FROZEN_NOW });
 		const next = await roster.write({ ...seed, admins: ['gh-a', 'gh-b'] });
@@ -63,6 +74,32 @@ describe('getOrSeedRoster', () => {
 		const result = await getOrSeedRoster(roster, users, now);
 		expect(result.admins).toEqual([]);
 		expect(result._etag).toBeDefined();
+	});
+
+	it('tolerates a concurrent seeder: re-reads and returns their roster', async () => {
+		// Race scenario on a fresh deploy: two requests both hit a roster
+		// that doesn't exist yet. Request A reads (null), starts seeding.
+		// Just before A's write, B seeds first with a different admin set.
+		// A's write fails RosterStaleError (IfNoneMatch:*); A re-reads and
+		// returns B's version. Critical: A must NOT clobber B with a stale
+		// seed.
+		await users.upsert({
+			id: userIdForGithub('legacy'),
+			githubUsername: 'legacy',
+			roles: ['admin'],
+			updatedAt: FROZEN_NOW,
+		});
+		// Simulate request B winning by pre-seeding the roster with a
+		// DIFFERENT admin set (rmjoia, not legacy). Request A should
+		// observe this and return rmjoia's roster, not overwrite it.
+		roster.injectBeforeNextWrite(() => ({
+			id: ROSTER_ID,
+			admins: [userIdForGithub('rmjoia')],
+			updatedAt: FROZEN_NOW,
+		}));
+
+		const result = await getOrSeedRoster(roster, users, now);
+		expect(result.admins).toEqual([userIdForGithub('rmjoia')]);
 	});
 
 	it('seeds from existing admin user records (legacy migration)', async () => {

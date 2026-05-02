@@ -185,6 +185,59 @@ describe('resolveRoles', () => {
 			expect(roles).toEqual([]);
 		});
 	});
+
+	describe('bootstrap atomicity', () => {
+		// If the user record were written before the roster, a failed
+		// roster write would leave a UserRecord with `roles: ['admin']`
+		// but no roster entry. On the next login, `existing` becomes
+		// truthy → bootstrap branch is skipped → the user is NEVER added
+		// to the roster → resolveRoles returns []. The intended first
+		// admin is permanently locked out.
+		//
+		// Roster-first ensures: roster-write failure → no record created
+		// → next login retries bootstrap cleanly. Record-write failure
+		// after roster-write → next login takes the rebuild branch
+		// ('isAdminPerRoster && !existing') → record gets recreated.
+		it('does not create a user record when the roster write fails', async () => {
+			const failingRoster = {
+				read: async () => ({ id: 'roster' as const, admins: [], updatedAt: FROZEN_NOW, _etag: 'e1' }),
+				write: async () => {
+					throw new Error('cosmos down');
+				},
+			};
+
+			await expect(
+				resolveRoles(
+					{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+					{ repo, roster: failingRoster, bootstrapLogins: new Set(['rmjoia']), now }
+				)
+			).rejects.toThrow();
+
+			// Critical assertion: the user record was NOT created. Without
+			// roster-first, this would have written the record and locked
+			// the user out forever.
+			expect(await repo.findByGithubUsername('rmjoia')).toBeNull();
+		});
+
+		it('rebuilds a missing user record on next login when roster says admin (record-write failure recovery)', async () => {
+			// Simulates: prior bootstrap attempt wrote roster, then crashed
+			// before writing the user record. Roster has [rmjoia], no record.
+			roster.seed([userIdForGithub('rmjoia')]);
+
+			const roles = await resolveRoles(
+				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+				{ repo, roster, bootstrapLogins: new Set(), now }
+			);
+			expect(roles).toEqual(['admin']);
+			// Record was rebuilt
+			const rebuilt = await repo.findByGithubUsername('rmjoia');
+			expect(rebuilt).toMatchObject({
+				githubUsername: 'rmjoia',
+				roles: ['admin'],
+				swaUserId: 'u1',
+			});
+		});
+	});
 });
 
 describe('parseAdminLogins', () => {
