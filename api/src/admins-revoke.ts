@@ -1,7 +1,13 @@
 import { app, type HttpRequest, type InvocationContext, type HttpResponseInit } from '@azure/functions';
 import { getClientPrincipal } from './lib/principal';
 import { getCosmosConfig } from './lib/cosmos';
-import { createUserRepository, type UserRepository } from './lib/users';
+import { createUserRepository, type UserRepository, userIdForGithub } from './lib/users';
+import {
+	createAdminRosterRepository,
+	mutateRoster,
+	RosterContendedError,
+	type AdminRosterRepository,
+} from './lib/admin-roster';
 
 const GITHUB_USERNAME_RE = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
 
@@ -9,10 +15,20 @@ interface RevokeBody {
 	githubUsername?: unknown;
 }
 
+export interface AdminRepos {
+	users: UserRepository;
+	roster: AdminRosterRepository;
+}
+
+type RevokeOutcome =
+	| { kind: 'notFound' }
+	| { kind: 'lastAdmin' }
+	| { kind: 'revoked' };
+
 export async function adminsRevokeHandler(
 	request: HttpRequest,
 	context: InvocationContext,
-	overrideRepo?: UserRepository
+	overrideRepos?: AdminRepos
 ): Promise<HttpResponseInit> {
 	const principal = getClientPrincipal(request);
 	if (!principal) {
@@ -36,51 +52,74 @@ export async function adminsRevokeHandler(
 		return { status: 400, jsonBody: { error: 'Invalid githubUsername' } };
 	}
 	const username = body.githubUsername.toLowerCase();
+	const targetId = userIdForGithub(username);
 
-	let repo = overrideRepo;
-	if (!repo) {
+	let repos = overrideRepos;
+	if (!repos) {
 		const cfg = getCosmosConfig();
 		if (!cfg) {
 			context.error('admins-revoke: missing COSMOS_DB_CONNECTION_STRING or COSMOS_DB_DATABASE_NAME');
 			return { status: 500, jsonBody: { error: 'Server configuration error' } };
 		}
-		repo = createUserRepository(cfg.connectionString, cfg.database);
+		repos = {
+			users: createUserRepository(cfg.connectionString, cfg.database),
+			roster: createAdminRosterRepository(cfg.connectionString, cfg.database),
+		};
 	}
 
 	try {
-		const existing = await repo.findByGithubUsername(username);
-		if (!existing || !existing.roles?.includes('admin')) {
-			// Treat "not an admin" the same as "not found" — idempotent revoke.
+		// Roster CAS gates the operation. The "is admin?" and "last admin?"
+		// checks evaluate against the same roster snapshot we're about to
+		// write — a concurrent revoke of a different admin invalidates our
+		// etag and forces re-read + re-evaluate. This closes the race that
+		// the prior count+upsert design left open.
+		const outcome = await mutateRoster<RevokeOutcome>(
+			repos.roster,
+			repos.users,
+			(roster) => {
+				if (!roster.admins.includes(targetId)) {
+					return { abort: { kind: 'notFound' } };
+				}
+				if (roster.admins.length <= 1) {
+					return { abort: { kind: 'lastAdmin' } };
+				}
+				return {
+					next: { ...roster, admins: roster.admins.filter((id) => id !== targetId) },
+					result: { kind: 'revoked' },
+				};
+			}
+		);
+
+		if (outcome.kind === 'notFound') {
 			return { status: 404, jsonBody: { error: 'Not an admin' } };
 		}
-
-		// Last-admin guard: refuse to remove the only remaining admin.
-		// Without this the operator would lose access to /admin and have no
-		// path to grant another admin — the system becomes unmanageable.
-		//
-		// Concurrency caveat: countByRole + upsert here are NOT atomic. Two
-		// admins concurrently revoking different "second-to-last" admins
-		// could both observe adminCount > 1 and both succeed, leaving zero
-		// admins. Truly closing that race requires a single roster document
-		// with optimistic concurrency / etag — significant architectural
-		// change. In practice this system has 1–3 admins and concurrent
-		// admin operations are very rare; tracked as a future enhancement.
-		const adminCount = await repo.countByRole('admin');
-		if (adminCount <= 1) {
+		if (outcome.kind === 'lastAdmin') {
 			return { status: 409, jsonBody: { error: 'Cannot revoke the last remaining admin' } };
 		}
 
-		const now = new Date().toISOString();
-		const updated = {
-			...existing,
-			roles: existing.roles.filter((r) => r !== 'admin'),
-			grantedBy: undefined,
-			grantedAt: undefined,
-			updatedAt: now,
-		};
-		await repo.upsert(updated);
+		// Roster says revoked. Best-effort: keep the user record's roles
+		// array consistent (drops 'admin', preserves other roles + metadata).
+		// If this fails, the roster is still authoritative — resolveRoles
+		// reads from the roster, so the user no longer has admin access.
+		// Stale `roles` on the record is cosmetic.
+		const existing = await repos.users.findByGithubUsername(username);
+		if (existing) {
+			const now = new Date().toISOString();
+			await repos.users.upsert({
+				...existing,
+				roles: (existing.roles ?? []).filter((r) => r !== 'admin'),
+				grantedBy: undefined,
+				grantedAt: undefined,
+				updatedAt: now,
+			});
+		}
+
 		return { status: 200, jsonBody: { ok: true, githubUsername: username } };
 	} catch (error) {
+		if (error instanceof RosterContendedError) {
+			context.error('admins-revoke: roster write contended after retries');
+			return { status: 503, jsonBody: { error: 'Admin roster busy, please retry' } };
+		}
 		context.error('admins-revoke failed:', error);
 		return { status: 500, jsonBody: { error: 'Failed to revoke admin' } };
 	}

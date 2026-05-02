@@ -1,4 +1,5 @@
 import { type UserRepository, type UserRecord, userIdForGithub } from './users';
+import { type AdminRosterRepository, getOrSeedRoster } from './admin-roster';
 
 /**
  * What we need from the principal to resolve roles. Decoupled from the
@@ -11,11 +12,12 @@ export interface ResolvedPrincipal {
 }
 
 /**
- * Inputs to resolveRoles. Repository is injected (DIP); bootstrapLogins
+ * Inputs to resolveRoles. Repositories are injected (DIP); bootstrapLogins
  * is the parsed env-var set computed once per request by the caller.
  */
 export interface RolesResolverDeps {
 	repo: UserRepository;
+	roster: AdminRosterRepository;
 	bootstrapLogins: ReadonlySet<string>;
 	/** Allows tests to freeze "now"; production passes Date.now/toISOString. */
 	now?: () => string;
@@ -27,11 +29,13 @@ export interface RolesResolverDeps {
  *   - get-roles (rolesSource): SWA calls per-login; result attached to session
  *   - admin handlers: defense-in-depth check on top of the SWA route gate
  *
- * Semantics:
- *   - DB record exists → roles come from the record (DB is source of truth)
- *   - No DB record AND user is in ADMIN_GITHUB_LOGINS → bootstrap: create
- *     record with admin role, return ['admin']
- *   - Otherwise → []
+ * Source of truth:
+ *   - Admin role → AdminRoster (single doc with optimistic concurrency)
+ *   - Other roles → UserRecord.roles[] (no atomicity needs)
+ *
+ * Bootstrap:
+ *   - If user has no DB record AND is in ADMIN_GITHUB_LOGINS, create the
+ *     user record AND add them to the roster. Returns ['admin'].
  *
  * Once a user has a DB record, the env var has no effect on them — UI
  * grants/revokes are the only way to change roles. This is the intent:
@@ -46,9 +50,17 @@ export async function resolveRoles(
 	if (!principal.githubUsername) return [];
 
 	const username = principal.githubUsername.toLowerCase();
+	const targetId = userIdForGithub(username);
 	const now = deps.now ?? (() => new Date().toISOString());
 
 	const existing = await deps.repo.findByGithubUsername(username);
+
+	// Roster is authoritative for the admin role. Read once and reuse.
+	// We tolerate the seed-from-userRepo path here too: a fresh deploy
+	// with admins recorded only in user docs gets reconciled on first
+	// login.
+	const roster = await getOrSeedRoster(deps.roster, deps.repo, now);
+	const isAdminPerRoster = roster.admins.includes(targetId);
 
 	if (existing) {
 		// Backfill swaUserId on first login if the record was created via
@@ -60,14 +72,36 @@ export async function resolveRoles(
 				updatedAt: now(),
 			});
 		}
-		return [...existing.roles];
+
+		// Compose: admin from roster, other roles from the record.
+		const otherRoles = (existing.roles ?? []).filter((r) => r !== 'admin');
+		return isAdminPerRoster ? ['admin', ...otherRoles] : otherRoles;
 	}
 
-	// Bootstrap path — only fires when the DB has no record for this user.
+	// No DB record. Three sub-cases:
+	//   1. Already in roster (e.g. previously granted, record cleaned up
+	//      out-of-band) → keep them admin and rebuild the user record.
+	//   2. In bootstrap env → create user record AND add to roster.
+	//   3. Otherwise → no roles.
+	if (isAdminPerRoster) {
+		const stamp = now();
+		const rebuilt: UserRecord = {
+			id: targetId,
+			githubUsername: username,
+			swaUserId: principal.swaUserId,
+			roles: ['admin'],
+			grantedBy: 'unknown',
+			grantedAt: stamp,
+			updatedAt: stamp,
+		};
+		await deps.repo.upsert(rebuilt);
+		return ['admin'];
+	}
+
 	if (deps.bootstrapLogins.has(username)) {
 		const stamp = now();
 		const record: UserRecord = {
-			id: userIdForGithub(username),
+			id: targetId,
 			githubUsername: username,
 			swaUserId: principal.swaUserId,
 			roles: ['admin'],
@@ -76,6 +110,14 @@ export async function resolveRoles(
 			updatedAt: stamp,
 		};
 		await deps.repo.upsert(record);
+		// Add to roster too. Unconditional write (no IfMatch retry needed
+		// for bootstrap — concurrent bootstrap of the same user is benign,
+		// and the seed already gave us an etag-bearing roster).
+		await deps.roster.write({
+			...roster,
+			admins: Array.from(new Set([...roster.admins, targetId])),
+			updatedAt: stamp,
+		});
 		return ['admin'];
 	}
 
