@@ -249,3 +249,40 @@ export async function getAdminUsers(): Promise<AdminUsersResponse> {
 	}
 	return await res.json();
 }
+
+// ─── Admin role management ──────────────────────────────────────────
+
+export interface AdminListEntry {
+	githubUsername: string;
+	roles: string[];
+	grantedBy?: string;
+	grantedAt?: string;
+	updatedAt: string;
+}
+
+export async function listAdmins(): Promise<AdminListEntry[]> {
+	const res = await fetch('/api/admins-list');
+	if (!res.ok) throw new ApiError(res.status, 'admins-list', await safeJson(res));
+	const data = await res.json();
+	return data?.admins ?? [];
+}
+
+export async function grantAdmin(githubUsername: string): Promise<AdminListEntry> {
+	const res = await fetch('/api/admins-grant', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ githubUsername }),
+	});
+	if (!res.ok) throw new ApiError(res.status, 'admins-grant', await safeJson(res));
+	const data = await res.json();
+	return data.admin;
+}
+
+export async function revokeAdmin(githubUsername: string): Promise<void> {
+	const res = await fetch('/api/admins-revoke', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ githubUsername }),
+	});
+	if (!res.ok) throw new ApiError(res.status, 'admins-revoke', await safeJson(res));
+}

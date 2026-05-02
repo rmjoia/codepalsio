@@ -55,6 +55,18 @@
 			"allowedRoles": ["admin"]
 		},
 		{
+			"route": "/api/admins-list",
+			"allowedRoles": ["admin"]
+		},
+		{
+			"route": "/api/admins-grant",
+			"allowedRoles": ["admin"]
+		},
+		{
+			"route": "/api/admins-revoke",
+			"allowedRoles": ["admin"]
+		},
+		{
 			"route": "/api/get-roles",
 			"allowedRoles": ["anonymous", "authenticated"]
 		},
