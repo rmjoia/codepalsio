@@ -3,7 +3,15 @@
 		"apiRuntime": "node:20"
 	},
 	"auth": {
-		"rolesSource": "/api/get-roles"
+		"rolesSource": "/api/get-roles",
+		"identityProviders": {
+			"github": {
+				"registration": {
+					"clientIdSettingName": "GITHUB_CLIENT_ID",
+					"clientSecretSettingName": "GITHUB_CLIENT_SECRET"
+				}
+			}
+		}
 	},
 	"routes": [
 		{
