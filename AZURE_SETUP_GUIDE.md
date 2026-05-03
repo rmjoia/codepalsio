@@ -24,13 +24,13 @@ Before deploying to Azure, you need to register a GitHub OAuth application.
 2. Click **New OAuth App**
 3. Fill in the details:
    - **Application name**: `CodePals.io` (or any name)
-   - **Homepage URL**: `https://your-site-name.azurestaticapps.net` (you'll get this after creating the Static Web App)
-   - **Authorization callback URL**: `https://identity.<N>.azurestaticapps.net/.auth/login/github/callback`
-     > ⚠️ Modern Azure SWA built-in auth routes the OAuth flow through a regional identity proxy
-     > (`identity.<N>.azurestaticapps.net`, where `<N>` is a small integer for your SWA's region —
-     > observe it in production by inspecting the redirect chain from `/.auth/login/github`).
-     > GitHub will reject the login with "redirect_uri is not associated with this application"
-     > if you register the SWA's custom domain or `*.azurestaticapps.net` URL instead.
+   - **Homepage URL**: `https://your-site-name.azurestaticapps.net` (you'll get this after creating the Static Web App, or your custom domain like `https://codepals.io`)
+   - **Authorization callback URL**: `https://<your-swa-host>/.auth/login/github/callback`
+     > Use the SWA's hostname (custom domain like `https://codepals.io` if bound, otherwise the
+     > default `<name>.azurestaticapps.net` URL). The path `/.auth/login/github/callback` is the
+     > built-in SWA auth callback — **not** `/api/auth/callback` (that was the old custom OAuth
+     > flow, removed in commit 7410e99). SWA's centralized identity tier (`identity.<N>.azurestaticapps.net`)
+     > is an **internal proxy** that GitHub never sees as the redirect_uri — don't register that URL.
 4. Click **Register application**
 5. **Save the Client ID** (you'll need this)
 6. Click **Generate a new client secret**
@@ -123,12 +123,11 @@ Now that you have your Azure URL, update the GitHub OAuth app:
 1. Go back to **GitHub Settings** → **Developer settings** → **OAuth Apps**
 2. Click on your CodePals.io app
 3. Update the URLs:
-   - **Homepage URL**: `https://codepals.azurestaticapps.net` (or your actual URL)
-   - **Authorization callback URL**: `https://identity.<N>.azurestaticapps.net/.auth/login/github/callback`
-     > ⚠️ This must be the **SWA identity proxy** URL, not the SWA hostname or your custom domain.
-     > To find your `<N>`: visit `https://<your-swa>/.auth/login/github` in a browser, watch the
-     > Network tab; the first redirect goes to `https://identity.<N>.azurestaticapps.net/...` —
-     > use that exact host. For codepals.io it's currently `identity.3.azurestaticapps.net`.
+   - **Homepage URL**: `https://codepals.azurestaticapps.net` (or your actual URL — e.g. `https://codepals.io` once a custom domain is bound)
+   - **Authorization callback URL**: `https://<your-swa-host>/.auth/login/github/callback`
+     > Use the SWA's hostname directly (default `*.azurestaticapps.net` or your bound custom
+     > domain). SWA's internal identity tier proxies the OAuth flow but the `redirect_uri` GitHub
+     > sees is your SWA's URL.
 4. Click **Update application**
 
 ---
@@ -234,10 +233,9 @@ curl -X POST https://codepals.azurestaticapps.net/api/profile-save \
 
 Once custom domain is configured:
 1. Update the OAuth app's **Homepage URL** to your custom domain (e.g. `https://codepals.io`).
-2. **Do NOT change the Authorization callback URL** — it must stay as
-   `https://identity.<N>.azurestaticapps.net/.auth/login/github/callback`.
-   SWA's identity proxy is what GitHub talks to, regardless of which custom domain
-   the user clicked Sign In on.
+2. Update the **Authorization callback URL** to use the custom domain:
+   `https://codepals.io/.auth/login/github/callback`
+   (replace `codepals.io` with your custom domain).
 
 ---
 

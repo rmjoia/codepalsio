@@ -217,4 +217,8 @@ jobs:
       - name: Run E2E suite against production
         env:
           E2E_BASE_URL: https://codepals.io
+          # Production has GitHub OAuth secrets configured; require the
+          # full auth-flow chain to reach GitHub. Preview envs leave this
+          # unset and the test soft-skips when SWA auth-loop is detected.
+          E2E_AUTH_REQUIRED: '1'
         run: npm run test:e2e
