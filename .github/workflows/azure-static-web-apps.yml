@@ -1,27 +1,51 @@
-name: Azure Static Web Apps CI/CD
+name: CI/CD Pipeline
+
+# Quality-gated pipeline:
+#
+#   PR opened/updated:    validate → preview_deploy → e2e_preview
+#                         (merge blocked until all three pass)
+#
+#   push to main:         validate → prod_deploy → e2e_prod
+#                         (no deploy unless validate is green;
+#                          prod is alarmed by the post-deploy E2E)
+#
+#   workflow_dispatch:    validate → prod_deploy → e2e_prod
+#                         (deploys whatever ref is selected from the
+#                          GitHub UI; same gates as push-to-main)
+#
+# Quality gates run in `validate`:
+#   - prettier --check (frontend src/**)
+#   - eslint .
+#   - npm audit --omit=dev --audit-level=high (frontend prod deps)
+#   - npm audit --audit-level=moderate (api, all deps)
+#   - frontend unit + SWA-config-invariant tests (vitest)
+#   - api unit tests (vitest)
+#   - frontend build (astro)
+#   - api build (tsc)
 
 on:
   push:
     branches:
       - main
   pull_request:
-    # Run validation only on PRs — no SWA deploy. Just build + tests.
     types: [opened, synchronize, reopened]
     branches:
       - main
   workflow_dispatch:
-    # Manually deploy any branch to dev.codepals.io. Pick the branch from
-    # the GitHub UI's "Run workflow" dropdown; checkout uses that ref.
+
+# Cancel in-flight runs for the same ref when a new commit lands.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────
-  # CI: build everything, run all tests. Runs on every event (PRs,
-  # push-to-main, workflow_dispatch). The deploy job depends on this,
-  # so a red CI blocks deploys to prod.
+  # Stage 1 — Validate. All quality gates. Must pass before any deploy.
+  # Runs on every event (PRs, push-to-main, workflow_dispatch).
   # ─────────────────────────────────────────────────────────────────────
-  ci:
+  validate:
     runs-on: ubuntu-latest
-    name: CI (build + tests)
+    name: Validate (lint, audit, tests, build)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,39 +59,54 @@ jobs:
       - name: Install root deps
         run: npm ci
 
-      - name: Build app
-        run: npm run build
+      - name: Format check (prettier)
+        run: npm run format:check
 
-      - name: Run frontend tests
+      - name: Lint (eslint)
+        run: npm run lint
+
+      - name: Security audit (frontend prod deps, high+)
+        run: npm run audit
+
+      - name: Frontend tests (vitest, includes SWA config invariants)
         run: npm run test:run
+
+      - name: Build frontend
+        run: npm run build
 
       - name: Install API deps
         working-directory: api
         run: npm ci --include=dev
 
+      - name: Security audit (api, moderate+)
+        working-directory: api
+        run: npm audit --audit-level=moderate
+
+      - name: API tests (vitest)
+        working-directory: api
+        run: npm test
+
       - name: Build API
         working-directory: api
         run: npm run build
 
-      - name: Run API tests
-        working-directory: api
-        run: npm test
-
   # ─────────────────────────────────────────────────────────────────────
-  # Deploy: triggered by push-to-main OR manual workflow_dispatch.
-  # Manual dispatch from any branch lands that branch on dev.codepals.io.
+  # Stage 2a — PR preview deploy. SWA per-PR preview environment.
+  # Only runs on PRs and only after validate is green.
   # ─────────────────────────────────────────────────────────────────────
-  build_and_deploy_job:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    needs: ci
+  preview_deploy:
+    if: github.event_name == 'pull_request'
+    needs: validate
     runs-on: ubuntu-latest
-    name: Build and Deploy Job
+    name: Deploy PR preview
+    outputs:
+      preview_url: ${{ steps.builddeploy.outputs.static_web_app_url }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
           lfs: false
-      - name: Build And Deploy
+      - name: Build And Deploy (preview)
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
         with:
@@ -80,16 +119,15 @@ jobs:
           api_build_command: "npm ci --include=dev && npm test && npm run build"
 
   # ─────────────────────────────────────────────────────────────────────
-  # Post-deploy E2E: hits the live SWA to assert /.auth/login/github,
-  # role gating, etc. actually work end-to-end. Catches deploy-time
-  # regressions the config-invariant tests can't see (missing app
-  # settings, propagation lag, OAuth callback mismatch).
+  # Stage 2b — E2E against PR preview. Gates merge.
+  # Diagnostic curl step always prints the redirect chain so a failure
+  # is self-diagnosing without re-running.
   # ─────────────────────────────────────────────────────────────────────
-  e2e_post_deploy:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    needs: build_and_deploy_job
+  e2e_preview:
+    if: github.event_name == 'pull_request'
+    needs: preview_deploy
     runs-on: ubuntu-latest
-    name: Post-deploy E2E
+    name: E2E (PR preview)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -99,27 +137,88 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install root deps
         run: npm ci
-      - name: Resolve E2E base URL
-        id: resolve
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            echo "url=https://codepals.io" >> "$GITHUB_OUTPUT"
-          else
-            echo "url=https://dev.codepals.io" >> "$GITHUB_OUTPUT"
-          fi
       - name: Wait for SWA propagation
         run: sleep 60
       - name: Diagnostic — auth login redirect chain
-        # Always print the redirect chain so failures are self-diagnosing.
-        # Uses `|| true` so a non-2xx exit doesn't fail the step.
+        env:
+          E2E_BASE_URL: ${{ needs.preview_deploy.outputs.preview_url }}
         run: |
-          echo "::group::HEAD ${{ steps.resolve.outputs.url }}/.auth/login/github (3 hops)"
-          curl -sIL --max-redirs 3 -o /dev/null -w "url_effective=%{url_effective}\nhttp_code=%{http_code}\nredirect_url=%{redirect_url}\n" "${{ steps.resolve.outputs.url }}/.auth/login/github" || true
+          if [ -z "$E2E_BASE_URL" ]; then
+            echo "::error::SWA action did not return a preview URL — cannot run E2E"
+            exit 1
+          fi
+          echo "::group::HEAD $E2E_BASE_URL/.auth/login/github (3 hops)"
+          curl -sIL --max-redirs 3 -o /dev/null -w "url_effective=%{url_effective}\nhttp_code=%{http_code}\nredirect_url=%{redirect_url}\n" "$E2E_BASE_URL/.auth/login/github" || true
           echo "::endgroup::"
           echo "::group::Single-hop Location header"
-          curl -sI "${{ steps.resolve.outputs.url }}/.auth/login/github" | grep -i '^location:' || echo "(no Location header)"
+          curl -sI "$E2E_BASE_URL/.auth/login/github" | grep -i '^location:' || echo "(no Location header)"
           echo "::endgroup::"
-      - name: Run E2E suite
+      - name: Run E2E suite against preview
         env:
-          E2E_BASE_URL: ${{ steps.resolve.outputs.url }}
+          E2E_BASE_URL: ${{ needs.preview_deploy.outputs.preview_url }}
+        run: npm run test:e2e
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Stage 3a — Production deploy. Only after validate is green.
+  # Triggered by push-to-main or workflow_dispatch.
+  # ─────────────────────────────────────────────────────────────────────
+  prod_deploy:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: ubuntu-latest
+    name: Deploy production
+    environment:
+      name: production
+      url: https://codepals.io
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          lfs: false
+      - name: Build And Deploy (production)
+        id: builddeploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: "upload"
+          app_location: "/"
+          api_location: "api"
+          output_location: "dist"
+          api_build_command: "npm ci --include=dev && npm test && npm run build"
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Stage 3b — Post-deploy E2E against production. Alarms on regression.
+  # ─────────────────────────────────────────────────────────────────────
+  e2e_prod:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: prod_deploy
+    runs-on: ubuntu-latest
+    name: E2E (production)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+      - name: Install root deps
+        run: npm ci
+      - name: Wait for SWA propagation
+        run: sleep 60
+      - name: Diagnostic — auth login redirect chain
+        run: |
+          echo "::group::HEAD https://codepals.io/.auth/login/github (3 hops)"
+          curl -sIL --max-redirs 3 -o /dev/null -w "url_effective=%{url_effective}\nhttp_code=%{http_code}\nredirect_url=%{redirect_url}\n" "https://codepals.io/.auth/login/github" || true
+          echo "::endgroup::"
+          echo "::group::Single-hop Location header"
+          curl -sI "https://codepals.io/.auth/login/github" | grep -i '^location:' || echo "(no Location header)"
+          echo "::endgroup::"
+      - name: Run E2E suite against production
+        env:
+          E2E_BASE_URL: https://codepals.io
+          # Production has GitHub OAuth secrets configured; require the
+          # full auth-flow chain to reach GitHub. Preview envs leave this
+          # unset and the test soft-skips when SWA auth-loop is detected.
+          E2E_AUTH_REQUIRED: '1'
         run: npm run test:e2e

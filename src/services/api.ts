@@ -190,7 +190,8 @@ export async function saveProfile(input: ProfileInput): Promise<Profile> {
 	});
 	if (!res.ok) {
 		const body = await safeJson(res);
-		const err: { error?: string } | undefined = body && typeof body === 'object' ? (body as { error?: string }) : undefined;
+		const err: { error?: string } | undefined =
+			body && typeof body === 'object' ? (body as { error?: string }) : undefined;
 		throw new ApiError(res.status, err?.error ?? 'profile-save', body);
 	}
 	const data = await res.json();

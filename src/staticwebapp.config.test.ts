@@ -87,7 +87,10 @@ describe('staticwebapp.config.json — auth identity providers', () => {
 		// implicit GitHub provider auto-discovery by introducing an `auth` block
 		// without re-declaring `identityProviders`. This test fails if anyone
 		// references /.auth/login/X without an auth block backing it.
-		expect(config.auth, 'auth block is required when /.auth/login/{provider} is referenced').toBeDefined();
+		expect(
+			config.auth,
+			'auth block is required when /.auth/login/{provider} is referenced'
+		).toBeDefined();
 	});
 
 	it.each(collectAuthLoginPaths(config))(
@@ -98,9 +101,15 @@ describe('staticwebapp.config.json — auth identity providers', () => {
 			// referenced via /.auth/login/{provider} must be explicitly registered.
 			const idp = config.auth?.identityProviders?.[provider];
 			expect(idp, `identityProviders.${provider} must exist`).toBeDefined();
-			expect(idp?.registration?.clientIdSettingName, `clientIdSettingName must be set for ${provider}`).toBeTruthy();
-			expect(idp?.registration?.clientSecretSettingName, `clientSecretSettingName must be set for ${provider}`).toBeTruthy();
-		},
+			expect(
+				idp?.registration?.clientIdSettingName,
+				`clientIdSettingName must be set for ${provider}`
+			).toBeTruthy();
+			expect(
+				idp?.registration?.clientSecretSettingName,
+				`clientSecretSettingName must be set for ${provider}`
+			).toBeTruthy();
+		}
 	);
 
 	it('documents every clientIdSettingName / clientSecretSettingName in AZURE_SETUP_GUIDE.md', () => {
@@ -110,8 +119,10 @@ describe('staticwebapp.config.json — auth identity providers', () => {
 		const idps = config.auth?.identityProviders ?? {};
 		const settingNames: string[] = [];
 		for (const idp of Object.values(idps)) {
-			if (idp.registration?.clientIdSettingName) settingNames.push(idp.registration.clientIdSettingName);
-			if (idp.registration?.clientSecretSettingName) settingNames.push(idp.registration.clientSecretSettingName);
+			if (idp.registration?.clientIdSettingName)
+				settingNames.push(idp.registration.clientIdSettingName);
+			if (idp.registration?.clientSecretSettingName)
+				settingNames.push(idp.registration.clientSecretSettingName);
 		}
 		expect(settingNames.length).toBeGreaterThan(0);
 		for (const name of settingNames) {
@@ -152,7 +163,10 @@ describe('staticwebapp.config.json — route role gates', () => {
 			.filter((x) => x.route.startsWith('/api/') && x.route !== '/api/*');
 
 		for (const r of specificApiRoutes) {
-			expect(r.index, `${r.route} (index ${r.index}) must come before /api/* (index ${catchAllIndex})`).toBeLessThan(catchAllIndex);
+			expect(
+				r.index,
+				`${r.route} (index ${r.index}) must come before /api/* (index ${catchAllIndex})`
+			).toBeLessThan(catchAllIndex);
 		}
 	});
 
