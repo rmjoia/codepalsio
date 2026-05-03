@@ -13,5 +13,11 @@ export default defineConfig({
 		testTimeout: 30_000,
 		// No coverage thresholds for E2E — coverage is a unit-test concern.
 		coverage: { enabled: false },
+		// Explicit reporters: default for human-readable stdout, github-actions
+		// for the per-job summary panel + inline annotations on failures.
+		// Without this, the E2E job's summary panel was empty in CI runs even
+		// though the unit-test job's panel was populated (vitest only auto-adds
+		// the github-actions reporter in some default-detection paths).
+		reporters: process.env.GITHUB_ACTIONS ? ['default', 'github-actions'] : ['default'],
 	},
 });

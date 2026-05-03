@@ -23,3 +23,22 @@ CODE_OF_CONDUCT.md @rmjoia
 # Infrastructure and Deployment
 /infra/ @rmjoia
 /.github/workflows/ @rmjoia
+
+# Auth, admin, and role logic — security-critical surfaces. The
+# default `* @rmjoia` rule above already requires maintainer review;
+# these explicit entries are intentionally redundant to make ownership
+# of these paths self-evident to anyone reading this file or grepping
+# CODEOWNERS for sensitive code.
+/api/src/lib/admin-roster.* @rmjoia
+/api/src/lib/roles.*        @rmjoia
+/api/src/lib/users.*        @rmjoia
+/api/src/lib/principal.*    @rmjoia
+/api/src/get-roles.*        @rmjoia
+/api/src/admins-*.ts        @rmjoia
+/api/src/admin-users.*      @rmjoia
+/api/src/account-delete.*   @rmjoia
+/api/src/profile-get.*      @rmjoia
+/api/src/profile-save.*     @rmjoia
+/staticwebapp.config.json   @rmjoia
+/AZURE_SETUP_GUIDE.md       @rmjoia
+/DEPLOYMENT.md              @rmjoia
