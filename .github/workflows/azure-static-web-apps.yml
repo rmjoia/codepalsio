@@ -78,3 +78,38 @@ jobs:
           api_location: "api"
           output_location: "dist"
           api_build_command: "npm ci --include=dev && npm test && npm run build"
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Post-deploy E2E: hits the live SWA to assert /.auth/login/github,
+  # role gating, etc. actually work end-to-end. Catches deploy-time
+  # regressions the config-invariant tests can't see (missing app
+  # settings, propagation lag, OAuth callback mismatch).
+  # ─────────────────────────────────────────────────────────────────────
+  e2e_post_deploy:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: build_and_deploy_job
+    runs-on: ubuntu-latest
+    name: Post-deploy E2E
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+      - name: Install root deps
+        run: npm ci
+      - name: Resolve E2E base URL
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "url=https://codepals.io" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=https://dev.codepals.io" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Wait for SWA propagation
+        run: sleep 60
+      - name: Run E2E suite
+        env:
+          E2E_BASE_URL: ${{ steps.resolve.outputs.url }}
+        run: npm run test:e2e

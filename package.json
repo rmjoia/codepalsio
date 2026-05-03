@@ -12,6 +12,7 @@
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write src/**/*.{js,jsx,ts,tsx,astro,css,md}",
