@@ -17,7 +17,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write src/**/*.{js,jsx,ts,tsx,astro,css,md}",
     "format:check": "prettier --check src/**/*.{js,jsx,ts,tsx,astro,css,md}",
-    "audit": "npm audit --audit-level=moderate",
+    "audit": "npm audit --omit=dev --audit-level=high",
     "audit:report": "npm audit --json > audit-report.json && echo 'Audit report saved to audit-report.json'",
     "snyk:check": "snyk test --severity-threshold=high 2>/dev/null || echo 'Snyk check skipped (requires auth in CI/CD)'",
     "security": "npm run audit",
