@@ -31,110 +31,145 @@ export interface AutoHealResult {
 }
 
 /**
- * Find a user's profile, with one-time auto-heal for the auth-migration
- * orphan case (PR #14, Apr 2026).
+ * Find a user's profile, with auto-heal for orphaned pre-migration
+ * profile docs (custom-OAuth flow before commit 7410e99, Apr 2026
+ * keyed profiles by a different userId than SWA built-in auth uses
+ * today).
  *
- * Background:
- *   The custom-OAuth flow that ran before PR #14 keyed profile docs by
- *   a different `userId` value than SWA built-in auth produces today.
- *   A user who had a profile pre-migration logs in today, gets a new
- *   SWA principal hash, and the lookup-by-userId returns nothing — the
- *   frontend prompts them to "set up profile" while their old data
- *   sits orphaned in Cosmos (visible to others on /find via its public
- *   visibility, disconnected from their session).
+ * Strategy — single cross-partition query by `githubUsername`,
+ * which is stable across auth schemes (set server-side from
+ * `principal.userDetails` on every save). From the result set we
+ * decide everything in one pass:
  *
- * Heal procedure:
- *   1. Lookup by current `userId`. If found, done — no heal needed.
- *   2. Else lookup by `githubUsername` (stable across auth schemes,
- *      set server-side on every save from `principal.userDetails`).
- *   3. If found, re-key the doc:
- *        a. Insert a new doc with `userId = principal.userId`,
- *           preserving the existing `id` (so consumers caching the
- *           id keep their references).
- *        b. Best-effort delete the old doc at its old partition.
- *           A 404 here is fine (concurrent heal won the race) and
- *           a non-404 error is logged but doesn't fail the heal —
- *           the new doc is canonical from this point on, and the
- *           old orphan will be retried on next call.
+ *   - The doc whose `userId` matches the current principal is the
+ *     canonical profile. Return it.
+ *   - Any other doc with the same `githubUsername` is an orphan
+ *     (a leftover from before the auth-scheme change, OR a
+ *     leftover from a previous heal where the delete failed
+ *     transiently). Best-effort delete each one. 404s are fine
+ *     (already gone); non-404 errors are logged but don't fail
+ *     the read.
+ *   - If there's no canonical doc but at least one orphan, promote
+ *     the orphan: upsert a copy at the new `userId` partition
+ *     (preserving `id`), then delete every orphan as above.
  *
- * Idempotency:
- *   Two concurrent heals from the same user upsert the same
- *   (id, new userId) document — the second one overwrites with
- *   identical data. Both delete the same (id, old userId); one
- *   succeeds, the other 404s, no duplicates.
+ * Why cleanup runs on every call (not just on the heal path):
+ *   Earlier this only ran when no canonical doc existed. That
+ *   meant if the heal-path delete failed transiently, the orphan
+ *   would stay forever — subsequent reads find the new doc by
+ *   userId, return it directly, and never look back at the
+ *   orphan. Reviewer Copilot caught that. Cleanup-on-every-call
+ *   makes the heal eventually consistent: even a transient delete
+ *   failure converges to a clean state on the next call.
  *
- * Pre-#14 docs that have `id === userId` (issue #27): those use the
- * OLD userId AS the id. After heal, the new doc keeps that string as
- * its `id` but lives in the new partition. That's still consistent —
- * `id` is just a string, not required to equal `userId`. Issue #27's
- * cleanup (uuid-shape ids) can be done in a separate migration.
+ * Cost: one cross-partition query per profile-get/save instead
+ * of a userId-filtered query. The userId filter wasn't a true
+ * point-read either (the partition key is userId but we don't
+ * have the id), so the cost difference is small. Acceptable for
+ * a per-page-load endpoint.
+ *
+ * Idempotency / concurrency:
+ *   - Two concurrent heals upsert the same (id, new userId) doc.
+ *     Last write wins with identical data — no conflict.
+ *   - Two concurrent cleanups attempt the same delete. One
+ *     succeeds, the other 404s — no conflict.
+ *   - The principal-lookup-by-userId path (no githubUsername
+ *     fallback) still works as a fast path when userDetails is
+ *     missing, but pays the cost of NOT cleaning up orphans in
+ *     that edge case (anonymous-style principals shouldn't have
+ *     orphans in the first place).
+ *
+ * Pre-#14 docs that have `id === userId` (issue #27): those use
+ * the OLD userId AS the id. After heal, the new doc keeps that
+ * string as its `id` but lives in the new partition. That's
+ * still consistent — `id` is just a string, not required to
+ * equal `userId`. Issue #27's id-shape normalization is a
+ * separate migration.
  */
 export async function findProfileWithAutoHeal(
 	container: Container,
 	principal: AutoHealPrincipal,
 	logger: AutoHealLogger
 ): Promise<AutoHealResult> {
-	const byUserId = await container.items
-		.query<Profile>({
-			query: PROFILE_BY_USERID_QUERY,
-			parameters: [{ name: '@userId', value: principal.userId }],
-		})
-		.fetchAll();
-
-	if (byUserId.resources[0]) {
-		return { profile: byUserId.resources[0], healed: false };
-	}
-
+	// Without a github username we can't query by it; fall back to
+	// userId-only. Orphan cleanup is a no-op in this branch — but
+	// principals without userDetails shouldn't have orphan profiles
+	// either (the orphan was created from a previous userDetails-bearing
+	// session).
 	if (!principal.userDetails) {
-		return { profile: null, healed: false };
+		const byUserId = await container.items
+			.query<Profile>({
+				query: PROFILE_BY_USERID_QUERY,
+				parameters: [{ name: '@userId', value: principal.userId }],
+			})
+			.fetchAll();
+		return { profile: byUserId.resources[0] ?? null, healed: false };
 	}
 
-	const byGithub = await container.items
+	const allByGithub = await container.items
 		.query<Profile>({
 			query: PROFILE_BY_GITHUB_USERNAME_QUERY,
 			parameters: [{ name: '@githubUsername', value: principal.userDetails }],
 		})
 		.fetchAll();
 
-	const orphan = byGithub.resources[0];
-	if (!orphan) {
+	const docs = allByGithub.resources;
+	const canonical = docs.find((d) => d.userId === principal.userId);
+	const orphans = docs.filter((d) => d.userId !== principal.userId);
+
+	if (!canonical && orphans.length === 0) {
+		// No docs at all for this github username — fresh user, no heal
+		// possible.
 		return { profile: null, healed: false };
 	}
 
-	if (orphan.userId === principal.userId) {
-		// Should be unreachable (would have hit the userId lookup), but
-		// defensive guard against duplicate-doc surprises.
-		return { profile: orphan, healed: false };
+	if (canonical && orphans.length === 0) {
+		return { profile: canonical, healed: false };
 	}
 
-	const oldUserId = orphan.userId;
-	const healed: Profile = {
-		...orphan,
-		userId: principal.userId,
-		githubUsername: principal.userDetails,
-	};
+	let result: Profile;
+	let healed = false;
 
-	logger.log(
-		`profile auto-heal: re-keying profile id=${orphan.id} from userId=${oldUserId} to userId=${principal.userId} (githubUsername=${principal.userDetails})`
-	);
+	if (canonical) {
+		// Common steady-state-with-leftover-orphan case: canonical doc
+		// already exists, just clean up the orphans below.
+		result = canonical;
+	} else {
+		// No canonical doc — promote one of the orphans by re-keying it
+		// to the current userId. Preserve `id` so consumers caching the
+		// id keep their references.
+		const orphan = orphans[0];
+		const oldUserId = orphan.userId;
+		result = {
+			...orphan,
+			userId: principal.userId,
+			githubUsername: principal.userDetails,
+		};
+		logger.log(
+			`profile auto-heal: re-keying profile id=${orphan.id} from userId=${oldUserId} to userId=${principal.userId} (githubUsername=${principal.userDetails})`
+		);
+		await container.items.upsert<Profile>(result);
+		healed = true;
+	}
 
-	await container.items.upsert<Profile>(healed);
-
-	try {
-		await container.item(orphan.id, oldUserId).delete();
-	} catch (err) {
-		if (!isCosmosNotFound(err)) {
-			// Non-404 means the new doc is in place but the orphan still
-			// exists. Next call will heal again (idempotent), so log and
-			// return success rather than fail the read.
-			logger.error(
-				`profile auto-heal: failed to delete orphan id=${orphan.id} userId=${oldUserId}; will retry on next call`,
-				err
-			);
+	// Best-effort delete of every orphan, on every call — converges to
+	// a clean state even after transient delete failures (the bug
+	// Copilot flagged). 404s are fine (already deleted by a concurrent
+	// caller). Non-404s are logged but don't fail the read.
+	for (const orphan of orphans) {
+		try {
+			await container.item(orphan.id, orphan.userId).delete();
+		} catch (err) {
+			if (!isCosmosNotFound(err)) {
+				logger.error(
+					`profile auto-heal: failed to delete orphan id=${orphan.id} userId=${orphan.userId}; will retry on next call`,
+					err
+				);
+			}
 		}
 	}
 
-	return { profile: healed, healed: true };
+	return { profile: result, healed };
 }
 
 function isCosmosNotFound(error: unknown): boolean {
