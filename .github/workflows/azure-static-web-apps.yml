@@ -15,12 +15,11 @@ on:
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────
-  # PR validation: build everything, run all tests, no deploy.
-  # No SWA action, no preview environment, no minutes wasted on a URL
-  # nobody uses.
+  # CI: build everything, run all tests. Runs on every event (PRs,
+  # push-to-main, workflow_dispatch). The deploy job depends on this,
+  # so a red CI blocks deploys to prod.
   # ─────────────────────────────────────────────────────────────────────
   ci:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     name: CI (build + tests)
     steps:
@@ -60,6 +59,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   build_and_deploy_job:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: ci
     runs-on: ubuntu-latest
     name: Build and Deploy Job
     steps:
@@ -109,6 +109,16 @@ jobs:
           fi
       - name: Wait for SWA propagation
         run: sleep 60
+      - name: Diagnostic — auth login redirect chain
+        # Always print the redirect chain so failures are self-diagnosing.
+        # Uses `|| true` so a non-2xx exit doesn't fail the step.
+        run: |
+          echo "::group::HEAD ${{ steps.resolve.outputs.url }}/.auth/login/github (3 hops)"
+          curl -sIL --max-redirs 3 -o /dev/null -w "url_effective=%{url_effective}\nhttp_code=%{http_code}\nredirect_url=%{redirect_url}\n" "${{ steps.resolve.outputs.url }}/.auth/login/github" || true
+          echo "::endgroup::"
+          echo "::group::Single-hop Location header"
+          curl -sI "${{ steps.resolve.outputs.url }}/.auth/login/github" | grep -i '^location:' || echo "(no Location header)"
+          echo "::endgroup::"
       - name: Run E2E suite
         env:
           E2E_BASE_URL: ${{ steps.resolve.outputs.url }}
