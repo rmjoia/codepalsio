@@ -1,7 +1,13 @@
-import { app, type HttpRequest, type InvocationContext, type HttpResponseInit } from '@azure/functions';
+import {
+	app,
+	type HttpRequest,
+	type InvocationContext,
+	type HttpResponseInit,
+} from '@azure/functions';
 import { randomUUID } from 'crypto';
 import { getClientPrincipal } from './lib/principal';
 import { getContainer, getCosmosConfig } from './lib/cosmos';
+import { findProfileWithAutoHeal } from './lib/profile-repo';
 import {
 	LIMITS,
 	isAvailability,
@@ -65,15 +71,17 @@ app.http('profile-save', {
 		try {
 			const container = getContainer(cfg.connectionString, cfg.database, 'profiles');
 
-			// Preserve the existing profile id on update.
-			const { resources } = await container.items
-				.query<{ id: string }>({
-					query: 'SELECT c.id FROM c WHERE c.userId = @userId',
-					parameters: [{ name: '@userId', value: principal.userId }],
-				})
-				.fetchAll();
+			// Lookup existing profile WITH auto-heal: if the user has an
+			// orphaned pre-#14 doc keyed by an old userId, this re-keys it
+			// to the current userId before we save, so we update in place
+			// instead of creating a duplicate.
+			const { profile: existing } = await findProfileWithAutoHeal(
+				container,
+				{ userId: principal.userId, userDetails: principal.userDetails },
+				{ log: (m) => context.log(m), error: (m, e) => context.error(m, e) }
+			);
 
-			const profileId = resources[0]?.id ?? `profile-${randomUUID()}`;
+			const profileId = existing?.id ?? `profile-${randomUUID()}`;
 
 			const profile: Profile = {
 				id: profileId,

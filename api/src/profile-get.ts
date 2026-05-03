@@ -1,6 +1,12 @@
-import { app, type HttpRequest, type InvocationContext, type HttpResponseInit } from '@azure/functions';
+import {
+	app,
+	type HttpRequest,
+	type InvocationContext,
+	type HttpResponseInit,
+} from '@azure/functions';
 import { getClientPrincipal } from './lib/principal';
 import { getContainer, getCosmosConfig } from './lib/cosmos';
+import { findProfileWithAutoHeal } from './lib/profile-repo';
 import { isProfileVisibility } from './lib/validation';
 import type { Profile } from './lib/types';
 
@@ -21,15 +27,13 @@ app.http('profile-get', {
 
 		try {
 			const container = getContainer(cfg.connectionString, cfg.database, 'profiles');
-			const { resources } = await container.items
-				.query<Profile>({
-					query:
-						'SELECT c.id, c.userId, c.githubUsername, c.displayName, c.bio, c.skills, c.interests, c.availability, c.location, c.timezone, c.githubUrl, c.linkedinUrl, c.websiteUrl, c.preferredLanguages, c.yearsOfExperience, c.profileVisibility, c.updatedAt FROM c WHERE c.userId = @userId',
-					parameters: [{ name: '@userId', value: principal.userId }],
-				})
-				.fetchAll();
+			const { profile } = await findProfileWithAutoHeal(
+				container,
+				{ userId: principal.userId, userDetails: principal.userDetails },
+				{ log: (m) => context.log(m), error: (m, e) => context.error(m, e) }
+			);
 
-			return { status: 200, jsonBody: { profile: normalizeLegacy(resources[0]) } };
+			return { status: 200, jsonBody: { profile: normalizeLegacy(profile) } };
 		} catch (error) {
 			context.error('profile-get failed:', error);
 			return { status: 500, jsonBody: { error: 'Failed to load profile' } };
@@ -44,7 +48,7 @@ app.http('profile-get', {
  * for every consumer (frontend service, future directory endpoint, admin
  * view) and we fail safely toward not-listed.
  */
-function normalizeLegacy(profile: Profile | undefined): Profile | null {
+function normalizeLegacy(profile: Profile | null): Profile | null {
 	if (!profile) return null;
 	if (!isProfileVisibility(profile.profileVisibility)) {
 		profile.profileVisibility = 'private';
