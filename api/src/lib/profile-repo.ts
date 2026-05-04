@@ -1,5 +1,5 @@
 import type { Container } from '@azure/cosmos';
-import { randomUUID } from 'crypto';
+import { createHash } from 'crypto';
 import type { Profile } from './types';
 import type { UserRepository } from './users';
 
@@ -79,17 +79,24 @@ export interface AutoHealResult {
  * endpoint.
  *
  * Idempotency / concurrency:
- *   - Two concurrent heals upsert the same (id, new userId) doc.
- *     Last write wins with identical data — no conflict.
+ *   - When promoting an orphan, the new `id` is computed
+ *     deterministically from the orphan's old id (SHA-256
+ *     formatted as a uuid — see profileIdFromLegacy). Two
+ *     concurrent rescues observing the same orphan therefore
+ *     compute the SAME id, so their upserts target the same
+ *     (id, new userId) document. Last-write-wins overwrites
+ *     with identical data — no duplicates, no conflict.
  *   - Two concurrent cleanups attempt the same delete. One
  *     succeeds, the other 404s — no conflict.
  *
  * Pre-#14 docs that have `id === userId` (issue #27): those use
- * the OLD userId AS the id. After heal, the new doc keeps that
- * string as its `id` but lives in the new partition. That's
- * still consistent — `id` is just a string, not required to
- * equal `userId`. Issue #27's id-shape normalization can run as
- * a separate migration.
+ * the OLD userId AS the id (a soft PII leak — the doc key
+ * reveals the principal hash). The promotion path rotates the
+ * id to a uuid-shaped string deterministically derived from the
+ * orphan's old id. The rescued doc therefore satisfies issue
+ * #27's acceptance (`id` matches `^profile-[0-9a-f-]+$`) AND
+ * preserves concurrency safety (two racing rescues produce the
+ * same id, not different uuids).
  */
 export async function findProfileWithAutoHeal(
 	container: Container,
@@ -169,12 +176,13 @@ export async function findProfileWithAutoHeal(
 		result = canonical;
 	} else {
 		// No canonical doc — promote one of the orphans by re-keying it
-		// to the current userId. Generate a fresh `profile-{uuid}` id
-		// instead of preserving the orphan's `id` (which on pre-#14 docs
-		// IS the legacy SWA principal hash — a soft PII leak in the
-		// document key and inconsistent with new docs already using
-		// uuid-shaped ids). This closes issue #27's acceptance criteria
-		// (`id` matches `^profile-[0-9a-f-]+$`) for the rescue path.
+		// to the current userId. Rotate `id` to a uuid-shaped string
+		// (closes issue #27 — orphans on pre-#14 docs use the legacy
+		// SWA principal hash AS their id, a soft PII leak). The new id
+		// is derived DETERMINISTICALLY from the orphan's old id so two
+		// concurrent rescues compute the same id — preserves the
+		// "same (id, new userId) → idempotent upsert" concurrency
+		// guarantee that a fresh randomUUID would have broken.
 		// Backfill `githubUsername` server-side — old-shape orphans
 		// don't have it.
 		const orphan = orphans[0];
@@ -182,7 +190,7 @@ export async function findProfileWithAutoHeal(
 		const oldId = orphan.id;
 		result = {
 			...orphan,
-			id: `profile-${randomUUID()}`,
+			id: profileIdFromLegacy(oldId),
 			userId: principal.userId,
 			githubUsername: principal.userDetails,
 		};
@@ -220,4 +228,35 @@ function isCosmosNotFound(error: unknown): boolean {
 		'code' in error &&
 		(error as { code: unknown }).code === 404
 	);
+}
+
+/**
+ * Deterministic uuid-shaped id derived from a legacy orphan's id.
+ *
+ * Concurrency: two callers rescuing the same orphan compute the same
+ * id and so produce identical (id, userId) docs on upsert — last
+ * write wins with identical data, no duplicates. A non-deterministic
+ * id (e.g. `randomUUID()`) would let two racing rescues create two
+ * different canonical docs in the same userId partition, neither of
+ * which would be treated as an orphan on the next call.
+ *
+ * Shape: `profile-XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX` where the
+ * X's are hex from SHA-256(namespace + oldId), formatted to look
+ * like a uuid. Satisfies the regex `^profile-[0-9a-f-]+$` from
+ * issue #27 without using a true random uuid.
+ *
+ * PII: SHA-256 of the old id is one-way; the rotated id doesn't
+ * leak the underlying principal hash. (The old id was the legacy
+ * SWA principal hash — using it directly was the soft PII leak
+ * #27 flagged.)
+ */
+export function profileIdFromLegacy(oldId: string): string {
+	const hex = createHash('sha256')
+		.update(`profile-id-rotation:${oldId}`)
+		.digest('hex')
+		.slice(0, 32);
+	return `profile-${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(
+		16,
+		20
+	)}-${hex.slice(20, 32)}`;
 }
