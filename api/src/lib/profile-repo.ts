@@ -1,4 +1,5 @@
 import type { Container } from '@azure/cosmos';
+import { randomUUID } from 'crypto';
 import type { Profile } from './types';
 import type { UserRepository } from './users';
 
@@ -168,18 +169,25 @@ export async function findProfileWithAutoHeal(
 		result = canonical;
 	} else {
 		// No canonical doc — promote one of the orphans by re-keying it
-		// to the current userId. Preserve `id` so consumers caching the
-		// id keep their references. Stamp `githubUsername` server-side
-		// — old-shape orphans don't have it; this backfills.
+		// to the current userId. Generate a fresh `profile-{uuid}` id
+		// instead of preserving the orphan's `id` (which on pre-#14 docs
+		// IS the legacy SWA principal hash — a soft PII leak in the
+		// document key and inconsistent with new docs already using
+		// uuid-shaped ids). This closes issue #27's acceptance criteria
+		// (`id` matches `^profile-[0-9a-f-]+$`) for the rescue path.
+		// Backfill `githubUsername` server-side — old-shape orphans
+		// don't have it.
 		const orphan = orphans[0];
 		const oldUserId = orphan.userId;
+		const oldId = orphan.id;
 		result = {
 			...orphan,
+			id: `profile-${randomUUID()}`,
 			userId: principal.userId,
 			githubUsername: principal.userDetails,
 		};
 		logger.log(
-			`profile auto-heal: re-keying profile id=${orphan.id} from userId=${oldUserId} to userId=${principal.userId} (githubUsername=${principal.userDetails})`
+			`profile auto-heal: re-keying profile from id=${oldId} userId=${oldUserId} to id=${result.id} userId=${principal.userId} (githubUsername=${principal.userDetails})`
 		);
 		await container.items.upsert<Profile>(result);
 		healed = true;
