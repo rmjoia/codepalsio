@@ -1,5 +1,6 @@
 import type { Container } from '@azure/cosmos';
 import type { Profile } from './types';
+import type { UserRepository } from './users';
 
 /**
  * Profile fields we read in the user-facing handlers. Mirrors the SELECT
@@ -53,6 +54,15 @@ export interface AutoHealResult {
  *     the orphan: upsert a copy at the new `userId` partition
  *     (preserving `id`), then delete every orphan as above.
  *
+ * Old-shape rescue (when `userRepo` is provided):
+ *   Profiles created before PR #24 don't have a `githubUsername`
+ *   field, so the github-username query above can't see them. For
+ *   that case we use the `users` Cosmos container as a bridge:
+ *   the legacy user record's `id` IS the OLD userId hash. We look
+ *   it up via UserRepository.findByGithubUsernameAcrossShapes,
+ *   then query the profile by that old userId. If found, treat it
+ *   as an orphan and re-key it the same way.
+ *
  * Why cleanup runs on every call (not just on the heal path):
  *   Earlier this only ran when no canonical doc existed. That
  *   meant if the heal-path delete failed transiently, the orphan
@@ -62,34 +72,29 @@ export interface AutoHealResult {
  *   makes the heal eventually consistent: even a transient delete
  *   failure converges to a clean state on the next call.
  *
- * Cost: one cross-partition query per profile-get/save instead
- * of a userId-filtered query. The userId filter wasn't a true
- * point-read either (the partition key is userId but we don't
- * have the id), so the cost difference is small. Acceptable for
- * a per-page-load endpoint.
+ * Cost: one cross-partition query per profile-get/save (plus, for
+ * the no-githubUsername-on-orphan case, a user-record point-read
+ * with cross-partition fallback). Acceptable for a per-page-load
+ * endpoint.
  *
  * Idempotency / concurrency:
  *   - Two concurrent heals upsert the same (id, new userId) doc.
  *     Last write wins with identical data — no conflict.
  *   - Two concurrent cleanups attempt the same delete. One
  *     succeeds, the other 404s — no conflict.
- *   - The principal-lookup-by-userId path (no githubUsername
- *     fallback) still works as a fast path when userDetails is
- *     missing, but pays the cost of NOT cleaning up orphans in
- *     that edge case (anonymous-style principals shouldn't have
- *     orphans in the first place).
  *
  * Pre-#14 docs that have `id === userId` (issue #27): those use
  * the OLD userId AS the id. After heal, the new doc keeps that
  * string as its `id` but lives in the new partition. That's
  * still consistent — `id` is just a string, not required to
- * equal `userId`. Issue #27's id-shape normalization is a
- * separate migration.
+ * equal `userId`. Issue #27's id-shape normalization can run as
+ * a separate migration.
  */
 export async function findProfileWithAutoHeal(
 	container: Container,
 	principal: AutoHealPrincipal,
-	logger: AutoHealLogger
+	logger: AutoHealLogger,
+	userRepo?: UserRepository
 ): Promise<AutoHealResult> {
 	// Without a github username we can't query by it; fall back to
 	// userId-only. Orphan cleanup is a no-op in this branch — but
@@ -113,9 +118,36 @@ export async function findProfileWithAutoHeal(
 		})
 		.fetchAll();
 
-	const docs = allByGithub.resources;
-	const canonical = docs.find((d) => d.userId === principal.userId);
-	const orphans = docs.filter((d) => d.userId !== principal.userId);
+	let docs = allByGithub.resources;
+	let canonical = docs.find((d) => d.userId === principal.userId);
+	let orphans = docs.filter((d) => d.userId !== principal.userId);
+
+	// Old-shape rescue. If the github-username query found nothing AND we
+	// have a userRepo, the orphan likely pre-dates PR #24 (no
+	// githubUsername field). Use the users container as a bridge to
+	// discover the old userId hash, then look up the profile by that.
+	if (docs.length === 0 && userRepo) {
+		const userRecord = await userRepo.findByGithubUsernameAcrossShapes(principal.userDetails);
+		if (userRecord) {
+			const candidateOldUserId = userRecord.swaUserId ?? userRecord.id;
+			if (candidateOldUserId && candidateOldUserId !== principal.userId) {
+				const byOldUserId = await container.items
+					.query<Profile>({
+						query: PROFILE_BY_USERID_QUERY,
+						parameters: [{ name: '@userId', value: candidateOldUserId }],
+					})
+					.fetchAll();
+				if (byOldUserId.resources.length > 0) {
+					logger.log(
+						`profile auto-heal: discovered old-shape orphan via user record (githubUsername=${principal.userDetails}, oldUserId=${candidateOldUserId})`
+					);
+					docs = byOldUserId.resources;
+					canonical = undefined;
+					orphans = byOldUserId.resources;
+				}
+			}
+		}
+	}
 
 	if (!canonical && orphans.length === 0) {
 		// No docs at all for this github username — fresh user, no heal
@@ -137,7 +169,8 @@ export async function findProfileWithAutoHeal(
 	} else {
 		// No canonical doc — promote one of the orphans by re-keying it
 		// to the current userId. Preserve `id` so consumers caching the
-		// id keep their references.
+		// id keep their references. Stamp `githubUsername` server-side
+		// — old-shape orphans don't have it; this backfills.
 		const orphan = orphans[0];
 		const oldUserId = orphan.userId;
 		result = {
