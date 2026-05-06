@@ -130,3 +130,32 @@ describe('findByGithubUsernameAcrossShapes (point-read + cross-partition fallbac
 		expect(repo.store.has(userIdForGithub('rmjoia'))).toBe(false);
 	});
 });
+
+describe('deleteById', () => {
+	let repo: FakeUserRepository;
+
+	beforeEach(() => {
+		repo = new FakeUserRepository();
+	});
+
+	it('removes the doc with the given id', async () => {
+		repo.store.set('gh-rmjoia', newShape());
+		await repo.deleteById('gh-rmjoia');
+		expect(repo.store.has('gh-rmjoia')).toBe(false);
+	});
+
+	it('is idempotent — deleting a missing id is a no-op (no throw)', async () => {
+		// Mirrors the production contract: 404 from Cosmos is swallowed.
+		// The legacy-migration path in resolveRoles relies on this to keep
+		// role resolution resilient against transient delete failures.
+		await expect(repo.deleteById('does-not-exist')).resolves.toBeUndefined();
+	});
+
+	it('only deletes the targeted id, leaves siblings untouched', async () => {
+		repo.store.set('gh-alice', newShape({ id: 'gh-alice', githubUsername: 'alice' }));
+		repo.store.set('gh-bob', newShape({ id: 'gh-bob', githubUsername: 'bob' }));
+		await repo.deleteById('gh-alice');
+		expect(repo.store.has('gh-alice')).toBe(false);
+		expect(repo.store.has('gh-bob')).toBe(true);
+	});
+});
