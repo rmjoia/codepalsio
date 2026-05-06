@@ -186,6 +186,140 @@ describe('resolveRoles', () => {
 		});
 	});
 
+	describe('legacy-shape user record migration', () => {
+		// The maintainer's pre-#32 user record looks like this in prod:
+		//   { id: '59298c75…', userId: '59298c75…', githubUsername: 'rmjoia',
+		//     registrationDate: ..., lastLogin: ... }
+		// — NO `roles` field, NO `gh-` id prefix. findByGithubUsername (point-
+		// read on `gh-rmjoia`) misses it; findByGithubUsernameAcrossShapes
+		// catches it via cross-partition query on the githubUsername field.
+		// resolveRoles must (a) migrate it to `gh-rmjoia` shape on discovery,
+		// (b) delete the legacy doc, and (c) graduate the user via the
+		// bootstrap path if env-var-eligible — this is the one-time path
+		// that takes pre-#32 records into the new role system.
+
+		const LEGACY_ID = '59298c758a6f409c83d05d9f0bce90c9';
+
+		function seedLegacy(overrides: Partial<{ roles: string[]; updatedAt: string }> = {}) {
+			repo.store.set(LEGACY_ID, {
+				id: LEGACY_ID,
+				githubUsername: 'rmjoia',
+				roles: overrides.roles ?? [],
+				updatedAt: overrides.updatedAt ?? '2025-11-24T17:25:15Z',
+				// pre-#32 records don't carry swaUserId / grantedBy / grantedAt
+			});
+		}
+
+		it('migrates a legacy record (no roles, no env var) to gh-<username> with no admin', async () => {
+			seedLegacy();
+			const roles = await resolveRoles(
+				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+				{ repo, roster, bootstrapLogins: new Set(), now }
+			);
+
+			expect(roles).toEqual([]);
+			// Legacy doc deleted, gh-rmjoia created with backfilled fields.
+			expect(repo.store.has(LEGACY_ID)).toBe(false);
+			const migrated = repo.store.get(userIdForGithub('rmjoia'));
+			expect(migrated).toMatchObject({
+				id: 'gh-rmjoia',
+				githubUsername: 'rmjoia',
+				swaUserId: 'u1',
+				roles: [],
+			});
+			// Roster untouched (no admin granted).
+			expect(roster.stored?.admins ?? []).toEqual([]);
+		});
+
+		it("migrates a legacy record AND grants admin when env var matches (the maintainer's scenario)", async () => {
+			// This is the exact scenario blocking the maintainer's admin nav:
+			// legacy record exists, no roles, but ADMIN_GITHUB_LOGINS=rmjoia.
+			// Without legacy migration + bootstrap-on-migration, env var was
+			// silently ignored because findByGithubUsername returned null →
+			// bootstrap fired → wrote gh-rmjoia → BUT the legacy lingered as
+			// orphan. Worse, in some flows the legacy was re-discovered on
+			// next login and the bootstrap path was skipped, locking admin
+			// out permanently.
+			seedLegacy();
+
+			const roles = await resolveRoles(
+				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+				{ repo, roster, bootstrapLogins: new Set(['rmjoia']), now }
+			);
+
+			expect(roles).toEqual(['admin']);
+			// Legacy doc deleted, gh-rmjoia carries admin role + bootstrap
+			// provenance.
+			expect(repo.store.has(LEGACY_ID)).toBe(false);
+			const migrated = repo.store.get(userIdForGithub('rmjoia'));
+			expect(migrated).toMatchObject({
+				id: 'gh-rmjoia',
+				githubUsername: 'rmjoia',
+				swaUserId: 'u1',
+				roles: ['admin'],
+				grantedBy: 'bootstrap',
+				grantedAt: FROZEN_NOW,
+			});
+			// Roster contains the new gh-<username> id, not the legacy one.
+			expect(roster.stored?.admins).toEqual(['gh-rmjoia']);
+		});
+
+		it('preserves pre-existing non-admin roles through migration', async () => {
+			seedLegacy({ roles: ['moderator'] });
+
+			const roles = await resolveRoles(
+				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+				{ repo, roster, bootstrapLogins: new Set(), now }
+			);
+
+			expect(roles).toEqual(['moderator']);
+			const migrated = repo.store.get(userIdForGithub('rmjoia'));
+			expect(migrated?.roles).toEqual(['moderator']);
+		});
+
+		it('lower-cases the github username on migration (canonicalizes)', async () => {
+			repo.store.set('LegAcyMixed', {
+				id: 'LegAcyMixed',
+				githubUsername: 'RmJoia',
+				roles: [],
+				updatedAt: FROZEN_NOW,
+			});
+
+			await resolveRoles(
+				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+				{ repo, roster, bootstrapLogins: new Set(), now }
+			);
+
+			const migrated = repo.store.get('gh-rmjoia');
+			expect(migrated?.githubUsername).toBe('rmjoia');
+			expect(repo.store.has('LegAcyMixed')).toBe(false);
+		});
+
+		it('does NOT re-migrate when a gh-<username> record already exists (point-read wins)', async () => {
+			// Existing canonical record at gh-rmjoia. findByGithubUsernameAcross
+			// Shapes returns this via point-read first, never reaches the
+			// fallback query that would expose the legacy doc. Nothing to
+			// migrate this call.
+			await repo.upsert({
+				id: userIdForGithub('rmjoia'),
+				githubUsername: 'rmjoia',
+				swaUserId: 'u1',
+				roles: ['admin'],
+				updatedAt: FROZEN_NOW,
+			});
+
+			const roles = await resolveRoles(
+				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+				{ repo, roster, bootstrapLogins: new Set(['rmjoia']), now }
+			);
+
+			expect(roles).toEqual(['admin']);
+			// gh-rmjoia still there, no migration churn.
+			expect(repo.store.size).toBeGreaterThanOrEqual(1);
+			expect(repo.store.has('gh-rmjoia')).toBe(true);
+		});
+	});
+
 	describe('bootstrap atomicity', () => {
 		// If the user record were written before the roster, a failed
 		// roster write would leave a UserRecord with `roles: ['admin']`
@@ -200,7 +334,12 @@ describe('resolveRoles', () => {
 		// ('isAdminPerRoster && !existing') → record gets recreated.
 		it('does not create a user record when the roster write fails', async () => {
 			const failingRoster = {
-				read: async () => ({ id: 'roster' as const, admins: [], updatedAt: FROZEN_NOW, _etag: 'e1' }),
+				read: async () => ({
+					id: 'roster' as const,
+					admins: [],
+					updatedAt: FROZEN_NOW,
+					_etag: 'e1',
+				}),
 				write: async () => {
 					throw new Error('cosmos down');
 				},
