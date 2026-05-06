@@ -38,6 +38,18 @@ export function userIdForGithub(githubUsername: string): string {
  */
 export interface UserRepository {
 	findByGithubUsername(githubUsername: string): Promise<UserRecord | null>;
+	/**
+	 * Like findByGithubUsername, but also looks for legacy/old-shape user
+	 * records whose `id` is NOT `gh-<username>` (e.g. pre-#32 records that
+	 * used the SWA principal hash directly as their id). Falls back to a
+	 * cross-partition query on the `githubUsername` field when the
+	 * point-read misses. Used by the profile auto-heal path to discover
+	 * the old principal hash hidden in legacy user records.
+	 *
+	 * Read-only — does NOT migrate the legacy doc to the new shape; that's
+	 * a separate concern handled by an explicit migration step.
+	 */
+	findByGithubUsernameAcrossShapes(githubUsername: string): Promise<UserRecord | null>;
 	upsert(record: UserRecord): Promise<UserRecord>;
 	listByRole(role: string): Promise<UserRecord[]>;
 	countByRole(role: string): Promise<number>;
@@ -60,6 +72,32 @@ class CosmosUserRepository implements UserRepository {
 		}
 	}
 
+	async findByGithubUsernameAcrossShapes(githubUsername: string): Promise<UserRecord | null> {
+		// Fast path: the new-shape point-read.
+		const fresh = await this.findByGithubUsername(githubUsername);
+		if (fresh) return fresh;
+
+		// Fallback: cross-partition query for legacy records whose id is NOT
+		// `gh-<username>`. We can't point-read those — we don't know their
+		// id ahead of time. The query is case-insensitive to match
+		// findByGithubUsername's behaviour.
+		const wanted = githubUsername.trim().toLowerCase();
+		const { resources } = await this.container.items
+			.query<UserRecord>({
+				query: 'SELECT * FROM c WHERE LOWER(c.githubUsername) = @username',
+				parameters: [{ name: '@username', value: wanted }],
+			})
+			.fetchAll();
+
+		// Prefer the legacy record (the one with non-gh- id) — that's the
+		// one the point-read couldn't reach. If multiple legacy records
+		// somehow exist (shouldn't), pick the most recently updated.
+		const legacy = resources
+			.filter((r) => !r.id.startsWith('gh-'))
+			.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+		return legacy[0] ?? null;
+	}
+
 	async upsert(record: UserRecord): Promise<UserRecord> {
 		const { resource } = await this.container.items.upsert<UserRecord>(record);
 		// Cosmos returns the persisted resource; fall back to the input on the
@@ -73,8 +111,7 @@ class CosmosUserRepository implements UserRepository {
 		// makes new additions visually pop.
 		const { resources } = await this.container.items
 			.query<UserRecord>({
-				query:
-					'SELECT * FROM c WHERE ARRAY_CONTAINS(c.roles, @role) ORDER BY c.grantedAt DESC',
+				query: 'SELECT * FROM c WHERE ARRAY_CONTAINS(c.roles, @role) ORDER BY c.grantedAt DESC',
 				parameters: [{ name: '@role', value: role }],
 			})
 			.fetchAll();

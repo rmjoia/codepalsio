@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { getClientPrincipal } from './lib/principal';
 import { getContainer, getCosmosConfig } from './lib/cosmos';
 import { findProfileWithAutoHeal } from './lib/profile-repo';
+import { createUserRepository } from './lib/users';
 import {
 	LIMITS,
 	isAvailability,
@@ -70,15 +71,19 @@ app.http('profile-save', {
 
 		try {
 			const container = getContainer(cfg.connectionString, cfg.database, 'profiles');
+			const userRepo = createUserRepository(cfg.connectionString, cfg.database);
 
 			// Lookup existing profile WITH auto-heal: if the user has an
 			// orphaned pre-#14 doc keyed by an old userId, this re-keys it
 			// to the current userId before we save, so we update in place
-			// instead of creating a duplicate.
+			// instead of creating a duplicate. Pass userRepo so old-shape
+			// orphans (no githubUsername field, pre-#24) can be discovered
+			// via the user record bridge.
 			const { profile: existing } = await findProfileWithAutoHeal(
 				container,
 				{ userId: principal.userId, userDetails: principal.userDetails },
-				{ log: (m) => context.log(m), error: (m, e) => context.error(m, e) }
+				{ log: (m) => context.log(m), error: (m, e) => context.error(m, e) },
+				userRepo
 			);
 
 			const profileId = existing?.id ?? `profile-${randomUUID()}`;
