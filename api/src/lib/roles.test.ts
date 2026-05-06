@@ -200,6 +200,12 @@ describe('resolveRoles', () => {
 
 		const LEGACY_ID = '59298c758a6f409c83d05d9f0bce90c9';
 
+		// Seed a legacy doc. By default `roles` is set to [] for ergonomics —
+		// most production code paths read `existing.roles ?? []` so an empty
+		// array and an undefined value behave identically. The truly-missing-
+		// field shape (matching prod's actual data) is exercised by the
+		// dedicated test below ("handles a legacy doc with truly missing
+		// roles field").
 		function seedLegacy(overrides: Partial<{ roles: string[]; updatedAt: string }> = {}) {
 			repo.store.set(LEGACY_ID, {
 				id: LEGACY_ID,
@@ -317,6 +323,87 @@ describe('resolveRoles', () => {
 			// gh-rmjoia still there, no migration churn.
 			expect(repo.store.size).toBeGreaterThanOrEqual(1);
 			expect(repo.store.has('gh-rmjoia')).toBe(true);
+		});
+
+		it('handles a legacy doc with truly missing roles field (matches prod data shape)', async () => {
+			// The maintainer's actual prod doc literally has no `roles` key —
+			// pre-#32 records pre-date the field. The cast lets us model that
+			// without TypeScript complaining; production resolveRoles must
+			// handle it via `existing.roles ?? []` — exercised here.
+			repo.store.set(LEGACY_ID, {
+				id: LEGACY_ID,
+				githubUsername: 'rmjoia',
+				updatedAt: '2025-11-24T17:25:15Z',
+				// roles, swaUserId, grantedBy, grantedAt all absent
+			} as unknown as Parameters<typeof repo.upsert>[0]);
+
+			const roles = await resolveRoles(
+				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+				{ repo, roster, bootstrapLogins: new Set(['rmjoia']), now }
+			);
+
+			expect(roles).toEqual(['admin']);
+			const migrated = repo.store.get(userIdForGithub('rmjoia'));
+			// roles field correctly defaulted to [] before admin was appended
+			// by the bootstrap path.
+			expect(migrated?.roles).toEqual(['admin']);
+			expect(repo.store.has(LEGACY_ID)).toBe(false);
+		});
+
+		it('repairs the roster when it carries the legacy id (Copilot review fix)', async () => {
+			// Scenario: a previous deploy had the user as admin in their
+			// legacy-shape user record. getOrSeedRoster seeded the roster
+			// with `r.id` directly — so the roster admins[] contains the
+			// legacy hash, not gh-rmjoia. After this PR's migration writes
+			// gh-rmjoia, isAdminPerRoster against gh-rmjoia would be false
+			// without the repair, silently revoking admin. The repair swaps
+			// legacy → canonical inside the roster on the same call.
+			seedLegacy({ roles: ['admin'] });
+			roster.seed([LEGACY_ID]);
+
+			const roles = await resolveRoles(
+				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+				{ repo, roster, bootstrapLogins: new Set(), now }
+			);
+
+			expect(roles).toContain('admin');
+			expect(roster.stored?.admins).toEqual(['gh-rmjoia']);
+			expect(roster.stored?.admins).not.toContain(LEGACY_ID);
+		});
+
+		it('roster repair dedupes if both legacy and canonical ids were already in the roster', async () => {
+			// Defensive: if a previous migration partially completed (canonical
+			// added, legacy not removed), the roster could carry both. Repair
+			// must not produce duplicates.
+			seedLegacy({ roles: ['admin'] });
+			roster.seed([LEGACY_ID, userIdForGithub('rmjoia')]);
+
+			await resolveRoles(
+				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+				{ repo, roster, bootstrapLogins: new Set(), now }
+			);
+
+			expect(roster.stored?.admins).toEqual(['gh-rmjoia']);
+			expect(roster.stored?.admins.length).toBe(1);
+		});
+
+		it('does NOT touch the roster when no legacy id is present (no-op repair)', async () => {
+			// Sanity: the repair writes the roster only when legacy id is in
+			// it. Otherwise the roster stays untouched (no spurious writes,
+			// no contention with concurrent operators).
+			seedLegacy();
+			roster.seed(['gh-someoneelse']);
+			const writesBefore = roster.writes;
+
+			await resolveRoles(
+				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+				{ repo, roster, bootstrapLogins: new Set(), now }
+			);
+
+			expect(roster.stored?.admins).toEqual(['gh-someoneelse']);
+			// Repair didn't fire; only writes from the bootstrap path (none
+			// in this test — env var empty) would bump this counter.
+			expect(roster.writes).toBe(writesBefore);
 		});
 	});
 

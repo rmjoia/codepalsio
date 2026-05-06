@@ -79,8 +79,11 @@ export async function resolveRoles(
 	// PR #40: write the new shape first, then best-effort delete the old.
 	// `migrationApplied` flags this run as a one-time graduation so the
 	// bootstrap branch below can fire even though `existing` is now
-	// truthy (it points at the migrated record).
+	// truthy (it points at the migrated record). `legacyIdMigrated`
+	// captures the OLD id so we can normalize the roster too — see
+	// "Roster repair" below.
 	let migrationApplied = false;
+	let legacyIdMigrated: string | null = null;
 	if (existing && existing.id !== targetId) {
 		const legacyId = existing.id;
 		const migrated: UserRecord = {
@@ -103,12 +106,34 @@ export async function resolveRoles(
 		}
 		existing = migrated;
 		migrationApplied = true;
+		legacyIdMigrated = legacyId;
 	}
 
 	// Roster is authoritative for the admin role. Read once and reuse.
 	// Tolerates the seed-from-userRepo path: a fresh deploy with admins
 	// recorded only in user docs gets reconciled on first login.
-	const roster = await getOrSeedRoster(deps.roster, deps.repo, now);
+	const initialRoster = await getOrSeedRoster(deps.roster, deps.repo, now);
+
+	// Roster repair: getOrSeedRoster seeds with raw user-record ids. If the
+	// roster was seeded from legacy user records (or this user was
+	// previously granted admin while their record was still legacy-shape),
+	// the roster carries the legacy id rather than `gh-<username>`. Without
+	// repair, isAdminPerRoster below would return false against targetId
+	// and the user would silently lose admin on this login. Swap legacy →
+	// canonical, dedupe in case both somehow coexist. (Copilot review.)
+	let roster = initialRoster;
+	if (legacyIdMigrated && initialRoster.admins.includes(legacyIdMigrated)) {
+		const stamp = now();
+		const repairedAdmins = Array.from(
+			new Set(initialRoster.admins.map((id) => (id === legacyIdMigrated ? targetId : id)))
+		);
+		roster = await deps.roster.write({
+			...initialRoster,
+			admins: repairedAdmins,
+			updatedAt: stamp,
+		});
+	}
+
 	const isAdminPerRoster = roster.admins.includes(targetId);
 
 	// Bootstrap-eligibility: env var matches AND user not already admin AND
