@@ -1,5 +1,5 @@
 import { type UserRepository, type UserRecord, userIdForGithub } from './users';
-import { type AdminRosterRepository, getOrSeedRoster } from './admin-roster';
+import { type AdminRosterRepository, getOrSeedRoster, mutateRoster } from './admin-roster';
 
 /**
  * What we need from the principal to resolve roles. Decoupled from the
@@ -33,14 +33,33 @@ export interface RolesResolverDeps {
  *   - Admin role → AdminRoster (single doc with optimistic concurrency)
  *   - Other roles → UserRecord.roles[] (no atomicity needs)
  *
- * Bootstrap:
- *   - If user has no DB record AND is in ADMIN_GITHUB_LOGINS, create the
- *     user record AND add them to the roster. Returns ['admin'].
+ * Discovery:
+ *   - findByGithubUsernameAcrossShapes covers both `gh-<username>` (post-#32)
+ *     and legacy non-`gh-` ids (pre-#32 records like the maintainer's own
+ *     pre-PR-#14 doc, where id === SWA-principal-hash).
  *
- * Once a user has a DB record, the env var has no effect on them — UI
- * grants/revokes are the only way to change roles. This is the intent:
- * env var seeds the FIRST admin on a fresh deploy; the running system is
- * managed via the /admin UI.
+ * Legacy migration:
+ *   - When discovery returns a legacy-shape record (id !== `gh-<username>`),
+ *     migrate it to the new shape: upsert under `gh-<username>` preserving
+ *     fields, best-effort delete the legacy doc. After migration the
+ *     bootstrap path can fire — see "Bootstrap" below.
+ *
+ * Bootstrap:
+ *   - Fires when the user has NO new-shape record yet AND is in
+ *     ADMIN_GITHUB_LOGINS. Two flavours:
+ *       (a) Truly fresh user → create record + add to roster.
+ *       (b) Just-migrated legacy user → append admin role to migrated
+ *           record + add to roster. This is the one-time graduation of
+ *           pre-#32 records into the role system; without it, legacy
+ *           users in ADMIN_GITHUB_LOGINS would never get admin because
+ *           their pre-existing legacy record disqualified them from the
+ *           bootstrap branch.
+ *
+ * Once a user has a `gh-<username>` record, the env var has no effect on
+ * them — UI grants/revokes via /admin become the only way to change
+ * roles. Intent: env var seeds first admin(s) on a fresh deploy AND
+ * graduates legacy records on first login post-migration; after that the
+ * running system is managed via /admin.
  */
 export async function resolveRoles(
 	principal: ResolvedPrincipal,
@@ -53,14 +72,150 @@ export async function resolveRoles(
 	const targetId = userIdForGithub(username);
 	const now = deps.now ?? (() => new Date().toISOString());
 
-	const existing = await deps.repo.findByGithubUsername(username);
+	// Discover record across both shapes.
+	let existing = await deps.repo.findByGithubUsernameAcrossShapes(username);
 
-	// Roster is authoritative for the admin role. Read once and reuse.
-	// We tolerate the seed-from-userRepo path here too: a fresh deploy
-	// with admins recorded only in user docs gets reconciled on first
-	// login.
-	const roster = await getOrSeedRoster(deps.roster, deps.repo, now);
-	const isAdminPerRoster = roster.admins.includes(targetId);
+	// Legacy-shape migration. Mirrors the profile auto-heal pattern from
+	// PR #40: write the new shape first, then best-effort delete the old.
+	// `migrationApplied` flags this run as a one-time graduation so the
+	// bootstrap branch below can fire even though `existing` is now
+	// truthy (it points at the migrated record). `legacyIdMigrated`
+	// captures the OLD id so we can normalize the roster too — see
+	// "Roster repair" below.
+	let migrationApplied = false;
+	let legacyIdMigrated: string | null = null;
+	if (existing && existing.id !== targetId) {
+		const legacyId = existing.id;
+		const migrated: UserRecord = {
+			...existing,
+			id: targetId,
+			githubUsername: username,
+			swaUserId: principal.swaUserId,
+			roles: existing.roles ?? [],
+			updatedAt: now(),
+		};
+		await deps.repo.upsert(migrated);
+		// Don't fail role resolution if the legacy delete fails — the
+		// migrated doc is canonical from this point on. Subsequent logins
+		// will discover the gh-<username> record via point-read first and
+		// won't re-enter this branch.
+		try {
+			await deps.repo.deleteById(legacyId);
+		} catch {
+			// Swallow — migration already succeeded with the upsert above.
+		}
+		existing = migrated;
+		migrationApplied = true;
+		legacyIdMigrated = legacyId;
+	}
+
+	// Roster is authoritative for the admin role. We compute
+	// isAdminPerRoster from a fresh read AND, if the just-migrated user
+	// had their legacy id sitting in the roster (because a previous
+	// admin grant happened while the record was legacy-shape, or
+	// getOrSeedRoster seeded from such a record), we repair the roster
+	// in the same call: swap legacy → canonical, dedupe.
+	//
+	// The repair uses mutateRoster (CAS retry loop) — a previous version
+	// did a single read-then-write which could throw RosterStaleError on
+	// contention and fail the login closed (Copilot review). With
+	// mutateRoster, concurrent writers don't cost the user their roles.
+	let isAdminPerRoster: boolean;
+	if (legacyIdMigrated) {
+		const legacyId = legacyIdMigrated; // Capture for closure typing.
+		isAdminPerRoster = await mutateRoster<boolean>(
+			deps.roster,
+			deps.repo,
+			(current) => {
+				if (!current.admins.includes(legacyId)) {
+					// Roster doesn't carry the legacy id — nothing to repair.
+					// Could be: (a) user was never admin under legacy shape, or
+					// (b) a concurrent caller already repaired it. Either way,
+					// abort the write and report the current admin status.
+					return { abort: current.admins.includes(targetId) };
+				}
+				const repairedAdmins = Array.from(
+					new Set(current.admins.map((id) => (id === legacyId ? targetId : id)))
+				);
+				return {
+					next: { ...current, admins: repairedAdmins },
+					result: repairedAdmins.includes(targetId),
+				};
+			},
+			{ now: deps.now }
+		);
+	} else {
+		// Fresh read; no repair needed. getOrSeedRoster tolerates the
+		// seed-from-userRepo path so a fresh deploy with admins recorded
+		// only in user docs gets reconciled on first login.
+		const initialRoster = await getOrSeedRoster(deps.roster, deps.repo, now);
+		isAdminPerRoster = initialRoster.admins.includes(targetId);
+	}
+
+	// Bootstrap-eligibility: env var matches AND user not already admin AND
+	// (no record yet OR just migrated from legacy shape — pre-#32 records
+	// effectively didn't exist from the new role system's perspective).
+	const eligibleForBootstrap =
+		deps.bootstrapLogins.has(username) && !isAdminPerRoster && (!existing || migrationApplied);
+
+	if (eligibleForBootstrap) {
+		const stamp = now();
+		// Roster FIRST, then user record. If the roster write fails, no
+		// user record is created — the next login retries cleanly.
+		// Writing the user record first would risk leaving `existing`
+		// truthy for next time while the user is still missing from the
+		// roster, locking them out permanently.
+		//
+		// Uses mutateRoster (CAS retry loop) so concurrent roster writes
+		// don't cause this login to fail closed. If a concurrent caller
+		// already added us, abort the write and proceed — we're admin
+		// either way. (Copilot review on the legacy-id repair surfaced
+		// the same staleness risk on this older write; fixing both.)
+		await mutateRoster<void>(
+			deps.roster,
+			deps.repo,
+			(current) => {
+				if (current.admins.includes(targetId)) {
+					return { abort: undefined };
+				}
+				return {
+					next: {
+						...current,
+						admins: Array.from(new Set([...current.admins, targetId])),
+					},
+					result: undefined,
+				};
+			},
+			{ now: deps.now }
+		);
+
+		if (existing) {
+			// Migrated-legacy case: append admin role to the migrated
+			// record (preserve any pre-existing roles).
+			const newRoles = Array.from(new Set([...(existing.roles ?? []), 'admin']));
+			await deps.repo.upsert({
+				...existing,
+				roles: newRoles,
+				grantedBy: existing.grantedBy ?? 'bootstrap',
+				grantedAt: existing.grantedAt ?? stamp,
+				updatedAt: stamp,
+			});
+			return ['admin', ...newRoles.filter((r) => r !== 'admin')];
+		}
+
+		// Truly-fresh case: create the record from scratch.
+		const record: UserRecord = {
+			id: targetId,
+			githubUsername: username,
+			swaUserId: principal.swaUserId,
+			roles: ['admin'],
+			grantedBy: 'bootstrap',
+			grantedAt: stamp,
+			updatedAt: stamp,
+		};
+		await deps.repo.upsert(record);
+		return ['admin'];
+	}
 
 	if (existing) {
 		// Backfill swaUserId on first login if the record was created via
@@ -78,11 +233,9 @@ export async function resolveRoles(
 		return isAdminPerRoster ? ['admin', ...otherRoles] : otherRoles;
 	}
 
-	// No DB record. Three sub-cases:
-	//   1. Already in roster (e.g. previously granted, record cleaned up
-	//      out-of-band) → keep them admin and rebuild the user record.
-	//   2. In bootstrap env → create user record AND add to roster.
-	//   3. Otherwise → no roles.
+	// No record AND not bootstrap-eligible. One last branch: if the user
+	// is already in the roster (e.g. previously granted, record cleaned
+	// up out-of-band) → rebuild the user record from roster state.
 	if (isAdminPerRoster) {
 		const stamp = now();
 		const rebuilt: UserRecord = {
@@ -95,34 +248,6 @@ export async function resolveRoles(
 			updatedAt: stamp,
 		};
 		await deps.repo.upsert(rebuilt);
-		return ['admin'];
-	}
-
-	if (deps.bootstrapLogins.has(username)) {
-		const stamp = now();
-		// Roster FIRST, then user record. If the roster write fails, no
-		// user record is created — the next login retries the bootstrap
-		// path cleanly. Writing the user record first would risk leaving
-		// `existing` truthy for next time while the user is still missing
-		// from the roster, locking them out permanently. If the roster
-		// write succeeds and the user-record write fails, the rebuild
-		// branch above ("isAdminPerRoster && !existing") handles it on
-		// the next login.
-		await deps.roster.write({
-			...roster,
-			admins: Array.from(new Set([...roster.admins, targetId])),
-			updatedAt: stamp,
-		});
-		const record: UserRecord = {
-			id: targetId,
-			githubUsername: username,
-			swaUserId: principal.swaUserId,
-			roles: ['admin'],
-			grantedBy: 'bootstrap',
-			grantedAt: stamp,
-			updatedAt: stamp,
-		};
-		await deps.repo.upsert(record);
 		return ['admin'];
 	}
 

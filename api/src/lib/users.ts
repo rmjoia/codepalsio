@@ -51,6 +51,14 @@ export interface UserRepository {
 	 */
 	findByGithubUsernameAcrossShapes(githubUsername: string): Promise<UserRecord | null>;
 	upsert(record: UserRecord): Promise<UserRecord>;
+	/**
+	 * Delete a user record by its `id` (which equals the partition key on
+	 * the users container — `/id`). Idempotent: a 404 (already gone) is
+	 * swallowed silently. Used by the legacy-shape migration path in
+	 * resolveRoles to remove the legacy doc after creating its
+	 * `gh-<username>` replacement.
+	 */
+	deleteById(id: string): Promise<void>;
 	listByRole(role: string): Promise<UserRecord[]>;
 	countByRole(role: string): Promise<number>;
 }
@@ -103,6 +111,15 @@ class CosmosUserRepository implements UserRepository {
 		// Cosmos returns the persisted resource; fall back to the input on the
 		// off-chance it's omitted (shouldn't happen with the SDK, but be safe).
 		return (resource as UserRecord | undefined) ?? record;
+	}
+
+	async deleteById(id: string): Promise<void> {
+		try {
+			await this.container.item(id, id).delete();
+		} catch (e: unknown) {
+			if (isNotFound(e)) return;
+			throw e;
+		}
 	}
 
 	async listByRole(role: string): Promise<UserRecord[]> {

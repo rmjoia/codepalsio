@@ -37,6 +37,11 @@ export class FakeUserRepository implements UserRepository {
 		return { ...record };
 	}
 
+	async deleteById(id: string): Promise<void> {
+		// Idempotent — Map.delete returns false on missing key, no throw.
+		this.store.delete(id);
+	}
+
 	async listByRole(role: string): Promise<UserRecord[]> {
 		return [...this.store.values()].filter((r) => r.roles?.includes(role)).map((r) => ({ ...r }));
 	}

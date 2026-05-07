@@ -17,6 +17,9 @@ param currentUserObjectId string = ''
 @description('Public IP of the operator running the deploy, in CIDR or single-IP form. Added to the Key Vault firewall allowlist so the post-deploy PowerShell can write secrets. Leave empty in headless CI — the firewall then relies solely on AzureServices bypass. Detect with: (Invoke-RestMethod https://api.ipify.org).Trim()')
 param operatorPublicIp string = ''
 
+@description('Comma-separated GitHub logins to seed as admins on first sign-in. Wired into the SWA app setting `ADMIN_GITHUB_LOGINS` and read by the `/api/get-roles` rolesSource handler bootstrap path. Once a user logs in, the AdminRoster (Cosmos) takes over and this env var stops driving their role — leaving it set is harmless. Default: `rmjoia` on dev, empty on prod (override via params file when ready to seed prod admins).')
+param adminGithubLogins string = environment == 'dev' ? 'rmjoia' : ''
+
 var project = 'codepals'
 var staticWebAppName = '${project}-${environment}'
 var keyVaultName = '${project}-${environment}-kv'
@@ -321,6 +324,11 @@ resource staticWebAppConfig 'Microsoft.Web/staticSites/config@2023-01-01' = {
     KEY_VAULT_URI: keyVault.properties.vaultUri
     MANAGED_IDENTITY_CLIENT_ID: managedIdentity.properties.clientId
     ENVIRONMENT: environment
+    // Comma-separated GitHub logins to seed as admins on first sign-in.
+    // Read by /api/get-roles → resolveRoles bootstrap path. After a user
+    // logs in, the persistent AdminRoster (Cosmos) takes over — leaving
+    // this set is harmless.
+    ADMIN_GITHUB_LOGINS: adminGithubLogins
   }
 }
 
