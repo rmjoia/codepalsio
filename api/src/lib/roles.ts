@@ -1,5 +1,5 @@
 import { type UserRepository, type UserRecord, userIdForGithub } from './users';
-import { type AdminRosterRepository, getOrSeedRoster } from './admin-roster';
+import { type AdminRosterRepository, getOrSeedRoster, mutateRoster } from './admin-roster';
 
 /**
  * What we need from the principal to resolve roles. Decoupled from the
@@ -109,32 +109,48 @@ export async function resolveRoles(
 		legacyIdMigrated = legacyId;
 	}
 
-	// Roster is authoritative for the admin role. Read once and reuse.
-	// Tolerates the seed-from-userRepo path: a fresh deploy with admins
-	// recorded only in user docs gets reconciled on first login.
-	const initialRoster = await getOrSeedRoster(deps.roster, deps.repo, now);
-
-	// Roster repair: getOrSeedRoster seeds with raw user-record ids. If the
-	// roster was seeded from legacy user records (or this user was
-	// previously granted admin while their record was still legacy-shape),
-	// the roster carries the legacy id rather than `gh-<username>`. Without
-	// repair, isAdminPerRoster below would return false against targetId
-	// and the user would silently lose admin on this login. Swap legacy →
-	// canonical, dedupe in case both somehow coexist. (Copilot review.)
-	let roster = initialRoster;
-	if (legacyIdMigrated && initialRoster.admins.includes(legacyIdMigrated)) {
-		const stamp = now();
-		const repairedAdmins = Array.from(
-			new Set(initialRoster.admins.map((id) => (id === legacyIdMigrated ? targetId : id)))
+	// Roster is authoritative for the admin role. We compute
+	// isAdminPerRoster from a fresh read AND, if the just-migrated user
+	// had their legacy id sitting in the roster (because a previous
+	// admin grant happened while the record was legacy-shape, or
+	// getOrSeedRoster seeded from such a record), we repair the roster
+	// in the same call: swap legacy → canonical, dedupe.
+	//
+	// The repair uses mutateRoster (CAS retry loop) — a previous version
+	// did a single read-then-write which could throw RosterStaleError on
+	// contention and fail the login closed (Copilot review). With
+	// mutateRoster, concurrent writers don't cost the user their roles.
+	let isAdminPerRoster: boolean;
+	if (legacyIdMigrated) {
+		const legacyId = legacyIdMigrated; // Capture for closure typing.
+		isAdminPerRoster = await mutateRoster<boolean>(
+			deps.roster,
+			deps.repo,
+			(current) => {
+				if (!current.admins.includes(legacyId)) {
+					// Roster doesn't carry the legacy id — nothing to repair.
+					// Could be: (a) user was never admin under legacy shape, or
+					// (b) a concurrent caller already repaired it. Either way,
+					// abort the write and report the current admin status.
+					return { abort: current.admins.includes(targetId) };
+				}
+				const repairedAdmins = Array.from(
+					new Set(current.admins.map((id) => (id === legacyId ? targetId : id)))
+				);
+				return {
+					next: { ...current, admins: repairedAdmins },
+					result: repairedAdmins.includes(targetId),
+				};
+			},
+			{ now: deps.now }
 		);
-		roster = await deps.roster.write({
-			...initialRoster,
-			admins: repairedAdmins,
-			updatedAt: stamp,
-		});
+	} else {
+		// Fresh read; no repair needed. getOrSeedRoster tolerates the
+		// seed-from-userRepo path so a fresh deploy with admins recorded
+		// only in user docs gets reconciled on first login.
+		const initialRoster = await getOrSeedRoster(deps.roster, deps.repo, now);
+		isAdminPerRoster = initialRoster.admins.includes(targetId);
 	}
-
-	const isAdminPerRoster = roster.admins.includes(targetId);
 
 	// Bootstrap-eligibility: env var matches AND user not already admin AND
 	// (no record yet OR just migrated from legacy shape — pre-#32 records
@@ -149,11 +165,29 @@ export async function resolveRoles(
 		// Writing the user record first would risk leaving `existing`
 		// truthy for next time while the user is still missing from the
 		// roster, locking them out permanently.
-		await deps.roster.write({
-			...roster,
-			admins: Array.from(new Set([...roster.admins, targetId])),
-			updatedAt: stamp,
-		});
+		//
+		// Uses mutateRoster (CAS retry loop) so concurrent roster writes
+		// don't cause this login to fail closed. If a concurrent caller
+		// already added us, abort the write and proceed — we're admin
+		// either way. (Copilot review on the legacy-id repair surfaced
+		// the same staleness risk on this older write; fixing both.)
+		await mutateRoster<void>(
+			deps.roster,
+			deps.repo,
+			(current) => {
+				if (current.admins.includes(targetId)) {
+					return { abort: undefined };
+				}
+				return {
+					next: {
+						...current,
+						admins: Array.from(new Set([...current.admins, targetId])),
+					},
+					result: undefined,
+				};
+			},
+			{ now: deps.now }
+		);
 
 		if (existing) {
 			// Migrated-legacy case: append admin role to the migrated

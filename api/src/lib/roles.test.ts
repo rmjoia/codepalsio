@@ -405,6 +405,44 @@ describe('resolveRoles', () => {
 			// in this test — env var empty) would bump this counter.
 			expect(roster.writes).toBe(writesBefore);
 		});
+
+		it('roster repair survives concurrent etag contention (mutateRoster retry loop)', async () => {
+			// Copilot review (round 2): the original repair did a single
+			// read-modify-write that would throw RosterStaleError on
+			// contention and fail the login closed. The fix: route the
+			// repair through mutateRoster's CAS retry loop. This test
+			// simulates one round of contention via the fake's
+			// simulateContention() hook.
+			seedLegacy({ roles: ['admin'] });
+			roster.seed([LEGACY_ID]);
+			roster.simulateContention(1); // First write attempt sees a stale etag.
+
+			const roles = await resolveRoles(
+				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+				{ repo, roster, bootstrapLogins: new Set(), now }
+			);
+
+			// Despite the contention bump, the user keeps admin and the
+			// roster is fully repaired on the retry.
+			expect(roles).toContain('admin');
+			expect(roster.stored?.admins).toEqual(['gh-rmjoia']);
+		});
+
+		it('bootstrap path also survives concurrent etag contention', async () => {
+			// Same fix applied prophylactically to the existing bootstrap
+			// roster write — it had the same staleness risk pre-PR. With
+			// mutateRoster, contention resolves transparently and the user
+			// gets admin without operator intervention.
+			roster.simulateContention(1);
+
+			const roles = await resolveRoles(
+				{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+				{ repo, roster, bootstrapLogins: new Set(['rmjoia']), now }
+			);
+
+			expect(roles).toEqual(['admin']);
+			expect(roster.stored?.admins).toContain('gh-rmjoia');
+		});
 	});
 
 	describe('bootstrap atomicity', () => {
