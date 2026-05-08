@@ -230,7 +230,15 @@ jobs:
   # See infra/README.md for setup.
   # ─────────────────────────────────────────────────────────────────────
   infra_apply_dev:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # workflow_dispatch is restricted to main because the federated
+    # credential on codepals-dev-mi is bound to
+    # `repo:rmjoia/codepalsio:ref:refs/heads/main` (Initialize-Infra.ps1).
+    # Dispatching from a non-main ref would fail OIDC. Widen the
+    # federated credential subject if branch infra-applies are ever
+    # needed.
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     needs: validate
     runs-on: ubuntu-latest
     name: Apply Bicep (dev)
@@ -264,14 +272,16 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: What-if (preview Bicep diff)
         run: |
+          # RG name follows the Initialize-Infra.ps1 convention:
+          # `${project}-${environment}-rg` → codepals-dev-rg.
           az deployment group what-if \
-            --resource-group codepals-dev \
+            --resource-group codepals-dev-rg \
             --template-file infra/main.bicep \
             --parameters environment=dev
       - name: Apply Bicep
         run: |
           az deployment group create \
-            --resource-group codepals-dev \
+            --resource-group codepals-dev-rg \
             --template-file infra/main.bicep \
             --parameters environment=dev \
             --name "github-actions-${{ github.run_id }}"
@@ -280,11 +290,17 @@ jobs:
   # Stage 3a — Dev deploy. Targets the DEV SWA's production env, which
   # serves dev.codepals.io. Only after validate is green AND infra is
   # applied (so app settings, containers, etc. exist).
-  # Triggered by push-to-main or workflow_dispatch.
+  # Triggered by push-to-main or workflow_dispatch on main.
   # NOT a deploy to actual production (codepals.io) — see header comment.
   # ─────────────────────────────────────────────────────────────────────
   dev_deploy:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Restricted to main: dev_deploy needs infra_apply_dev, which is
+    # main-only (federated OIDC subject restriction). Allowing dispatch
+    # from non-main here would just queue forever waiting on a skipped
+    # dependency.
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     needs: [validate, infra_apply_dev]
     runs-on: ubuntu-latest
     name: Deploy dev (dev.codepals.io)
@@ -314,7 +330,10 @@ jobs:
   # configured, so the full auth-flow chain must reach GitHub.
   # ─────────────────────────────────────────────────────────────────────
   e2e_dev:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Same main-only restriction as dev_deploy (its only dependency).
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     needs: dev_deploy
     runs-on: ubuntu-latest
     name: E2E (dev.codepals.io)

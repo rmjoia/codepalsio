@@ -108,7 +108,7 @@ the workflow run log for debugging) on the repo:
 
 | Variable | Where to find it |
 |---|---|
-| `AZURE_CLIENT_ID_DEV` | Bicep output `managedIdentityClientId` from the dev deployment, OR `Get-AzUserAssignedIdentity -ResourceGroupName codepals-dev -Name codepals-dev-mi \| Select-Object -ExpandProperty ClientId` |
+| `AZURE_CLIENT_ID_DEV` | Bicep output `managedIdentityClientId` from the dev deployment, OR `Get-AzUserAssignedIdentity -ResourceGroupName codepals-dev-rg -Name codepals-dev-mi \| Select-Object -ExpandProperty ClientId` |
 | `AZURE_TENANT_ID` | `(Get-AzContext).Tenant.Id` |
 | `AZURE_SUBSCRIPTION_ID` | `(Get-AzContext).Subscription.Id` |
 
@@ -117,11 +117,20 @@ Actions → Variables tab → New repository variable**.
 
 Once these are set and the next `push` to `main` runs, the
 `infra_apply_dev` job runs `az deployment group what-if` (preview)
-followed by `az deployment group create` against `codepals-dev` —
-no operator-clicked PowerShell required. `dev_deploy` (the SWA app
-deploy) waits for `infra_apply_dev` to succeed so any new app
-settings / containers are in place before the new app code goes
-live.
+followed by `az deployment group create` against `codepals-dev-rg`
+(the RG name follows `Initialize-Infra.ps1`'s convention:
+`${project}-${environment}-rg`) — no operator-clicked PowerShell
+required. `dev_deploy` (the SWA app deploy) waits for
+`infra_apply_dev` to succeed so any new app settings / containers
+are in place before the new app code goes live.
+
+**Note:** `infra_apply_dev` is restricted to `main` because the
+managed identity's federated credential subject is locked to
+`repo:rmjoia/codepalsio:ref:refs/heads/main`. Dispatching the
+workflow from a non-main branch will skip the job (the dispatch
+runs the build path but no deploy / apply happens). To enable
+non-main dispatches, widen the federated credential subject in
+`Initialize-Infra.ps1`.
 
 For prod: a parallel `infra_apply_prod` job will be added when ready
 to go live, gated on a manual-approval `production` GitHub
