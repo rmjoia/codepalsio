@@ -30,7 +30,9 @@ Initialize-Infra -Environment prod -SubscriptionId "your-subscription-id"
 - Resource Group
 - Static Web App (with user-assigned managed identity)
 - Key Vault (access policy model; soft delete enabled, 90-day retention)
-- User-Assigned Managed Identity (Cosmos DB Data Contributor)
+- User-Assigned Managed Identity:
+  - Cosmos DB Data Contributor (data plane)
+  - **Contributor on the resource group** (control plane — required for GitHub Actions to deploy Bicep updates via OIDC)
 - Cosmos DB serverless account with `users`, `profiles`, `connections` containers
 - DNS records for the environment's custom domain
 - Federated identity credential for GitHub Actions OIDC
@@ -90,6 +92,40 @@ Initialize-Infra -Environment prod -SubscriptionId "your-prod-subscription-id"
   - Az.Dns
   - Az.CosmosDB
 - Authenticated Azure session (`Connect-AzAccount`)
+- For the FIRST `Initialize-Infra` run: an account with **Owner** or
+  **User Access Administrator** on the target subscription/RG (the
+  Bicep grants the managed identity `Contributor` on the RG, which
+  requires a role-assignment-creating identity to bootstrap).
+  Subsequent applies are run by GitHub Actions via OIDC against the MI.
+
+## GitHub Actions OIDC setup
+
+After `Initialize-Infra -Environment dev` completes, the workflow's
+`infra_apply_dev` job can apply Bicep updates automatically — but you
+need to wire three GitHub Actions **variables** (NOT secrets — these
+are non-sensitive identifiers; using vars also makes them visible in
+the workflow run log for debugging) on the repo:
+
+| Variable | Where to find it |
+|---|---|
+| `AZURE_CLIENT_ID_DEV` | Bicep output `managedIdentityClientId` from the dev deployment, OR `Get-AzUserAssignedIdentity -ResourceGroupName codepals-dev -Name codepals-dev-mi \| Select-Object -ExpandProperty ClientId` |
+| `AZURE_TENANT_ID` | `(Get-AzContext).Tenant.Id` |
+| `AZURE_SUBSCRIPTION_ID` | `(Get-AzContext).Subscription.Id` |
+
+Set them in GitHub: **Repo → Settings → Secrets and variables →
+Actions → Variables tab → New repository variable**.
+
+Once these are set and the next `push` to `main` runs, the
+`infra_apply_dev` job runs `az deployment group what-if` (preview)
+followed by `az deployment group create` against `codepals-dev` —
+no operator-clicked PowerShell required. `dev_deploy` (the SWA app
+deploy) waits for `infra_apply_dev` to succeed so any new app
+settings / containers are in place before the new app code goes
+live.
+
+For prod: a parallel `infra_apply_prod` job will be added when ready
+to go live, gated on a manual-approval `production` GitHub
+Environment and using `AZURE_CLIENT_ID_PROD` from the prod MI.
 
 ## Architecture
 

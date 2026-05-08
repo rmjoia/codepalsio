@@ -212,14 +212,80 @@ jobs:
           exit 1
 
   # ─────────────────────────────────────────────────────────────────────
+  # Stage 2.5 — Apply Bicep to the dev resource group. Idempotent — Bicep
+  # is declarative, re-running with no diff is a no-op. Runs BEFORE
+  # dev_deploy so any new app settings, container schemas, etc. are in
+  # place before the app code that depends on them goes live.
+  #
+  # Auth: OIDC against the user-assigned managed identity (`codepals-dev-mi`)
+  # which has a federated credential for `repo:rmjoia/codepalsio:ref:refs/
+  # heads/main` and the Contributor role on the dev RG (granted by
+  # main.bicep itself — bootstrap requires the FIRST apply to come from a
+  # human Owner via infra/Initialize-Infra.ps1; after that CI takes over).
+  #
+  # GitHub vars required:
+  #   AZURE_CLIENT_ID_DEV       — MI client id (Bicep output: managedIdentityClientId)
+  #   AZURE_TENANT_ID           — AAD tenant
+  #   AZURE_SUBSCRIPTION_ID     — subscription id
+  # See infra/README.md for setup.
+  # ─────────────────────────────────────────────────────────────────────
+  infra_apply_dev:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: ubuntu-latest
+    name: Apply Bicep (dev)
+    permissions:
+      id-token: write # Required for azure/login OIDC.
+      contents: read
+    environment:
+      name: dev
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify required GitHub vars are set
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID_DEV }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SUB_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          missing=""
+          [ -z "$CLIENT_ID" ] && missing="$missing AZURE_CLIENT_ID_DEV"
+          [ -z "$TENANT_ID" ] && missing="$missing AZURE_TENANT_ID"
+          [ -z "$SUB_ID" ] && missing="$missing AZURE_SUBSCRIPTION_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing GitHub Actions variable(s):$missing. See infra/README.md → 'GitHub Actions OIDC setup'."
+            exit 1
+          fi
+          echo "OIDC vars present."
+      - name: Azure login (OIDC, user-assigned MI)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID_DEV }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: What-if (preview Bicep diff)
+        run: |
+          az deployment group what-if \
+            --resource-group codepals-dev \
+            --template-file infra/main.bicep \
+            --parameters environment=dev
+      - name: Apply Bicep
+        run: |
+          az deployment group create \
+            --resource-group codepals-dev \
+            --template-file infra/main.bicep \
+            --parameters environment=dev \
+            --name "github-actions-${{ github.run_id }}"
+
+  # ─────────────────────────────────────────────────────────────────────
   # Stage 3a — Dev deploy. Targets the DEV SWA's production env, which
-  # serves dev.codepals.io. Only after validate is green.
+  # serves dev.codepals.io. Only after validate is green AND infra is
+  # applied (so app settings, containers, etc. exist).
   # Triggered by push-to-main or workflow_dispatch.
   # NOT a deploy to actual production (codepals.io) — see header comment.
   # ─────────────────────────────────────────────────────────────────────
   dev_deploy:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    needs: validate
+    needs: [validate, infra_apply_dev]
     runs-on: ubuntu-latest
     name: Deploy dev (dev.codepals.io)
     environment:

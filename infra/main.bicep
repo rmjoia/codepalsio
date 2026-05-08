@@ -278,6 +278,32 @@ resource cosmosDbRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAs
   }
 }
 
+// ARM control-plane RBAC: grant the managed identity Contributor on its
+// own resource group so GitHub Actions (federated to this MI via OIDC)
+// can run `az deployment group create` against this RG. Without this,
+// the workflow's infra_apply_dev job has no permission to deploy Bicep
+// updates and falls back to operator-clicked PowerShell.
+//
+// Bootstrap: the FIRST application of this Bicep must come from an
+// identity that already has User Access Administrator / Owner on the
+// RG (typically the maintainer running `Initialize-Infra.ps1` locally).
+// After that, this role assignment is in place and CI can apply
+// subsequent updates.
+//
+// Built-in role IDs are subscription-scoped and stable. Contributor:
+// b24988ac-6180-42a0-ab88-20f7382dd24c.
+var contributorRoleId = 'b24988ac-6180-42a0-ab88-20f7382dd24c'
+
+resource managedIdentityContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: resourceGroup()
+  name: guid(resourceGroup().id, managedIdentity.id, contributorRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', contributorRoleId)
+    principalId: managedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // Cosmos secrets live in Key Vault as the canonical store for operator /
 // rotation use. The SWA app settings below also get the connection string
 // directly because SWA Free doesn't resolve Key Vault references (Standard
