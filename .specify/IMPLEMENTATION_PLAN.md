@@ -1,3 +1,8 @@
+> ⚠️ **HISTORICAL — superseded by `.specify/PROJECT_STATUS.md`** (reconciled 2026-05-08).
+> This document predates SWA built-in auth migration (PR #14) and references the now-deleted custom OAuth endpoints (`/api/auth/login`, `/api/auth/callback`). Auth, profile setup, /find, and reporting are tracked in current specs (002, 003) — see PROJECT_STATUS.md. Preserved here as a historical artifact.
+
+---
+
 # GitHub Authentication & Registration Flow - Implementation Plan
 
 ## Current Status

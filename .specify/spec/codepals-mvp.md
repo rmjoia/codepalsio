@@ -1,3 +1,8 @@
+> ⚠️ **HISTORICAL — see `.specify/PROJECT_STATUS.md` for current state** (reconciled 2026-05-08).
+> Phase 1 (foundation, landing, IaC, CI/CD) is shipped. Phase 2 (profiles, /find, admin) is mostly shipped. The Connections / Help Board / Karma / Events surfaces and Phase 3-4 features remain valid intent. New work is tracked via numbered specs (`002-...`, `003-...`) — this document is preserved as the original vision artifact.
+
+---
+
 # Feature Specification: CodePals.io MVP Platform
 
 **Feature Branch**: `001-codepals-mvp`  

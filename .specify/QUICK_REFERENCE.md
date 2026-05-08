@@ -1,3 +1,8 @@
+> ⚠️ **HISTORICAL — see `.specify/PROJECT_STATUS.md` for current state** (reconciled 2026-05-08).
+> URLs and constitution links are still mostly accurate. Status / roadmap content is stale — many "Phase 2/3/4 not started" items are now shipped (PRs #11–#46). Use PROJECT_STATUS.md for the authoritative roadmap.
+
+---
+
 # CodePals.io MVP: Quick Reference Guide for Teams
 
 **Last Updated**: 2025-11-16  

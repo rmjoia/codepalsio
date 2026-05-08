@@ -1,3 +1,7 @@
+> 🟡 **PARTIALLY SHIPPED — see `.specify/PROJECT_STATUS.md`.** Browse/discovery shipped via /find + GET /api/profiles (PRs #29, #30) with structurally-enforced privacy guard. Connection invites NOT yet implemented — the `connections` Cosmos container exists (Bicep) but no API/UI. Future spec ("Connections") will replace the connections section here. Spec 002 (spoken-languages filter) extends discovery; spec 003 (community safety) will inform the connection-request UX.
+
+---
+
 # Phase 2, Weeks 4-5: Profile Browse & Discovery, Connection Invites
 
 **Status**: Not Started  

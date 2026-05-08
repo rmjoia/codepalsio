@@ -1,3 +1,7 @@
+> 📋 **NOT STARTED — see `.specify/PROJECT_STATUS.md` Roadmap → FUTURE.** Events / Help Board / Karma / Badges remain valid product intent but no code is shipped. Each will get its own numbered spec (`004-...`, `005-...`) when prioritized — informed by spec 003's safety patterns (reporting, blocking, audit) once those are live.
+
+---
+
 # Phase 3, Weeks 6-8: Events, Help Board, Karma & Badges System
 
 **Status**: Not Started  

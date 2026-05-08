@@ -1,3 +1,7 @@
+> ✅ **SHIPPED — Phase 1 Week 1 is complete.** See `.specify/PROJECT_STATUS.md` for the consolidated record. Azure RG + SWA + KV + MI + Cosmos provisioned (PR #11), GitHub OAuth wired (PR #14, #36), CI/CD pipeline operational (PR #38, #45, #46), API skeleton ported to TypeScript Functions v4 (PR #19, #15). Original task descriptions preserved below for historical reference; checkboxes were not retroactively updated.
+
+---
+
 # Phase 1, Week 1: Infrastructure & Setup
 
 **Status**: Not Started  
