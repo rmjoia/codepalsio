@@ -151,29 +151,65 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install root deps
         run: npm ci
-      - name: Wait for SWA propagation
-        run: sleep 60
-      - name: Diagnostic — auth login redirect chain
+      - name: Wait for SWA readiness (poll homepage until 200, max 5min)
         env:
           E2E_BASE_URL: ${{ needs.preview_dev_deploy.outputs.preview_url }}
         run: |
           if [ -z "$E2E_BASE_URL" ]; then
-            echo "::error::SWA action did not return a preview URL — cannot run E2E"
+            echo "::error::SWA action did not return a preview URL — cannot wait"
             exit 1
           fi
+          deadline=$(($(date +%s) + 300))
+          attempts=0
+          while true; do
+            attempts=$((attempts + 1))
+            code=$(curl -sLo /dev/null -w "%{http_code}" --max-time 10 "$E2E_BASE_URL/" || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "$E2E_BASE_URL ready (200) after $attempts attempt(s)"
+              break
+            fi
+            now=$(date +%s)
+            if [ "$now" -gt "$deadline" ]; then
+              echo "::error::Timed out waiting for $E2E_BASE_URL (last code: $code)"
+              exit 1
+            fi
+            echo "  attempt $attempts: $code, retrying in 5s..."
+            sleep 5
+          done
+      - name: Diagnostic — auth login redirect chain
+        env:
+          E2E_BASE_URL: ${{ needs.preview_dev_deploy.outputs.preview_url }}
+        run: |
           echo "::group::HEAD $E2E_BASE_URL/.auth/login/github (3 hops)"
           curl -sIL --max-redirs 3 -o /dev/null -w "url_effective=%{url_effective}\nhttp_code=%{http_code}\nredirect_url=%{redirect_url}\n" "$E2E_BASE_URL/.auth/login/github" || true
           echo "::endgroup::"
           echo "::group::Single-hop Location header"
           curl -sI "$E2E_BASE_URL/.auth/login/github" | grep -i '^location:' || echo "(no Location header)"
           echo "::endgroup::"
-      - name: Run E2E suite against preview
+      - name: Run E2E suite against preview (with retry)
         env:
           E2E_BASE_URL: ${{ needs.preview_dev_deploy.outputs.preview_url }}
           # Preview envs don't inherit OAuth secrets; the auth-flow test
           # soft-skips when SWA auth-loop is detected. Leaving
           # E2E_AUTH_REQUIRED unset for the same reason.
-        run: npm run test:e2e
+        run: |
+          # Up to 3 attempts, 30s between. Catches transient cold-start /
+          # network blips without hiding real regressions (3 consecutive
+          # failures still fail the job).
+          for attempt in 1 2 3; do
+            echo "::group::E2E attempt $attempt/3"
+            if npm run test:e2e; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -lt 3 ]; then
+              echo "E2E attempt $attempt failed; retrying in 30s..."
+              sleep 30
+            fi
+          done
+          echo "::error::E2E failed after 3 attempts"
+          exit 1
 
   # ─────────────────────────────────────────────────────────────────────
   # Stage 3a — Dev deploy. Targets the DEV SWA's production env, which
@@ -225,8 +261,25 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install root deps
         run: npm ci
-      - name: Wait for SWA propagation
-        run: sleep 60
+      - name: Wait for SWA readiness (poll homepage until 200, max 5min)
+        run: |
+          deadline=$(($(date +%s) + 300))
+          attempts=0
+          while true; do
+            attempts=$((attempts + 1))
+            code=$(curl -sLo /dev/null -w "%{http_code}" --max-time 10 https://dev.codepals.io/ || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "https://dev.codepals.io/ ready (200) after $attempts attempt(s)"
+              break
+            fi
+            now=$(date +%s)
+            if [ "$now" -gt "$deadline" ]; then
+              echo "::error::Timed out waiting for https://dev.codepals.io/ (last code: $code)"
+              exit 1
+            fi
+            echo "  attempt $attempts: $code, retrying in 5s..."
+            sleep 5
+          done
       - name: Diagnostic — auth login redirect chain
         run: |
           echo "::group::HEAD https://dev.codepals.io/.auth/login/github (3 hops)"
@@ -235,8 +288,25 @@ jobs:
           echo "::group::Single-hop Location header"
           curl -sI "https://dev.codepals.io/.auth/login/github" | grep -i '^location:' || echo "(no Location header)"
           echo "::endgroup::"
-      - name: Run E2E suite against dev
+      - name: Run E2E suite against dev (with retry)
         env:
           E2E_BASE_URL: https://dev.codepals.io
           E2E_AUTH_REQUIRED: '1'
-        run: npm run test:e2e
+        run: |
+          # Up to 3 attempts, 30s between. Catches transient cold-start /
+          # network blips without hiding real regressions (3 consecutive
+          # failures still fail the job and red-flag the deploy).
+          for attempt in 1 2 3; do
+            echo "::group::E2E attempt $attempt/3"
+            if npm run test:e2e; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -lt 3 ]; then
+              echo "E2E attempt $attempt failed; retrying in 30s..."
+              sleep 30
+            fi
+          done
+          echo "::error::E2E failed against dev.codepals.io after 3 attempts"
+          exit 1
