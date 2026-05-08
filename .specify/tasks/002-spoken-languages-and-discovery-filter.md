@@ -25,8 +25,8 @@ description: "Task list for spec 002 — Spoken Languages on Profile + Discovery
 **Purpose**: Allow-list module + type updates that every downstream task depends on.
 
 - [ ] **T-201** [P] [SHARED] Add `Profile.spokenLanguages?: string[]` to `api/src/lib/types.ts` (Principle 5 — privacy: optional + defensive default for legacy docs).
-- [ ] **T-202** [P] [SHARED] Create `api/src/lib/languages.ts` exporting `LANGUAGE_ALLOW_LIST: readonly string[]` (initial set per spec 002 "Key Entities") and helpers `isAllowedLanguage(s)`, `normalizeLanguageList(input, max=10)` (Principles 3, 8 — security/i18n).
-- [ ] **T-203** [SHARED] Create `api/src/lib/languages.test.ts` covering: allow-list shape (lowercase, no duplicates, all ≤ 3 chars), `isAllowedLanguage` accepts/rejects, `normalizeLanguageList` lowercases / dedupes / caps / strips invalid entries.
+- [ ] **T-202** [P] [SHARED] Create `api/src/lib/languages.ts` exporting `LANGUAGE_ALLOW_LIST: readonly string[]` (initial set per spec 002 "Key Entities") and helpers `isAllowedLanguage(s)`, `normalizeLanguageList(input)` — the latter lowercases, dedupes, and strips entries that are not in the allow-list. It does NOT cap length; over-cap rejection is the caller's contract per FR-003 (reject-and-preserve, not truncate). The handler in T-212 enforces the cap separately and returns HTTP 400. (Principles 3, 8 — security/i18n.)
+- [ ] **T-203** [SHARED] Create `api/src/lib/languages.test.ts` covering: allow-list shape (lowercase, no duplicates, all ≤ 3 chars); `isAllowedLanguage` accepts/rejects; `normalizeLanguageList` lowercases / dedupes / strips invalid entries; explicitly does NOT truncate (length-cap is enforced upstream by the handler).
 - [ ] **T-204** [P] [SHARED] Mirror the allow-list constant in the frontend at `src/lib/languages.ts` (re-exported, plus a `LANGUAGE_DISPLAY_NAMES` lookup keyed by code, sourced from i18n strings — Principle 8). Add `src/lib/languages.test.ts` asserting the keys match `api/src/lib/languages.ts`'s allow-list (drift guard).
 - [ ] **T-205** [SHARED] Add `PRIVACY.md` paragraph mentioning the new `spokenLanguages` self-disclosed field, retention follows existing profile retention.
 - [ ] **T-206** [SHARED] Verify `api/src/lib/profile-repo.ts:PROFILE_FIELDS` already includes `spokenLanguages` projection — if not, add it; add a regression test in `profile-repo.test.ts`.
@@ -43,12 +43,12 @@ description: "Task list for spec 002 — Spoken Languages on Profile + Discovery
 
 ### Tests for User Story 1 (REQUIRED — before implementation)
 
-- [ ] **T-210** [P] [US1] Add `profile-save.test.ts` cases: (a) accepts allow-listed codes, normalizes to lowercase, dedupes; (b) rejects non-allow-listed codes with HTTP 400; (c) caps at 10; (d) preserves stored value when request omits the field.
+- [ ] **T-210** [P] [US1] Add `profile-save.test.ts` cases: (a) accepts allow-listed codes, normalizes to lowercase, dedupes; (b) rejects non-allow-listed codes with HTTP 400 + preserves existing stored value; (c) **rejects** > 10 entries with HTTP 400 + preserves existing stored value (NOT truncate); (d) preserves stored value when request omits the field.
 - [ ] **T-211** [P] [US1] Add `profile-get.test.ts` (or extend existing) asserting `spokenLanguages` is returned in the response payload.
 
 ### Implementation for User Story 1
 
-- [ ] **T-212** [US1] Wire `normalizeLanguageList` (T-202) into `api/src/profile-save.ts` — read `body.spokenLanguages`, normalize, store on the upserted Profile (Principle 3 — server-side validation, never trust client).
+- [ ] **T-212** [US1] Wire `normalizeLanguageList` (T-202) into `api/src/profile-save.ts` — read `body.spokenLanguages`, normalize, **then enforce the length cap (10) at the handler level**: if the normalized list exceeds 10, return HTTP 400 with `{ error: 'spokenLanguages exceeds maximum of 10 entries', max: 10 }` and DO NOT upsert. Otherwise, store on the upserted Profile. (Principle 3 — server-side validation, never trust client; reject-and-preserve over silent truncation, FR-003.)
 - [ ] **T-213** [US1] Update `src/pages/profile/edit.astro` and `src/pages/profile/setup.astro` to render a `<select multiple>` populated from `LANGUAGE_DISPLAY_NAMES`, pre-selected from the loaded profile, posted as `spokenLanguages` on save.
 - [ ] **T-214** [US1] Update `src/pages/profile/index.astro` to render language badges (deterministic alphabetical order by display name, locale-aware sort).
 - [ ] **T-215** [US1] Update `src/services/api.ts` Profile type to include `spokenLanguages?: string[]` (mirror api/src/lib/types.ts).

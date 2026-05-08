@@ -24,7 +24,7 @@ The functional surface is small. The discipline is in **what we don't ship**: no
 **Testing**: vitest (api unit + frontend unit + frontend SWA-config-invariant + e2e)
 **Target Platform**: Azure SWA (dev: dev.codepals.io; prod: codepals.io — separate SWA, out of scope here)
 **Project Type**: web application — frontend (`src/`) + api (`api/src/`)
-**Performance Goals**: spec SC-002 — /find filter API p95 < 500ms for ≤ 200 profiles (matches existing `DIRECTORY_PAGE_SIZE = 200`)
+**Performance Goals**: spec SC-002 — /find filter API p95 < 500ms for ≤ 100 profiles (matches existing `DIRECTORY_PAGE_SIZE = 100`)
 **Constraints**: SWA Free tier (limits SWA-managed concurrency); Cosmos serverless RU/s billed per request
 **Scale/Scope**: Tens to hundreds of codepals near term; expect to revisit pagination + filter performance at ~1k profiles
 
@@ -37,7 +37,7 @@ Confirmed against Constitution v1.3.0:
 1. **Transparency**: No secrets introduced. Allow-list hardcoded in source (auditable). No new credentials, no env vars beyond what already exists. ✅
 2. **Code Quality**: Follows existing patterns (validation in `api/src/lib/validation.ts`, profile shape in `api/src/lib/types.ts`, list filter in `api/src/profiles-list.ts`, edit form in `src/pages/profile/edit.astro`). New module `lib/languages.ts` for the allow-list with tests. ✅
 3. **Security (NON-NEGOTIABLE)**: Server-side allow-list validation (FR-002), cap (FR-003), normalization (FR-004), structurally-enforced privacy filter on the new query (FR-008/009 mirroring `profiles-list.ts:PROFILES_QUERY` invariants). New unit tests on the privacy-guard pattern. ✅
-4. **Performance**: Filter adds an `ARRAY_CONTAINS_ANY`-equivalent (Cosmos has no built-in ANY but we can use `EXISTS(SELECT VALUE l FROM l IN c.spokenLanguages WHERE l IN (...))`). Indexed via the existing `automatic: true` indexing policy on `/*`. Expected p95 unchanged for the 200-profile cap. ✅
+4. **Performance**: Filter adds an `ARRAY_CONTAINS_ANY`-equivalent (Cosmos has no built-in ANY but we can use `EXISTS(SELECT VALUE l FROM l IN c.spokenLanguages WHERE l IN (...))`). Indexed via the existing `automatic: true` indexing policy on `/*`. Expected p95 unchanged for the 100-profile cap. ✅
 5. **Privacy (NON-NEGOTIABLE)**: New field is self-asserted public attribute. `profileVisibility = 'private'` default still applies. Filter logs (FR-012) retain only the requesting userId, not the matched-profile userIds. Per PRIVACY.md retention. ✅
 6. **Community & Governance**: Allow-list additions are spec-amendments (governance trail), not silent code-only changes. ✅
 7. **Definition of Done**: tests, docs, review, deployment verification all in scope per existing pipeline. ✅
@@ -125,7 +125,7 @@ The spec depends on three items from 003 (ToS clause, reporting workflow, admin 
 
 | Risk | Mitigation |
 |---|---|
-| Cosmos query performance on `EXISTS(SELECT VALUE l FROM l IN c.spokenLanguages WHERE l IN (...))` worse than expected | Verified locally with N=200 fixtures; if p95 exceeds SC-002, fall back to a denormalized index field (`spokenLanguagesString: string` joined-comma) with a `CONTAINS` query — known faster on Cosmos serverless. |
+| Cosmos query performance on `EXISTS(SELECT VALUE l FROM l IN c.spokenLanguages WHERE l IN (...))` worse than expected | Verified locally with N=100 fixtures (matches the current `DIRECTORY_PAGE_SIZE`); if p95 exceeds SC-002, fall back to a denormalized index field (`spokenLanguagesString: string` joined-comma) with a `CONTAINS` query — known faster on Cosmos serverless. |
 | Allow-list disagreement (e.g., "should we include constructed languages?") | Allow-list edits are spec-amendments. Discussion happens on the spec, not in the PR. |
 | The uniqueness guard threshold (5) is wrong for our scale | FR-011 + SC-006: threshold is a single config constant. We log filter result counts (FR-012) and tune the threshold based on the distribution after 30 days of usage. |
 | Picker UX is bad on mobile | Use `<select multiple>` for the MVP — ugly but works everywhere with zero a11y bugs. A custom combobox is a follow-up enhancement, not blocking. |

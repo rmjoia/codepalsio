@@ -11,7 +11,7 @@ This is a **cross-cutting spec**. It defines the platform-wide safety stance and
 
 ## Summary
 
-CodePals's value proposition is connecting developers for learning, mentoring, and pairing — not for romantic or social outreach. As soon as the directory has > 100 codepals with public profiles, abuse vectors that already exist on every developer-directory product (LinkedIn, GitHub, Stack Overflow) will appear here too: dating-app exploitation, harassment, doxxing-via-narrow-filter, scraping for outreach lists, impersonation. This spec captures the threat model and the **layered defenses** that make those vectors expensive enough to be impractical.
+CodePals' value proposition is connecting developers for learning, mentoring, and pairing — not for romantic or social outreach. As soon as the directory has > 100 codepals with public profiles, abuse vectors that already exist on every developer-directory product (LinkedIn, GitHub, Stack Overflow) will appear here too: dating-app exploitation, harassment, doxxing-via-narrow-filter, scraping for outreach lists, impersonation. This spec captures the threat model and the **layered defenses** that make those vectors expensive enough to be impractical.
 
 The constitution already commits to Privacy and Security as **NON-NEGOTIABLE** principles (1.3.0, Principles 3 and 5). This spec operationalizes those principles for community-facing surfaces. It does NOT replace `CODE_OF_CONDUCT.md`, `PRIVACY.md`, `SECURITY.md`, or `TERMS.md` — it complements them by making the implementation requirements concrete.
 
@@ -29,6 +29,7 @@ The constitution already commits to Privacy and Security as **NON-NEGOTIABLE** p
 | **T6** Filter for protected attributes | Filter combinations infer gender / age / nationality / disability from non-protected facets | Currently no fields collect these directly; profile fields are self-declared opt-in | Avoid adding facets for protected attributes; document this as a non-goal in every future feature spec |
 | **T7** Profile data exfiltration via API | Authenticated user calls /api/profiles with crafted parameters to bypass visibility | `/api/profiles` query has explicit `c.profileVisibility = 'public'` filter, structurally enforced (privacy-guard tests in `profiles-list.test.ts`) | Maintain test coverage; add similar guards on every new discovery endpoint |
 | **T8** Stale data from auth migration | Pre-PR-#14 user records / profiles inadvertently exposed to others (legacy hash as id, etc.) | Auto-heal in `findProfileWithAutoHeal` (PR #40) re-keys legacy data + rotates id away from the legacy SWA principal hash (PR #40, closes #27) | Continue this pattern for any future schema migrations |
+| **T9** Compromised admin / insider misuse | A legitimate admin account is phished or sold; OR an admin acts maliciously (mass-suspends users, exfiltrates report notes, grants admin to a confederate). High blast radius because admin endpoints carry destructive actions (suspend, unlist, revoke). | (a) Audit log (FR-122) — every admin action is recorded immutably with `(adminId, action, target, timestamp)`, joinable by reportId. (b) Defense-in-depth role checks in handlers (mirroring `admin-users.ts`), not just SWA route gates. (c) Anti-self-action guard (FR-123) — admin can't suspend/unlist themselves. (d) Roster atomicity (PR #35) — admin grants/revokes are CAS-protected, can't race. (e) CODEOWNERS (PR #39) requires maintainer review on every admin/auth code change. | (e) Alerting on abnormal admin activity volumes (e.g., > N suspensions/hour, > M unlists/day) — instrumented via FR-150 logging, alerting wired in a future ops spec. (f) Admin role rotation policy (constitution-level: how long does admin persist? grants expire?) — out of scope for MVP, called out for the constitution amendment that introduces it. |
 
 ---
 
@@ -75,7 +76,7 @@ As a signed-in codepal who has encountered behaviour that violates the Terms (of
 
 1. **Given** I'm viewing another codepal's profile, **When** I click "Report", **Then** I see a dialog with a reason picker (categories, no free text in the picker; an optional 500-char note field).
 2. **Given** I submit a report, **When** the request is processed, **Then** a `Report` document is created in Cosmos with `{reporterId, reportedProfileId, reason, note?, createdAt, status: 'open'}` and I see a confirmation toast.
-3. **Given** I report the same profile twice within 24h, **When** the second submission lands, **Then** it's recorded but de-duplicated in the admin queue (one row, last note wins) — prevents brigading inflation.
+3. **Given** I report the same profile twice within 24h, **When** the second submission lands, **Then** the existing report row is updated in place (last note wins, `updatedAt` advances) and a single row remains in the admin queue — prevents brigading inflation. The repository contract is "upsert by (reporterId, reportedProfileId, 24h-window)", not "always insert".
 4. **Given** an admin views `/admin/reports`, **When** they load the page, **Then** they see open reports newest-first, with reporter / reported / reason / note / 'view profile' link / actions (dismiss / suspend / unlist).
 5. **Given** the reported profile no longer exists (account-deleted), **When** the admin views the report, **Then** the row shows "Profile deleted" gracefully and the only action is "Dismiss".
 
@@ -154,7 +155,7 @@ This serves two purposes: (1) friction against drive-by outreach, (2) gives the 
 
 - **FR-110**: Authenticated users MUST be able to report any profile they can view from the profile-view page.
 - **FR-111**: A `Report` document MUST be created in a new `reports` Cosmos container with the schema in "Key Entities" below.
-- **FR-112**: Reports MUST be de-duplicated per (reporterId, reportedProfileId) within a 24-hour window — second submission updates the existing row's note instead of creating a new one.
+- **FR-112**: Reports MUST be de-duplicated per (reporterId, reportedProfileId) within a 24-hour window. The repository contract is **upsert** keyed on that tuple: a second submission within the window updates the existing row's `note` and `updatedAt` (last-note-wins) and does NOT create a new row. Outside the 24-hour window, a new row is created. The admin queue therefore shows one row per (reporter, reported) pair within the dedup window, regardless of resubmissions.
 - **FR-113**: The reporter MUST receive a non-detailed confirmation ("Thanks, we'll review.") — never feedback about the outcome (privacy of the reported user).
 
 #### Moderation
@@ -163,7 +164,14 @@ This serves two purposes: (1) friction against drive-by outreach, (2) gives the 
 - **FR-121**: Admins MUST be able to dismiss / unlist / suspend with one click from the queue.
 - **FR-122**: Every moderator action MUST write a row to a `audit` Cosmos container: `{id, adminId, action, targetUserId?, targetProfileId?, reportId?, reason?, timestamp}`.
 - **FR-123**: An admin MUST NOT be able to suspend or unlist themselves (server-side check).
-- **FR-124**: Suspended users MUST receive `roles: []` from `/api/get-roles` and a 403 with a clear "Your account is suspended" page on any auth-gated route.
+- **FR-124**: Suspension MUST be enforced via SWA's role-based route gating, not via `roles: []` from rolesSource alone. SWA's built-in `authenticated` role is granted to every signed-in user regardless of what the rolesSource handler returns; gating user-facing routes on `authenticated` therefore does NOT prevent a suspended user from reaching them. To enforce suspension:
+  - Introduce a custom role **`member`** that the rolesSource handler grants to signed-in, non-suspended users (and `admin` continues to imply `member`).
+  - Gate all user-facing routes (`/profile/*`, `/find`, `/welcome`, `/api/profile-*`, `/api/profiles`, `/api/account-delete`, `/api/reports*`, `/api/blocks*`) on `member` instead of `authenticated`.
+  - Introduce a public route **`/suspended`** with `allowedRoles: ['anonymous', 'authenticated']` — accessible by anyone signed in (even without `member`), so suspended users can land on it after login.
+  - The rolesSource handler grants `['suspended']` (and NOT `member`) to suspended users; the `/suspended` page renders a clear "Your account is suspended" message keyed on that role for the signed-in branch.
+  - The `responseOverrides.401` redirect MUST direct to `/.auth/login/github` for unauthenticated users and to `/suspended` for users with the `suspended` role (this distinction is achievable via separate route entries, since the SWA gate evaluates `allowedRoles` per route).
+- **FR-124a**: `/api/get-roles` (rolesSource) MUST return `['suspended']` for users with `users.suspended === true`, and MUST NOT return `'member'` or `'admin'` for them. Admins MAY also be suspended; in that case `'admin'` is also withheld until unsuspension.
+- **FR-124b**: Server-side defense-in-depth: every authenticated handler (e.g., `profile-save`, `profile-get`, `profiles-list`) MUST check `users.suspended === true` for the calling principal AND return HTTP 403 if so, even if the SWA gate somehow let the request through. This mirrors the existing pattern of admin handlers double-checking the role server-side (see `admin-users.ts`). Cost is one user-record point-read per request, cached if hot.
 - **FR-125**: Unlisted profiles MUST have `unlistedBy: <adminId>` set so the owner sees a moderator-action banner distinct from their own private toggle.
 
 #### Blocking
