@@ -284,10 +284,12 @@
 </header>
 
 <script>
-	import { getPrincipal, getAvatarUrl, hasRole, deleteAccount } from '../services/api';
+	import { getPrincipalWithRoles, getAvatarUrl, hasRole, deleteAccount } from '../services/api';
 
 	(async () => {
-		const principal = await getPrincipal();
+		// Use the enriched principal — on SWA Free the built-in userRoles
+		// can't carry 'admin', so we ask /api/get-roles to fill it in.
+		const principal = await getPrincipalWithRoles();
 		if (!principal) return;
 
 		const username = principal.userDetails || 'User';

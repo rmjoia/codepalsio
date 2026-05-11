@@ -4,10 +4,8 @@ import { resolve } from 'node:path';
 
 const repoRoot = resolve(__dirname, '..');
 const configPath = resolve(repoRoot, 'staticwebapp.config.json');
-const setupGuidePath = resolve(repoRoot, 'AZURE_SETUP_GUIDE.md');
 
 const rawConfig = readFileSync(configPath, 'utf8');
-const setupGuide = readFileSync(setupGuidePath, 'utf8');
 
 interface Registration {
 	clientIdSettingName?: string;
@@ -75,59 +73,48 @@ describe('staticwebapp.config.json — structural invariants', () => {
 	});
 });
 
-describe('staticwebapp.config.json — auth identity providers', () => {
+describe('staticwebapp.config.json — auth identity providers (SWA Free)', () => {
 	const referencedProviders = collectAuthLoginPaths(config);
+	const FREE_TIER_PRECONFIGURED = new Set(['github', 'aad']);
 
 	it('references at least one /.auth/login/{provider} path (sanity check)', () => {
 		expect(referencedProviders.length).toBeGreaterThan(0);
 	});
 
-	it('declares an auth block whenever /.auth/login/{provider} is referenced', () => {
-		// Regression guard: PR #32 added admin role bootstrap and removed the
-		// implicit GitHub provider auto-discovery by introducing an `auth` block
-		// without re-declaring `identityProviders`. This test fails if anyone
-		// references /.auth/login/X without an auth block backing it.
-		expect(
-			config.auth,
-			'auth block is required when /.auth/login/{provider} is referenced'
-		).toBeDefined();
+	it('only references pre-configured providers (github, aad) — required for Free tier', () => {
+		// On Free tier only GitHub and Microsoft Entra ID are pre-configured
+		// by Azure with no setup. Other providers (Google, Apple, Facebook,
+		// Twitter) require Standard tier + custom registration. Referencing
+		// any of those without that registration would 404 on login.
+		for (const provider of referencedProviders) {
+			expect(
+				FREE_TIER_PRECONFIGURED.has(provider),
+				`provider '${provider}' is not pre-configured on SWA Free — it would require Standard tier`
+			).toBe(true);
+		}
 	});
 
-	it.each(collectAuthLoginPaths(config))(
-		'declares identityProviders.%s.registration with client id and secret setting names',
-		(provider) => {
-			// Root cause of PR #36: SWA stops auto-discovering GITHUB_CLIENT_ID/SECRET
-			// from app settings the moment any `auth` block exists. Every provider
-			// referenced via /.auth/login/{provider} must be explicitly registered.
-			const idp = config.auth?.identityProviders?.[provider];
-			expect(idp, `identityProviders.${provider} must exist`).toBeDefined();
-			expect(
-				idp?.registration?.clientIdSettingName,
-				`clientIdSettingName must be set for ${provider}`
-			).toBeTruthy();
-			expect(
-				idp?.registration?.clientSecretSettingName,
-				`clientSecretSettingName must be set for ${provider}`
-			).toBeTruthy();
-		}
-	);
+	it('does NOT declare auth.rolesSource — Standard-tier feature', () => {
+		// Function-based role assignment (rolesSource) requires Standard
+		// plan. On Free we resolve roles in the frontend by calling
+		// GET /api/get-roles after /.auth/me — see src/services/api.ts
+		// `getPrincipalWithRoles`. Declaring rolesSource here would either
+		// be silently ignored (worst: confuse readers) or break login.
+		expect(
+			config.auth?.rolesSource,
+			'rolesSource is a SWA Standard feature; remove to stay on Free'
+		).toBeUndefined();
+	});
 
-	it('documents every clientIdSettingName / clientSecretSettingName in AZURE_SETUP_GUIDE.md', () => {
-		// Catches docs/config drift: if the config points at GITHUB_CLIENT_ID
-		// but the setup guide tells operators to set FOO_CLIENT_ID, deploys
-		// will silently 404 on auth — exactly the bug PR #36 fixes.
-		const idps = config.auth?.identityProviders ?? {};
-		const settingNames: string[] = [];
-		for (const idp of Object.values(idps)) {
-			if (idp.registration?.clientIdSettingName)
-				settingNames.push(idp.registration.clientIdSettingName);
-			if (idp.registration?.clientSecretSettingName)
-				settingNames.push(idp.registration.clientSecretSettingName);
-		}
-		expect(settingNames.length).toBeGreaterThan(0);
-		for (const name of settingNames) {
-			expect(setupGuide, `${name} should be documented in AZURE_SETUP_GUIDE.md`).toContain(name);
-		}
+	it('does NOT declare auth.identityProviders — Standard-tier feature for custom registration', () => {
+		// Custom identity provider registration (your own OAuth app with
+		// clientIdSettingName / clientSecretSettingName) requires Standard
+		// plan. On Free we use Microsoft's shared pre-configured OAuth app,
+		// which works zero-config — no `auth.identityProviders` block needed.
+		expect(
+			config.auth?.identityProviders,
+			'identityProviders custom registration is Standard-only; pre-configured providers work without it'
+		).toBeUndefined();
 	});
 });
 
@@ -139,19 +126,41 @@ describe('staticwebapp.config.json — route role gates', () => {
 		['/profile/*', 'authenticated'],
 		['/welcome', 'authenticated'],
 		['/find', 'authenticated'],
-		['/admin/*', 'admin'],
+		// On SWA Free the custom 'admin' role can't be assigned (rolesSource
+		// is Standard-only). Admin routes are gated on 'authenticated' at the
+		// SWA layer; the actual admin check runs server-side in each handler
+		// via isAdminFor() (see api/src/lib/roles.ts).
+		['/admin/*', 'authenticated'],
 		['/api/profile-save', 'authenticated'],
 		['/api/profile-get', 'authenticated'],
 		['/api/profiles', 'authenticated'],
 		['/api/account-delete', 'authenticated'],
-		['/api/admin-users', 'admin'],
-		['/api/admins-list', 'admin'],
-		['/api/admins-grant', 'admin'],
-		['/api/admins-revoke', 'admin'],
+		['/api/admin-users', 'authenticated'],
+		['/api/admins-list', 'authenticated'],
+		['/api/admins-grant', 'authenticated'],
+		['/api/admins-revoke', 'authenticated'],
 	])('gates %s on role %s', (path, role) => {
 		const route = findRoute(path);
 		expect(route, `route ${path} must exist`).toBeDefined();
 		expect(route?.allowedRoles, `route ${path} must have allowedRoles`).toContain(role);
+	});
+
+	it.each([
+		'/admin/*',
+		'/api/admin-users',
+		'/api/admins-list',
+		'/api/admins-grant',
+		'/api/admins-revoke',
+	])('does NOT declare a SWA-level admin role on %s (handler enforces)', (path) => {
+		// On SWA Free the custom 'admin' role is unreachable from rolesSource.
+		// If any of these routes carry allowedRoles: ['admin'] the SWA gate
+		// would 401 every signed-in user including the actual admin. Handler
+		// enforcement is the source of truth — verifying no leftover gate.
+		const route = findRoute(path);
+		expect(
+			route?.allowedRoles,
+			`route ${path} must not gate on 'admin' (Free tier can't grant it)`
+		).not.toContain('admin');
 	});
 
 	it('places /api/* catch-all after all specific /api/ routes', () => {

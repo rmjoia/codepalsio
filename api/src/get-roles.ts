@@ -1,23 +1,31 @@
 import { app, type HttpRequest, type InvocationContext, type HttpResponseInit } from '@azure/functions';
 import { getCosmosConfig } from './lib/cosmos';
+import { getClientPrincipal } from './lib/principal';
 import { createUserRepository } from './lib/users';
 import { createAdminRosterRepository } from './lib/admin-roster';
 import { parseAdminLogins, resolveRoles } from './lib/roles';
 
 /**
- * SWA `rolesSource` endpoint.
+ * Role-resolution endpoint, served two ways:
  *
- * Configured via staticwebapp.config.json `auth.rolesSource = '/api/get-roles'`.
- * SWA POSTs here once per sign-in with the in-progress principal in the
- * body; whatever roles[] we return get attached to the user's session
- * principal for the rest of the auth lifetime.
+ *   1) POST — historically the SWA `rolesSource` callback (rolesSource
+ *      requires Standard tier, which we're moving away from). Kept for
+ *      backwards-compat in case a future deploy briefly runs on
+ *      Standard. SWA POSTs the in-progress principal in the body once
+ *      per sign-in; whatever roles[] we return get attached to the
+ *      session principal.
  *
- * This handler is intentionally thin: parse → guard against probing →
- * delegate to resolveRoles. All policy lives in lib/roles.ts.
+ *   2) GET — frontend-driven enrichment. On SWA Free we don't have
+ *      rolesSource, so principal.userRoles can't carry 'admin'. The
+ *      frontend calls GET /api/get-roles to look up the caller's roles
+ *      from the same source of truth (the AdminRoster) and shows/hides
+ *      admin UI accordingly. Read from `x-ms-client-principal` — same
+ *      shape SWA passes to every authenticated function call.
  *
- * Anti-probing: anonymous callers POSTing partial payloads always get
- * `{roles: []}` regardless of ADMIN_GITHUB_LOGINS contents, so this
- * endpoint can't be used to enumerate which logins are admins.
+ * Both paths flow through resolveRoles; the only difference is how the
+ * principal is extracted. Anti-probing: anonymous / unauthenticated
+ * callers always get `{roles: []}` regardless of ADMIN_GITHUB_LOGINS
+ * contents, so this endpoint can't enumerate admins.
  */
 
 interface RolesSourcePayload {
@@ -51,17 +59,40 @@ export async function getRolesHandler(
 	request: HttpRequest,
 	context: InvocationContext
 ): Promise<HttpResponseInit> {
-	let body: RolesSourcePayload = {};
-	try {
-		const parsed = await request.json();
-		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-			body = parsed as RolesSourcePayload;
+	// Extract a ResolvedPrincipal either from the SWA rolesSource POST
+	// body (Standard tier path) or from the x-ms-client-principal header
+	// (GET path used by the frontend on Free tier).
+	let resolved: { identityProvider: string; swaUserId: string; githubUsername: string } | null = null;
+
+	if (request.method === 'POST') {
+		let body: RolesSourcePayload = {};
+		try {
+			const parsed = await request.json();
+			if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+				body = parsed as RolesSourcePayload;
+			}
+		} catch {
+			// Body wasn't JSON or was empty — fall through with empty body.
 		}
-	} catch {
-		// Body wasn't JSON or was empty — fall through with empty body.
+		if (looksLikeRolesSourceCall(body)) {
+			resolved = {
+				identityProvider: body.identityProvider!,
+				swaUserId: body.userId!,
+				githubUsername: body.userDetails!,
+			};
+		}
+	} else {
+		const principal = getClientPrincipal(request);
+		if (principal && principal.userId && principal.userDetails && principal.identityProvider) {
+			resolved = {
+				identityProvider: principal.identityProvider,
+				swaUserId: principal.userId,
+				githubUsername: principal.userDetails,
+			};
+		}
 	}
 
-	if (!looksLikeRolesSourceCall(body)) {
+	if (!resolved) {
 		return { status: 200, jsonBody: { roles: [] } };
 	}
 
@@ -76,14 +107,11 @@ export async function getRolesHandler(
 	try {
 		const repo = createUserRepository(cfg.connectionString, cfg.database);
 		const roster = createAdminRosterRepository(cfg.connectionString, cfg.database);
-		const roles = await resolveRoles(
-			{
-				swaUserId: body.userId!,
-				githubUsername: body.userDetails!,
-				identityProvider: body.identityProvider!,
-			},
-			{ repo, roster, bootstrapLogins: parseAdminLogins(process.env.ADMIN_GITHUB_LOGINS) }
-		);
+		const roles = await resolveRoles(resolved, {
+			repo,
+			roster,
+			bootstrapLogins: parseAdminLogins(process.env.ADMIN_GITHUB_LOGINS),
+		});
 		return { status: 200, jsonBody: { roles } };
 	} catch (error) {
 		// Fail closed on Cosmos errors too — never grant a role we can't verify.
@@ -93,7 +121,7 @@ export async function getRolesHandler(
 }
 
 app.http('get-roles', {
-	methods: ['POST'],
+	methods: ['GET', 'POST'],
 	authLevel: 'anonymous',
 	handler: getRolesHandler,
 });

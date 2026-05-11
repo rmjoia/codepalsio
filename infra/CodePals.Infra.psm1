@@ -15,6 +15,7 @@ $FunctionScripts = @(
     'Initialize-Infra.ps1'
     'Initialize-DNS.ps1'
     'Initialize-DNSZones.ps1'
+    'Remove-Infra.ps1'
 )
 
 foreach ($script in $FunctionScripts) {
@@ -31,4 +32,5 @@ Export-ModuleMember -Function @(
     'Initialize-Infra'
     'Initialize-DNS'
     'Initialize-DNSZones'
+    'Remove-Infra'
 )

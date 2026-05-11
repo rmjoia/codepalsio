@@ -38,6 +38,7 @@
         'Initialize-Infra'
         'Initialize-DNS'
         'Initialize-DNSZones'
+        'Remove-Infra'
     )
 
     # Cmdlets to export from this module

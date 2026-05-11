@@ -60,6 +60,32 @@ Initialize-DNSZones -Environment dev
 Initialize-DNSZones -Environment prod
 ```
 
+### Remove-Infra
+Tears down an environment completely — deletes the resource group AND purges the soft-deleted Key Vault so the names are reusable immediately.
+
+```powershell
+# Dev teardown (with confirmation prompt)
+Remove-Infra -Environment dev
+
+# Dev teardown, no prompt (useful in CI / scripts)
+Remove-Infra -Environment dev -Confirm:$false
+
+# Production teardown — requires both -Force and a typed confirmation
+Remove-Infra -Environment prod -Force
+```
+
+**Parameters:**
+- `Environment` (required): 'dev' or 'prod'. Prod requires `-Force`.
+- `SubscriptionId` (optional): Azure subscription ID
+- `Location` (optional): Azure region for the soft-deleted KV. Default: westeurope
+- `Force` (switch): bypasses the production safety gate
+
+**What it removes:**
+- Resource group + every resource it contains (SWA, Cosmos, MI, etc.)
+- The soft-deleted Key Vault entry (`Remove-AzKeyVault -InRemovedState`)
+
+**Required Bicep state:** the Key Vault must be deployed with `enablePurgeProtection: false`. With purge protection on, the soft-deleted vault can't be purged before retention expires (7 days dev / 90 days prod), which would block re-creation with the same name.
+
 ## Usage Examples
 
 ### One-Time Zone Setup

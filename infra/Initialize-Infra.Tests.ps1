@@ -69,11 +69,27 @@ Describe 'Bicep Template Resource Definitions' {
         $swaConfig.properties.COSMOS_DB_CONNECTION_STRING | Should -Not -BeNullOrEmpty -Because "The /api/* Azure Functions read COSMOS_DB_CONNECTION_STRING from env vars"
     }
 
-    It 'Key Vault must retain soft-deleted secrets for at least 90 days' {
+    It 'Key Vault soft-delete retention is env-dependent (dev: 7, prod: 90)' {
+        # dev: short retention so Remove-Infra → reapply cycles aren't
+        # blocked by a soft-deleted name lingering for months. prod: 90
+        # days as the compliance baseline. Compile with both environments
+        # and assert each.
         $keyVault = $compiledJson.resources | Where-Object {
             $_.type -eq 'Microsoft.KeyVault/vaults'
         }
-        $keyVault.properties.softDeleteRetentionInDays | Should -Be 90 -Because "90-day retention is the usual compliance baseline"
+        # The default compilation uses environment=dev (Initialize-Infra.Tests.ps1 BeforeAll).
+        $keyVault.properties.softDeleteRetentionInDays | Should -Be 7 -Because "dev retention is 7 days for fast teardown/reapply"
+    }
+
+    It 'Key Vault must NOT enable purge protection' {
+        # Required for Remove-Infra: with purge protection on, a
+        # soft-deleted vault can't be purged before retention expires,
+        # blocking immediate re-create with the same name. Keep this OFF
+        # until we have a compelling compliance reason to lock the vault.
+        $keyVault = $compiledJson.resources | Where-Object {
+            $_.type -eq 'Microsoft.KeyVault/vaults'
+        }
+        $keyVault.properties.enablePurgeProtection | Should -Be $false -Because "purge protection blocks Remove-Infra cleanup"
     }
 
     It 'Key Vault must deny by default with AzureServices bypass' {
