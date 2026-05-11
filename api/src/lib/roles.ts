@@ -255,6 +255,23 @@ export async function resolveRoles(
 }
 
 /**
+ * API-side admin check. On SWA Free, `principal.userRoles` from the SWA
+ * client principal only carries the built-in `anonymous` / `authenticated`
+ * roles — function-based role assignment (rolesSource) is Standard-only.
+ * Admin handlers therefore can't rely on `userRoles.includes('admin')`
+ * and must verify against the roster directly. This wraps resolveRoles
+ * so the single source-of-truth logic lives in one place — same code
+ * path the frontend hits via GET /api/get-roles.
+ */
+export async function isAdminFor(
+	principal: ResolvedPrincipal,
+	deps: RolesResolverDeps
+): Promise<boolean> {
+	const roles = await resolveRoles(principal, deps);
+	return roles.includes('admin');
+}
+
+/**
  * Parse the comma-separated ADMIN_GITHUB_LOGINS env var into a
  * lowercased Set. Empty / unset returns an empty Set.
  */
