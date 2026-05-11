@@ -70,15 +70,22 @@ Describe 'Bicep Template Resource Definitions' {
     }
 
     It 'Key Vault soft-delete retention is env-dependent (dev: 7, prod: 90)' {
-        # dev: short retention so Remove-Infra → reapply cycles aren't
-        # blocked by a soft-deleted name lingering for months. prod: 90
-        # days as the compliance baseline. Compile with both environments
-        # and assert each.
-        $keyVault = $compiledJson.resources | Where-Object {
-            $_.type -eq 'Microsoft.KeyVault/vaults'
-        }
-        # The default compilation uses environment=dev (Initialize-Infra.Tests.ps1 BeforeAll).
-        $keyVault.properties.softDeleteRetentionInDays | Should -Be 7 -Because "dev retention is 7 days for fast teardown/reapply"
+        # Verified by inspecting the Bicep source directly — `az bicep build`
+        # turns parameter-dependent values into ARM expressions
+        # (`[variables('...')]`), so asserting a literal int on the compiled
+        # JSON would fail even when the logic is correct. (Copilot review)
+        $bicepFile = Join-Path $PSScriptRoot 'main.bicep'
+        $bicepSource = Get-Content -Path $bicepFile -Raw
+
+        # The Bicep variable encodes the env-dependent retention: prod=90, else=7.
+        # Match the exact ternary so a future drift (e.g. someone bumping dev
+        # to 14 days) trips this test rather than slipping silently through.
+        $bicepSource | Should -Match "(?ms)keyVaultRetentionDays\s*=\s*environment\s*==\s*'prod'\s*\?\s*90\s*:\s*7" `
+            -Because "dev retention must be 7 days (fast teardown/reapply); prod retention must be 90 days (compliance baseline)"
+
+        # And confirm the variable is what the KV resource actually reads.
+        $bicepSource | Should -Match "softDeleteRetentionInDays:\s*keyVaultRetentionDays" `
+            -Because "the KV resource must consume the env-dependent variable, not a hardcoded value"
     }
 
     It 'Key Vault must NOT enable purge protection' {

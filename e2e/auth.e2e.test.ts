@@ -79,6 +79,26 @@ function isSwaAuthLoop(responses: Response[]): boolean {
 	return sameHostAndPath;
 }
 
+/**
+ * Detects the "GitHub rejected the OAuth handshake" pattern: chain
+ * reached github.com but landed somewhere other than the authorize
+ * endpoint (typically /login, because GitHub bounces a request whose
+ * redirect_uri doesn't match the OAuth app's registered callback).
+ *
+ * In preview envs the SWA hostname is a per-PR ephemeral URL (e.g.
+ * <branch>-<hash>.eastus2.azurestaticapps.net) that the custom OAuth
+ * app at github.com/settings/applications wasn't registered for, so
+ * the handshake always fails here. Same class of "preview env can't
+ * complete real OAuth" issue as isSwaAuthLoop, just hitting a
+ * different rejection path.
+ */
+function isGithubOauthRejection(responses: Response[]): boolean {
+	if (responses.length === 0) return false;
+	const last = responses[responses.length - 1];
+	const u = new URL(last.url);
+	return u.host === 'github.com' && u.pathname !== '/login/oauth/authorize';
+}
+
 describeIfDeployed(`auth-flow E2E (${baseUrl ?? 'skipped'}, auth-required=${authRequired})`, () => {
 	it('/.auth/login/github redirect chain completes (or skips on preview env without OAuth secrets)', async () => {
 		const chain = await walkRedirects('/.auth/login/github');
@@ -96,6 +116,27 @@ describeIfDeployed(`auth-flow E2E (${baseUrl ?? 'skipped'}, auth-required=${auth
 				`This means GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET are not configured in this env's ` +
 				`Application Settings. Configure them in the SWA's preview-env settings to enable ` +
 				`full auth-flow E2E here.\nChain:\n${summary}`;
+
+			if (authRequired) {
+				expect.fail(msg);
+			} else {
+				console.warn(`\n⚠️  ${msg}\n   (E2E_AUTH_REQUIRED is not set; treating as soft skip.)`);
+				return;
+			}
+		}
+
+		// Detect GitHub OAuth rejection (preview env hostname not registered
+		// as a callback on the custom OAuth app — GitHub bounces to /login).
+		if (isGithubOauthRejection(chain)) {
+			const last = chain[chain.length - 1];
+			const lastUrl = new URL(last.url);
+			const msg =
+				`GitHub OAuth rejection on ${expectedHost} — chain reached github.com ` +
+				`but landed at ${lastUrl.pathname} instead of /login/oauth/authorize. ` +
+				`Most likely the preview env's hostname isn't registered as a callback URL on the ` +
+				`custom GitHub OAuth app, so GitHub bounces the handshake. This is expected on per-PR ` +
+				`preview environments — register the preview hostname only if you need full auth ` +
+				`coverage here.\nChain:\n${summary}`;
 
 			if (authRequired) {
 				expect.fail(msg);
