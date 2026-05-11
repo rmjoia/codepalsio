@@ -24,8 +24,9 @@ Azure region where the soft-deleted KV lives. Default: westeurope
 (matches Initialize-Infra).
 
 .PARAMETER Force
-Required for prod. Skips the confirmation prompts even in dev. Combine
-with -Confirm:$false to fully automate in CI (use with extreme care).
+Production safety gate. Required when -Environment is 'prod' — without
+it, prod teardown throws before doing anything. Has no effect on dev
+(use -Confirm:$false to skip the standard ShouldProcess prompt there).
 
 .EXAMPLE
 Import-Module ./infra/CodePals.Infra.psd1
@@ -96,16 +97,17 @@ function Remove-Infra {
     Write-Host "  - Soft-deleted Key Vault '$KeyVaultName' (purged after RG delete)"
     Write-Host ""
 
-    # Auth + subscription context
+    # Auth + subscription context. After Set-AzContext, re-read so the
+    # printed name/id reflects the actual target subscription, not the
+    # session's pre-switch context. (Copilot review)
     $context = Get-AzContext
     if (-not $context) {
         throw "Not authenticated to Azure. Run Connect-AzAccount first."
     }
     if ($SubscriptionId) {
-        Set-AzContext -SubscriptionId $SubscriptionId | Out-Null
-    } else {
-        $SubscriptionId = $context.Subscription.Id
+        $context = Set-AzContext -SubscriptionId $SubscriptionId -ErrorAction Stop
     }
+    $SubscriptionId = $context.Subscription.Id
     Write-Host "Subscription: $($context.Subscription.Name) ($SubscriptionId)" -ForegroundColor Green
 
     # Step 1: Delete the resource group (waits for completion).
@@ -127,9 +129,14 @@ function Remove-Infra {
     $softDeletedKv = Get-AzKeyVault -InRemovedState -ErrorAction SilentlyContinue |
         Where-Object { $_.VaultName -eq $KeyVaultName }
     if ($softDeletedKv) {
-        if ($PSCmdlet.ShouldProcess($KeyVaultName, "Purge soft-deleted Key Vault")) {
-            Write-Host "→ Purging soft-deleted Key Vault $KeyVaultName..." -ForegroundColor Yellow
-            Remove-AzKeyVault -VaultName $KeyVaultName -InRemovedState -Location $Location -Force -ErrorAction Stop
+        # Use the location recorded on the soft-deleted vault itself rather
+        # than the operator-supplied -Location parameter. This guarantees
+        # the purge targets the right region even when the env was deployed
+        # somewhere other than the script's default (westeurope). (Copilot review)
+        $purgeLocation = $softDeletedKv.Location
+        if ($PSCmdlet.ShouldProcess($KeyVaultName, "Purge soft-deleted Key Vault in $purgeLocation")) {
+            Write-Host "→ Purging soft-deleted Key Vault $KeyVaultName in $purgeLocation..." -ForegroundColor Yellow
+            Remove-AzKeyVault -VaultName $KeyVaultName -InRemovedState -Location $purgeLocation -Force -ErrorAction Stop
             Write-Host "   ✓ Key Vault purged (name immediately reusable)" -ForegroundColor Green
         }
     } else {
