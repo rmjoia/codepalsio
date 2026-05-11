@@ -2,7 +2,26 @@ import { app, type HttpRequest, type InvocationContext, type HttpResponseInit } 
 import { getClientPrincipal } from './lib/principal';
 import { getContainer, getCosmosConfig } from './lib/cosmos';
 import { isProfileVisibility } from './lib/validation';
-import type { Profile, ProfileVisibility } from './lib/types';
+import type { ClientPrincipal, Profile, ProfileVisibility } from './lib/types';
+import { createUserRepository, type UserRepository } from './lib/users';
+import {
+	createAdminRosterRepository,
+	type AdminRosterRepository,
+} from './lib/admin-roster';
+import { isAdminFor, parseAdminLogins } from './lib/roles';
+
+/**
+ * Test seam — production handler builds these from env. The optional
+ * `verifyAdmin` lets unit tests mock the admin check without exercising
+ * the roster auto-heal side effects of `isAdminFor` (which is itself
+ * covered in roles.test.ts).
+ */
+export interface AdminAuthDeps {
+	users: UserRepository;
+	roster: AdminRosterRepository;
+	bootstrapLogins?: ReadonlySet<string>;
+	verifyAdmin?: (principal: ClientPrincipal) => Promise<boolean>;
+}
 
 /** Hard cap on rows returned in one shot. Same rationale as
  * profiles-list — bound RU/response/timeout. Pagination can come later. */
@@ -79,23 +98,43 @@ export const ADMIN_USERS_QUERY = `SELECT TOP ${ADMIN_PAGE_SIZE} c.id, c.userId, 
 
 export async function adminUsersHandler(
 	request: HttpRequest,
-	context: InvocationContext
+	context: InvocationContext,
+	overrideAuthDeps?: AdminAuthDeps
 ): Promise<HttpResponseInit> {
 	const principal = getClientPrincipal(request);
 	if (!principal) {
 		return { status: 401, jsonBody: { error: 'Not authenticated' } };
-	}
-	// Server-side admin check — defense in depth on top of the SWA route gate.
-	// If someone bypasses the route gate (misconfig, bug, future refactor),
-	// we still reject non-admin requests here.
-	if (!principal.userRoles?.includes('admin')) {
-		return { status: 403, jsonBody: { error: 'Forbidden' } };
 	}
 
 	const cfg = getCosmosConfig();
 	if (!cfg) {
 		context.error('admin-users: missing COSMOS_DB_CONNECTION_STRING or COSMOS_DB_DATABASE_NAME');
 		return { status: 500, jsonBody: { error: 'Server configuration error' } };
+	}
+
+	// Authoritative admin check via the roster. SWA Free has no rolesSource
+	// so principal.userRoles never carries 'admin' — we must verify here.
+	const authDeps: AdminAuthDeps = overrideAuthDeps ?? {
+		users: createUserRepository(cfg.connectionString, cfg.database),
+		roster: createAdminRosterRepository(cfg.connectionString, cfg.database),
+		bootstrapLogins: parseAdminLogins(process.env.ADMIN_GITHUB_LOGINS),
+	};
+	const isAdmin = authDeps.verifyAdmin
+		? await authDeps.verifyAdmin(principal)
+		: await isAdminFor(
+				{
+					swaUserId: principal.userId,
+					githubUsername: principal.userDetails,
+					identityProvider: principal.identityProvider,
+				},
+				{
+					repo: authDeps.users,
+					roster: authDeps.roster,
+					bootstrapLogins: authDeps.bootstrapLogins ?? new Set(),
+				}
+			);
+	if (!isAdmin) {
+		return { status: 403, jsonBody: { error: 'Forbidden' } };
 	}
 
 	try {

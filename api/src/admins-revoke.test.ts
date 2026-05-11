@@ -18,8 +18,16 @@ const adminPrincipal = {
 	identityProvider: 'github',
 	userId: 'u-rmjoia',
 	userDetails: 'rmjoia',
-	userRoles: ['authenticated', 'admin'],
+	// userRoles intentionally has no 'admin' — on SWA Free the rolesSource
+	// feature is unavailable, so 'admin' never lands here. The handler must
+	// resolve admin status from the roster, not from this array.
+	userRoles: ['authenticated'],
 	claims: [],
+};
+const outsiderPrincipal = {
+	...adminPrincipal,
+	userId: 'u-outsider',
+	userDetails: 'outsider',
 };
 
 function reqWith(body: unknown): HttpRequest {
@@ -52,19 +60,28 @@ describe('POST /api/admins-revoke', () => {
 		roster = new FakeAdminRosterRepository();
 	});
 
+	/**
+	 * Default test deps: verifyAdmin mocked to recognise 'rmjoia' so the
+	 * handler tests can focus on revoke logic without auth-time roster
+	 * side effects polluting state assertions. The real roster-based
+	 * admin resolution is covered in roles.test.ts.
+	 */
+	const deps = () => ({
+		users,
+		roster,
+		verifyAdmin: async (p: { userDetails?: string }) => p.userDetails === 'rmjoia',
+	});
+
 	describe('authorization', () => {
 		it('rejects unauthenticated with 401', async () => {
 			mocks.getClientPrincipalMock.mockReturnValueOnce(null);
-			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(401);
 		});
 
-		it('rejects non-admin with 403', async () => {
-			mocks.getClientPrincipalMock.mockReturnValueOnce({
-				...adminPrincipal,
-				userRoles: ['authenticated'],
-			});
-			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+		it('rejects authenticated non-admin with 403', async () => {
+			mocks.getClientPrincipalMock.mockReturnValueOnce(outsiderPrincipal);
+			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(403);
 		});
 	});
@@ -72,7 +89,7 @@ describe('POST /api/admins-revoke', () => {
 	describe('input validation', () => {
 		it('400 on invalid JSON body', async () => {
 			const req = { json: () => Promise.reject(new Error('not json')) } as unknown as HttpRequest;
-			const res = await adminsRevokeHandler(req, fakeContext, { users, roster });
+			const res = await adminsRevokeHandler(req, fakeContext, deps());
 			expect(res.status).toBe(400);
 		});
 
@@ -80,7 +97,7 @@ describe('POST /api/admins-revoke', () => {
 			const res = await adminsRevokeHandler(
 				reqWith({ githubUsername: 'with space' }),
 				fakeContext,
-				{ users, roster }
+				deps()
 			);
 			expect(res.status).toBe(400);
 		});
@@ -89,7 +106,7 @@ describe('POST /api/admins-revoke', () => {
 	describe('revoking', () => {
 		it('404 when target is not in the roster', async () => {
 			await seedAdmin(users, roster, 'rmjoia');
-			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'ghost' }), fakeContext, { users, roster });
+			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'ghost' }), fakeContext, deps());
 			expect(res.status).toBe(404);
 		});
 
@@ -101,13 +118,13 @@ describe('POST /api/admins-revoke', () => {
 				roles: [],
 				updatedAt: '2026-01-01T00:00:00Z',
 			});
-			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(404);
 		});
 
 		it('409 when revoking the only admin in the roster', async () => {
 			await seedAdmin(users, roster, 'rmjoia');
-			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'rmjoia' }), fakeContext, { users, roster });
+			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'rmjoia' }), fakeContext, deps());
 			expect(res.status).toBe(409);
 			// Roster unchanged
 			expect(roster.stored?.admins).toEqual([userIdForGithub('rmjoia')]);
@@ -119,7 +136,7 @@ describe('POST /api/admins-revoke', () => {
 		it('removes admin from a user when there are multiple admins', async () => {
 			await seedAdmin(users, roster, 'rmjoia');
 			await seedAdmin(users, roster, 'alice');
-			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(200);
 			expect(roster.stored?.admins).toEqual([userIdForGithub('rmjoia')]);
 			const after = await users.findByGithubUsername('alice');
@@ -135,7 +152,7 @@ describe('POST /api/admins-revoke', () => {
 				updatedAt: '2026-01-01T00:00:00Z',
 			});
 			roster.seed([userIdForGithub('rmjoia'), userIdForGithub('alice')]);
-			await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			const after = await users.findByGithubUsername('alice');
 			expect(after?.roles).toEqual(['moderator']);
 		});
@@ -143,7 +160,7 @@ describe('POST /api/admins-revoke', () => {
 		it('lowercases input', async () => {
 			await seedAdmin(users, roster, 'rmjoia');
 			await seedAdmin(users, roster, 'alice');
-			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'ALICE' }), fakeContext, { users, roster });
+			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'ALICE' }), fakeContext, deps());
 			expect(res.status).toBe(200);
 		});
 	});
@@ -159,7 +176,7 @@ describe('POST /api/admins-revoke', () => {
 			await seedAdmin(users, roster, 'alice');
 			await seedAdmin(users, roster, 'bob');
 			roster.simulateContention(1);
-			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(200);
 			expect(roster.stored?.admins.sort()).toEqual([
 				userIdForGithub('bob'),
@@ -208,11 +225,11 @@ describe('POST /api/admins-revoke', () => {
 			await seedAdmin(users, roster, 'rmjoia');
 			await seedAdmin(users, roster, 'alice');
 
-			const res1 = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res1 = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res1.status).toBe(200);
 			expect(roster.stored?.admins).toEqual([userIdForGithub('rmjoia')]);
 
-			const res2 = await adminsRevokeHandler(reqWith({ githubUsername: 'rmjoia' }), fakeContext, { users, roster });
+			const res2 = await adminsRevokeHandler(reqWith({ githubUsername: 'rmjoia' }), fakeContext, deps());
 			expect(res2.status).toBe(409);
 			expect(roster.stored?.admins).toEqual([userIdForGithub('rmjoia')]);
 		});
@@ -221,7 +238,7 @@ describe('POST /api/admins-revoke', () => {
 			await seedAdmin(users, roster, 'rmjoia');
 			await seedAdmin(users, roster, 'alice');
 			roster.simulateContention(10); // never resolves
-			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res = await adminsRevokeHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(503);
 		});
 	});

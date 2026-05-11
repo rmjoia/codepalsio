@@ -19,8 +19,16 @@ const adminPrincipal = {
 	identityProvider: 'github',
 	userId: 'u-rmjoia',
 	userDetails: 'rmjoia',
-	userRoles: ['authenticated', 'admin'],
+	// userRoles intentionally has no 'admin' — on SWA Free the rolesSource
+	// feature is unavailable, so 'admin' never lands here. The handler must
+	// resolve admin status from the roster, not from this array.
+	userRoles: ['authenticated'],
 	claims: [],
+};
+const outsiderPrincipal = {
+	...adminPrincipal,
+	userId: 'u-outsider',
+	userDetails: 'outsider',
 };
 
 describe('GET /api/admins-list', () => {
@@ -32,6 +40,9 @@ describe('GET /api/admins-list', () => {
 		mocks.getClientPrincipalMock.mockReturnValue(adminPrincipal);
 		users = new FakeUserRepository();
 		roster = new FakeAdminRosterRepository();
+		// Seed rmjoia as admin — the default success path requires this since
+		// the handler now verifies admin from the roster, not principal.userRoles.
+		roster.seed([userIdForGithub('rmjoia')]);
 	});
 
 	it('rejects unauthenticated with 401', async () => {
@@ -40,8 +51,8 @@ describe('GET /api/admins-list', () => {
 		expect(res.status).toBe(401);
 	});
 
-	it('rejects non-admin with 403', async () => {
-		mocks.getClientPrincipalMock.mockReturnValueOnce({ ...adminPrincipal, userRoles: ['authenticated'] });
+	it('rejects authenticated non-admin with 403', async () => {
+		mocks.getClientPrincipalMock.mockReturnValueOnce(outsiderPrincipal);
 		const res = await adminsListHandler(fakeRequest, fakeContext, { users, roster });
 		expect(res.status).toBe(403);
 	});
@@ -84,14 +95,31 @@ describe('GET /api/admins-list', () => {
 		});
 	});
 
-	it('returns empty array when no admins exist (seeds empty roster on first read)', async () => {
+	it('returns only the calling admin when no other admins exist', async () => {
+		// Under the new model, an admin call by definition means at least
+		// one admin (the caller) is in the roster. The previous "no admins
+		// at all" premise can't happen — any GET reaches the handler only
+		// after the auth check verified the caller is admin.
 		const res = await adminsListHandler(fakeRequest, fakeContext, { users, roster });
 		expect(res.status).toBe(200);
-		expect((res.jsonBody as { admins: unknown[] }).admins).toEqual([]);
+		const body = res.jsonBody as { admins: Array<{ githubUsername: string }> };
+		expect(body.admins.map((a) => a.githubUsername)).toEqual(['rmjoia']);
 	});
 
 	it('seeds the roster from existing admin user records on first read', async () => {
-		// Roster has never been written; legacy admin lives only in user records.
+		// Override the default roster seed — this test exercises the
+		// roster-from-records seeding path, which only fires when the
+		// roster doesn't exist yet.
+		roster = new FakeAdminRosterRepository();
+		// The calling admin must be reachable via the seed-from-records
+		// path too, otherwise auth fails. Both rmjoia and legacy live as
+		// admin user records; getOrSeedRoster should pick up both.
+		await users.upsert({
+			id: userIdForGithub('rmjoia'),
+			githubUsername: 'rmjoia',
+			roles: ['admin'],
+			updatedAt: '2026-01-02T00:00:00Z',
+		});
 		await users.upsert({
 			id: userIdForGithub('legacy'),
 			githubUsername: 'legacy',
@@ -100,18 +128,24 @@ describe('GET /api/admins-list', () => {
 		});
 		const res = await adminsListHandler(fakeRequest, fakeContext, { users, roster });
 		expect(res.status).toBe(200);
-		expect((res.jsonBody as { admins: Array<{ githubUsername: string }> }).admins.map((a) => a.githubUsername)).toEqual(['legacy']);
-		// Roster should now contain the seeded entry
-		expect(roster.stored?.admins).toEqual([userIdForGithub('legacy')]);
+		const usernames = (res.jsonBody as { admins: Array<{ githubUsername: string }> }).admins
+			.map((a) => a.githubUsername)
+			.sort();
+		expect(usernames).toEqual(['legacy', 'rmjoia']);
+		// Roster should now contain both seeded entries
+		expect(roster.stored?.admins?.slice().sort()).toEqual(
+			[userIdForGithub('legacy'), userIdForGithub('rmjoia')].sort()
+		);
 	});
 
 	it('surfaces a roster id even if its user record is missing (skeleton entry)', async () => {
-		// Roster says alice is admin, but no user record exists (deleted out-of-band).
-		roster.seed([userIdForGithub('alice')]);
+		// Roster has rmjoia (the caller) and alice, but alice has no user record.
+		roster.seed([userIdForGithub('rmjoia'), userIdForGithub('alice')]);
 		const res = await adminsListHandler(fakeRequest, fakeContext, { users, roster });
 		expect(res.status).toBe(200);
-		const body = res.jsonBody as { admins: Array<{ githubUsername: string }> };
-		expect(body.admins).toEqual([{ githubUsername: 'alice', roles: ['admin'], updatedAt: '' }]);
+		const body = res.jsonBody as { admins: Array<{ githubUsername: string; roles: string[] }> };
+		const alice = body.admins.find((a) => a.githubUsername === 'alice');
+		expect(alice).toEqual({ githubUsername: 'alice', roles: ['admin'], updatedAt: '' });
 	});
 
 	it("ensures 'admin' is in the response roles even when the user record's roles is stale", async () => {
@@ -122,7 +156,7 @@ describe('GET /api/admins-list', () => {
 		// alice in the admins array but with `roles: []`, contradicting
 		// its own source of truth and confusing any client that inspects
 		// the field.
-		roster.seed([userIdForGithub('alice')]);
+		roster.seed([userIdForGithub('rmjoia'), userIdForGithub('alice')]);
 		await users.upsert({
 			id: userIdForGithub('alice'),
 			githubUsername: 'alice',
@@ -133,8 +167,8 @@ describe('GET /api/admins-list', () => {
 		const res = await adminsListHandler(fakeRequest, fakeContext, { users, roster });
 		expect(res.status).toBe(200);
 		const body = res.jsonBody as { admins: Array<{ githubUsername: string; roles: string[] }> };
-		expect(body.admins).toHaveLength(1);
-		expect(body.admins[0].githubUsername).toBe('alice');
-		expect(body.admins[0].roles.sort()).toEqual(['admin', 'moderator']);
+		const alice = body.admins.find((a) => a.githubUsername === 'alice');
+		expect(alice).toBeDefined();
+		expect(alice!.roles.slice().sort()).toEqual(['admin', 'moderator']);
 	});
 });

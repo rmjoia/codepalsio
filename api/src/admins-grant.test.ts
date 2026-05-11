@@ -18,8 +18,16 @@ const adminPrincipal = {
 	identityProvider: 'github',
 	userId: 'u-rmjoia',
 	userDetails: 'rmjoia',
-	userRoles: ['authenticated', 'admin'],
+	// userRoles intentionally has no 'admin' — on SWA Free the rolesSource
+	// feature is unavailable, so 'admin' never lands here. The handler must
+	// resolve admin status from the roster, not from this array.
+	userRoles: ['authenticated'],
 	claims: [],
+};
+const outsiderPrincipal = {
+	...adminPrincipal,
+	userId: 'u-outsider',
+	userDetails: 'outsider',
 };
 
 function reqWith(body: unknown): HttpRequest {
@@ -37,21 +45,30 @@ describe('POST /api/admins-grant', () => {
 		roster = new FakeAdminRosterRepository();
 	});
 
+	/**
+	 * Default test deps: verifyAdmin mocked to recognise 'rmjoia' so the
+	 * handler tests can focus on grant logic without auth-time roster
+	 * side effects polluting state assertions. The real roster-based
+	 * admin resolution is covered in roles.test.ts.
+	 */
+	const deps = () => ({
+		users,
+		roster,
+		verifyAdmin: async (p: { userDetails?: string }) => p.userDetails === 'rmjoia',
+	});
+
 	describe('authorization', () => {
 		it('rejects unauthenticated with 401', async () => {
 			mocks.getClientPrincipalMock.mockReturnValueOnce(null);
-			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(401);
 			expect(users.store.size).toBe(0);
 			expect(roster.writes).toBe(0);
 		});
 
-		it('rejects non-admin with 403', async () => {
-			mocks.getClientPrincipalMock.mockReturnValueOnce({
-				...adminPrincipal,
-				userRoles: ['authenticated'],
-			});
-			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+		it('rejects authenticated non-admin with 403', async () => {
+			mocks.getClientPrincipalMock.mockReturnValueOnce(outsiderPrincipal);
+			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(403);
 			expect(users.store.size).toBe(0);
 			expect(roster.writes).toBe(0);
@@ -61,23 +78,23 @@ describe('POST /api/admins-grant', () => {
 	describe('input validation', () => {
 		it('400 on invalid JSON body', async () => {
 			const req = { json: () => Promise.reject(new Error('not json')) } as unknown as HttpRequest;
-			const res = await adminsGrantHandler(req, fakeContext, { users, roster });
+			const res = await adminsGrantHandler(req, fakeContext, deps());
 			expect(res.status).toBe(400);
 		});
 
 		it('400 when githubUsername is missing', async () => {
-			const res = await adminsGrantHandler(reqWith({}), fakeContext, { users, roster });
+			const res = await adminsGrantHandler(reqWith({}), fakeContext, deps());
 			expect(res.status).toBe(400);
 		});
 
 		it('400 when githubUsername is non-string', async () => {
-			const res = await adminsGrantHandler(reqWith({ githubUsername: 42 }), fakeContext, { users, roster });
+			const res = await adminsGrantHandler(reqWith({ githubUsername: 42 }), fakeContext, deps());
 			expect(res.status).toBe(400);
 		});
 
 		it('400 when githubUsername fails the format check', async () => {
 			for (const bad of ['-leading', 'trailing-', 'with space', 'a/b', '', 'a'.repeat(40)]) {
-				const res = await adminsGrantHandler(reqWith({ githubUsername: bad }), fakeContext, { users, roster });
+				const res = await adminsGrantHandler(reqWith({ githubUsername: bad }), fakeContext, deps());
 				expect(res.status, `bad input: ${bad}`).toBe(400);
 			}
 		});
@@ -85,7 +102,7 @@ describe('POST /api/admins-grant', () => {
 
 	describe('granting', () => {
 		it('adds the user to the roster and creates a user record', async () => {
-			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(200);
 			const stored = await users.findByGithubUsername('alice');
 			expect(stored?.roles).toEqual(['admin']);
@@ -94,7 +111,7 @@ describe('POST /api/admins-grant', () => {
 		});
 
 		it('lowercases the input so user records collapse on case differences', async () => {
-			await adminsGrantHandler(reqWith({ githubUsername: 'Alice' }), fakeContext, { users, roster });
+			await adminsGrantHandler(reqWith({ githubUsername: 'Alice' }), fakeContext, deps());
 			expect(await users.findByGithubUsername('alice')).not.toBeNull();
 			expect(users.store.size).toBe(1);
 			expect(roster.stored?.admins).toEqual([userIdForGithub('alice')]);
@@ -110,7 +127,7 @@ describe('POST /api/admins-grant', () => {
 				updatedAt: '2026-01-01T00:00:00Z',
 			});
 			const writesBefore = roster.writes;
-			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(200);
 			const stored = await users.findByGithubUsername('alice');
 			expect(stored?.roles).toEqual(['admin']);
@@ -127,7 +144,7 @@ describe('POST /api/admins-grant', () => {
 				roles: ['moderator'],
 				updatedAt: '2026-01-01T00:00:00Z',
 			});
-			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(200);
 			const stored = await users.findByGithubUsername('alice');
 			expect(stored?.roles?.sort()).toEqual(['admin', 'moderator']);
@@ -143,7 +160,7 @@ describe('POST /api/admins-grant', () => {
 				roles: ['admin'],
 				updatedAt: '2026-01-01T00:00:00Z',
 			});
-			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.jsonBody).toBeDefined();
 			const body = res.jsonBody as { admin: Record<string, unknown> };
 			expect(body.admin).not.toHaveProperty('swaUserId');
@@ -154,7 +171,7 @@ describe('POST /api/admins-grant', () => {
 		it('retries through transient stale-etag and succeeds', async () => {
 			roster.seed([userIdForGithub('seed-admin')]);
 			roster.simulateContention(1); // one synthetic etag bump on next write
-			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(200);
 			expect(roster.stored?.admins).toContain(userIdForGithub('alice'));
 		});
@@ -162,7 +179,7 @@ describe('POST /api/admins-grant', () => {
 		it('returns 503 when the roster stays contended past the retry budget', async () => {
 			roster.seed([userIdForGithub('seed-admin')]);
 			roster.simulateContention(10); // never resolves
-			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(503);
 		});
 	});
@@ -179,7 +196,7 @@ describe('POST /api/admins-grant', () => {
 			// No user record exists yet (prior upsert failed).
 			expect(await users.findByGithubUsername('alice')).toBeNull();
 
-			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(200);
 			const stored = await users.findByGithubUsername('alice');
 			expect(stored?.roles).toEqual(['admin']);
@@ -197,7 +214,7 @@ describe('POST /api/admins-grant', () => {
 				updatedAt: '2025-12-01T00:00:00Z',
 			});
 
-			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, { users, roster });
+			const res = await adminsGrantHandler(reqWith({ githubUsername: 'alice' }), fakeContext, deps());
 			expect(res.status).toBe(200);
 			const stored = await users.findByGithubUsername('alice');
 			expect(stored?.roles?.sort()).toEqual(['admin', 'moderator']);

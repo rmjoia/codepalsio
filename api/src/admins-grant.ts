@@ -8,6 +8,8 @@ import {
 	RosterContendedError,
 	type AdminRosterRepository,
 } from './lib/admin-roster';
+import { isAdminFor, parseAdminLogins } from './lib/roles';
+import type { ClientPrincipal } from './lib/types';
 
 /**
  * GitHub username constraints (per their docs):
@@ -27,6 +29,9 @@ interface GrantBody {
 export interface AdminRepos {
 	users: UserRepository;
 	roster: AdminRosterRepository;
+	bootstrapLogins?: ReadonlySet<string>;
+	/** Test seam — bypass the roster lookup. Default: real isAdminFor. */
+	verifyAdmin?: (principal: ClientPrincipal) => Promise<boolean>;
 }
 
 export async function adminsGrantHandler(
@@ -37,9 +42,6 @@ export async function adminsGrantHandler(
 	const principal = getClientPrincipal(request);
 	if (!principal) {
 		return { status: 401, jsonBody: { error: 'Not authenticated' } };
-	}
-	if (!principal.userRoles?.includes('admin')) {
-		return { status: 403, jsonBody: { error: 'Forbidden' } };
 	}
 
 	let body: GrantBody = {};
@@ -67,7 +69,28 @@ export async function adminsGrantHandler(
 		repos = {
 			users: createUserRepository(cfg.connectionString, cfg.database),
 			roster: createAdminRosterRepository(cfg.connectionString, cfg.database),
+			bootstrapLogins: parseAdminLogins(process.env.ADMIN_GITHUB_LOGINS),
 		};
+	}
+
+	// Authoritative admin check via the roster. SWA Free has no rolesSource
+	// so principal.userRoles never carries 'admin' — we must verify here.
+	const isAdmin = repos.verifyAdmin
+		? await repos.verifyAdmin(principal)
+		: await isAdminFor(
+				{
+					swaUserId: principal.userId,
+					githubUsername: principal.userDetails,
+					identityProvider: principal.identityProvider,
+				},
+				{
+					repo: repos.users,
+					roster: repos.roster,
+					bootstrapLogins: repos.bootstrapLogins ?? new Set(),
+				}
+			);
+	if (!isAdmin) {
+		return { status: 403, jsonBody: { error: 'Forbidden' } };
 	}
 
 	try {
