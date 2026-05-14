@@ -111,7 +111,13 @@ When a constraint is added here, an automated check (test or build-time guard) *
 }
 ```
 
-**Bootstrap fallback**: If you ever need to manually seed yourself as admin (e.g. after Microsoft retires the invitation system), edit this doc in Cosmos Data Explorer. Add your user id (`gh-<lowercased-github-username>`) to the `admins` array.
+**Bootstrap fallback** (recovery runbook): If you ever need to manually seed yourself as admin (e.g. after Microsoft retires the invitation system, or after a Cosmos restore wiped the roster), there are **two** steps — editing only the roster doc is NOT sufficient on Free tier because the SWA route gates on `/admin/*` and the admin API endpoints require an admin-tier SWA role BEFORE the handler ever reads the Cosmos roster:
+
+1. **SWA-side role**: assign yourself an admin-tier role (e.g. `manager`) via Azure Portal → Static Web App → Role management → Invite. Accept the invitation, sign out, sign back in. Verify `principal.userRoles` includes the role via `/.auth/me`.
+
+2. **Cosmos-side roster (optional but recommended)**: edit the `users` container's `id: "roster"` doc in Cosmos Data Explorer and add your user id (`gh-<lowercased-github-username>`) to the `admins` array. This ensures the legacy roster path also grants admin (defence in depth), AND makes you appear in the `/admin/manage-admins` UI list.
+
+Skipping step (1) leaves the SWA gate blocking you regardless of roster contents. Skipping step (2) leaves you with admin access via invitation but not visible in the admin UI's "Admins" list (which sources from the roster). Both steps are independent — operator does whichever combination matches their recovery situation.
 
 **Discovered**: PR #35 (race-safe roster with optimistic concurrency).
 

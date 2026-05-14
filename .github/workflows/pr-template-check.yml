@@ -1,0 +1,68 @@
+name: PR Template Check
+
+# Enforces Constitution Principle 9 (Verified Quality, NON-NEGOTIABLE) at the
+# PR level: every PR body MUST contain a populated "Verified by" section.
+# Without this check, the PR template (.github/pull_request_template.md) is
+# advisory only — authors can delete the section or leave it blank.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+
+jobs:
+  verified-by:
+    runs-on: ubuntu-latest
+    name: PR body has 'Verified by' (Constitution P9)
+    steps:
+      - name: Check PR body
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          # Anchor: require a "## Verified by" heading, then at least one
+          # non-empty line within the same section before the next H2 (##).
+          # Acceptable forms:
+          #   - bullet with file ref:   "- some/file.test.ts::test name"
+          #   - "Docs-only; no behavioural change." exception phrase
+          #   - "Refactor only; existing test coverage proves no regression: <ref>"
+
+          if [ -z "$PR_BODY" ]; then
+            echo "::error::PR body is empty. Use the template — see .github/pull_request_template.md."
+            exit 1
+          fi
+
+          # Extract the Verified by section text (everything between the
+          # heading and the next H2 or end of body).
+          section=$(printf '%s' "$PR_BODY" | awk '
+            /^## Verified by[[:space:]]*$/ { in_section=1; next }
+            in_section && /^## / { in_section=0 }
+            in_section { print }
+          ')
+
+          if [ -z "$section" ]; then
+            echo "::error::PR body missing '## Verified by' section. Constitution P9 (Verified Quality, NON-NEGOTIABLE) requires every PR to name the automated verification of its promised behaviour. Restore the section from .github/pull_request_template.md and populate it."
+            exit 1
+          fi
+
+          # Strip whitespace + HTML comments (template scaffolding); check
+          # there's substantive content left.
+          cleaned=$(printf '%s' "$section" \
+            | sed -E 's/<!--[^>]*-->//g' \
+            | sed -E '/^[[:space:]]*$/d' \
+            | sed -E '/^[[:space:]]*<!--/,/-->[[:space:]]*$/d')
+
+          if [ -z "$cleaned" ]; then
+            echo "::error::'## Verified by' section is empty. List the test file(s) that verify this PR's promised behaviour (file path :: test name). For exception cases, use 'Docs-only; no behavioural change.' or 'Refactor only; existing coverage: <ref>'. See Constitution P9."
+            exit 1
+          fi
+
+          # Require at least one line that looks like a test reference or
+          # an explicit exception phrase. Bullet '-' OR checkbox '- [ ]' OR
+          # 'Docs-only' OR 'Refactor only'.
+          if ! printf '%s' "$cleaned" | grep -qE '(^-|Docs-only|Refactor only)'; then
+            echo "::error::'## Verified by' section present but no test references found. Add at least one bullet pointing at a test file (e.g. \`- api/src/foo.test.ts::it asserts X\`), or use the documented exception phrases ('Docs-only; no behavioural change.' / 'Refactor only; existing coverage: <ref>'). See .github/pull_request_template.md."
+            exit 1
+          fi
+
+          echo "✓ PR body contains a populated 'Verified by' section."

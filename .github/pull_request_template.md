@@ -33,6 +33,7 @@ Exceptions (must be explicit):
 - [ ] P3 Security (NON-NEGOTIABLE) — input validation, output sanitization, least privilege addressed where relevant
 - [ ] P4 Performance — RU / bundle / response-time impact considered (note if significant)
 - [ ] P5 Privacy (NON-NEGOTIABLE) — minimal data collection; no PII leakage in responses
+- [ ] P6 Community & Governance — respects Code of Conduct; contribution paths unchanged or documented (if applicable)
 - [ ] P7 Brand Consistency — visual changes match design system (if applicable)
 - [ ] P8 i18n & Accessibility — strings externalized; keyboard / screen reader OK (if applicable)
 - [ ] P9 Verified Quality (NON-NEGOTIABLE) — see "Verified by" above
