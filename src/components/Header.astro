@@ -291,14 +291,28 @@
 		deleteAccount,
 	} from '../services/api';
 	import { setupModalDelegation } from '../lib/modals';
+	import { setupSmoothScroll } from '../lib/smooth-scroll';
+	import { setupOnboardingForm } from '../lib/onboarding-form';
 
-	// Initialize modal click-delegation. Moved here from Footer.astro because
-	// Astro was emitting the Footer's tiny standalone script inline rather
-	// than as a hashed external file — and our CSP (no 'unsafe-inline') blocks
-	// any inline <script>. Bundled here alongside the auth wiring, the
-	// combined script is big enough that Astro emits it externally where CSP
-	// allows it (script-src 'self').
+	// Initialize all page-agnostic global behaviours from here so they ride
+	// in Header.astro's bundled external script (every page loads Header).
+	// Each setup is internally idempotent + no-op on pages whose target
+	// elements don't exist, so calling them everywhere is safe.
+	//
+	// Centralised here because our CSP is "script-src 'self'" with no
+	// "unsafe-inline". Astro emits very small script blocks inline (as
+	// type="module" with literal body) using a size-based heuristic; CSP
+	// blocks those. Bundling these setups alongside the auth wiring keeps
+	// the chunk large enough to always emit as an external /_astro/*.js.
+	//
+	// Deterministic guard: npm run build chains
+	// scripts/verify-no-inline-scripts.mjs which fails the build if any
+	// inline script block appears in dist HTML. Even if a future refactor
+	// shrinks this chunk below Astro's threshold, CI catches it instead of
+	// a silent runtime CSP violation in production.
 	setupModalDelegation();
+	setupSmoothScroll();
+	setupOnboardingForm();
 
 	(async () => {
 		// Use the enriched principal — both invitation-assigned roles (manager,

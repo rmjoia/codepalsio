@@ -70,43 +70,9 @@ import SponsorshipModal from '../components/SponsorshipModal.astro';
 		<CodeOfConductModal />
 		<SponsorshipModal />
 
-		<script>
-			// Smooth scroll for anchor links (both #section and /#section).
-			document
-				.querySelectorAll<HTMLAnchorElement>('a[href^="#"], a[href^="/#"]')
-				.forEach((anchor) => {
-					anchor.addEventListener('click', (e) => {
-						const href = anchor.getAttribute('href');
-						if (!href) return;
-						const hash = href.startsWith('/#') ? href.substring(1) : href;
-						const target = document.querySelector(hash);
-						if (target) {
-							e.preventDefault();
-							target.scrollIntoView({ behavior: 'smooth' });
-							history.pushState(null, '', hash);
-						}
-					});
-				});
-
-			// Scroll to hash on page load.
-			window.addEventListener('load', () => {
-				if (!window.location.hash) return;
-				const target = document.querySelector(window.location.hash);
-				if (!target) return;
-				setTimeout(() => target.scrollIntoView({ behavior: 'smooth' }), 100);
-			});
-
-			// Navbar shadow enhancement on scroll.
-			window.addEventListener('scroll', () => {
-				const header = document.querySelector('header');
-				if (window.scrollY > 10) {
-					header?.classList.add('shadow-lg');
-					header?.classList.remove('shadow-sm');
-				} else {
-					header?.classList.remove('shadow-lg');
-					header?.classList.add('shadow-sm');
-				}
-			});
-		</script>
+		<!-- Smooth-scroll, hash-on-load, and navbar shadow effects are
+		     initialised globally by Header.astro via setupSmoothScroll()
+		     (src/lib/smooth-scroll.ts). Kept out of an inline script
+		     here so CSP `script-src 'self'` allows them. -->
 	</body>
 </html>

@@ -133,37 +133,13 @@ const user = Astro.url.searchParams.get('user') || 'there';
 			</div>
 		</div>
 
-		<script>
-			// Modal handling is provided globally by Footer.astro's modal
-			// delegation script — the data-modal-open attributes above hook
-			// into that. This script only owns the page-specific behavior:
-			// the three required-acknowledgement checkboxes + continue button.
-
-			const checkboxIds = ['accept-terms', 'accept-privacy', 'accept-coc'] as const;
-
-			function updateContinueButton() {
-				const continueBtn = document.getElementById('continue-btn') as HTMLButtonElement | null;
-				if (!continueBtn) return;
-				const allChecked = checkboxIds.every((id) => {
-					const cb = document.getElementById(id) as HTMLInputElement | null;
-					return !!cb?.checked;
-				});
-				continueBtn.disabled = !allChecked;
-				continueBtn.classList.toggle('opacity-50', !allChecked);
-				continueBtn.classList.toggle('cursor-not-allowed', !allChecked);
-				continueBtn.classList.toggle('hover:bg-primary-600', allChecked);
-			}
-
-			checkboxIds.forEach((id) => {
-				document.getElementById(id)?.addEventListener('change', updateContinueButton);
-			});
-
-			// TODO: Call API to save terms acceptance with timestamps. For
-			// now, redirect to profile setup once all checkboxes are ticked.
-			document.getElementById('continue-btn')?.addEventListener('click', () => {
-				window.location.href = '/profile/setup';
-			});
-		</script>
+		<!-- Onboarding checkbox + continue-button wiring is initialised
+		     globally by Header.astro via setupOnboardingForm()
+		     (src/lib/onboarding-form.ts). It's a no-op on pages that
+		     don't have these IDs. Kept out of an inline script here so
+		     CSP `script-src 'self'` allows it. -->
+		<!-- Modal data-modal-open attributes above hook into the global
+		     modal delegation, also wired by Header.astro. -->
 
 		<!-- Modals -->
 		<TermsModal />
