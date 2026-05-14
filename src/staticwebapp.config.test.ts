@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const repoRoot = resolve(__dirname, '..');
@@ -225,5 +225,104 @@ describe('staticwebapp.config.json — route role gates', () => {
 		expect(override, '401 response override must exist').toBeDefined();
 		expect(override?.statusCode).toBe(302);
 		expect(override?.redirect).toMatch(/\/\.auth\/login\//);
+	});
+});
+
+/**
+ * Cross-reference invariant: every `/api/X` route declared in
+ * staticwebapp.config.json MUST have a matching `app.http('X', ...)`
+ * registration in api/src/*.ts. And vice versa.
+ *
+ * Catches the class of silent regression where a function gets renamed
+ * but the route stays stale (or a route is added but no function
+ * exists), each of which yields a 404 in prod. See
+ * .specify/platform-constraints.md.
+ */
+describe('staticwebapp.config.json ↔ api/src/*.ts route/function consistency', () => {
+	const apiSrcDir = resolve(repoRoot, 'api/src');
+	const declaredApiRoutes = (config.routes ?? [])
+		.map((r) => r.route)
+		.filter((p) => p.startsWith('/api/') && p !== '/api/*');
+
+	/**
+	 * Discover every file under api/src/ that contains an `app.http()`
+	 * registration AND extract the registered function name(s).
+	 * Crucially, we ALSO collect the basename of the file so we can
+	 * cross-check that index.ts imports it — without that import, the
+	 * file is never executed at runtime and the function registration
+	 * is invisible to the SWA function host (404 in prod despite the
+	 * test passing). (Copilot review)
+	 */
+	function collectFunctionFiles(): Array<{ file: string; name: string }> {
+		const re = /\bapp\.http\(\s*(['"])([^'"]+)\1\s*,/g;
+		const results: Array<{ file: string; name: string }> = [];
+		for (const entry of readdirSync(apiSrcDir, { withFileTypes: true })) {
+			if (!entry.isFile()) continue;
+			if (!entry.name.endsWith('.ts')) continue;
+			if (entry.name.endsWith('.test.ts')) continue;
+			if (entry.name.endsWith('.fake.ts')) continue;
+			if (entry.name === 'index.ts') continue;
+			const content = readFileSync(resolve(apiSrcDir, entry.name), 'utf8');
+			for (const match of content.matchAll(re)) {
+				results.push({ file: entry.name, name: match[2] });
+			}
+		}
+		return results;
+	}
+
+	const functionFiles = collectFunctionFiles();
+	const registered = new Set(functionFiles.map((f) => f.name));
+
+	// Distinct list of file basenames (without .ts) that contain a
+	// registration — used to verify they're all imported by index.ts.
+	const filesWithRegistrations = new Set(functionFiles.map((f) => f.file.replace(/\.ts$/, '')));
+
+	it.each(declaredApiRoutes)('route %s has a matching app.http() registration', (route) => {
+		const functionName = route.replace(/^\/api\//, '');
+		expect(
+			registered.has(functionName),
+			`route ${route} declared but no app.http('${functionName}', …) found in api/src/*.ts.\n` +
+				`Either remove the route or add the function.\n` +
+				`Registered functions: ${[...registered].sort().join(', ')}`
+		).toBe(true);
+	});
+
+	it('every app.http() registration has a matching /api/X route declaration', () => {
+		const routePaths = new Set(declaredApiRoutes.map((r) => r.replace(/^\/api\//, '')));
+		const orphans = [...registered].filter((name) => !routePaths.has(name));
+		expect(
+			orphans,
+			`Functions registered but missing route declaration in staticwebapp.config.json:\n` +
+				orphans.map((n) => `  - app.http('${n}', …) — expected '/api/${n}' in routes`).join('\n') +
+				`\n\nAdd a route entry so SWA applies role gates correctly.`
+		).toEqual([]);
+	});
+
+	it('every file with app.http() is imported by api/src/index.ts (runtime reachability)', () => {
+		// The Functions v4 entrypoint only executes files that index.ts
+		// imports (each import has the side effect of running app.http()).
+		// A registration in a file that no one imports is dead code — the
+		// route 404s at runtime even though the test would otherwise pass.
+		// This invariant closes that gap. (Copilot review on PR #53)
+		const indexPath = resolve(apiSrcDir, 'index.ts');
+		const indexContent = readFileSync(indexPath, 'utf8');
+
+		// Match `import './X';` or `import "./X";` — the side-effect import
+		// pattern. Captures X (the file basename without .ts).
+		const importRe = /^\s*import\s+(['"])\.\/([\w-]+)\1\s*;?\s*$/gm;
+		const importedFiles = new Set<string>();
+		for (const match of indexContent.matchAll(importRe)) {
+			importedFiles.add(match[2]);
+		}
+
+		const missing = [...filesWithRegistrations].filter((f) => !importedFiles.has(f));
+		expect(
+			missing,
+			`Files containing app.http() but NOT imported by api/src/index.ts:\n` +
+				missing.map((f) => `  - api/src/${f}.ts`).join('\n') +
+				`\n\nAdd \`import './${missing[0] ?? '<file>'}';\` to api/src/index.ts so the\n` +
+				`Functions v4 host actually loads the module and registers the function.\n` +
+				`Without this, the route 404s in prod even though the file looks correct.`
+		).toEqual([]);
 	});
 });

@@ -1,21 +1,32 @@
 <!--
 Sync Impact Report
-Version: 1.2.0 → 1.3.0
-Change Type: MINOR (two new principles added: Brand Consistency + Internationalization & Accessibility; governance materially expanded to guide multi-platform branding and i18n architecture)
-Modified Sections: None
+Version: 1.3.0 → 1.4.0
+Change Type: MINOR (one new NON-NEGOTIABLE principle: Verified Quality)
+Modified Sections:
+  - Core Principles: added Principle 9
+  - Non-Negotiables: added "Verified Quality" line
+  - Definition of Done: tightened item 7 to require named verification
+  - Quality Gates: added platform-constraint enforcement requirement
 Added Principles:
-  - Principle 7: Brand Consistency (NON-NEGOTIABLE) - Discord server branding, visual identity across platforms, design system enforcement
-  - Principle 8: Internationalization & Accessibility (NON-NEGOTIABLE) - i18n architecture, locale support (pt-PT, en-IE, fr-FR, es-ES), community translation workflow, WCAG compliance
+  - Principle 9: Verified Quality (NON-NEGOTIABLE) — every PR must include
+    automated verification of its promised behavior; production bugs must
+    ship with regression tests; platform constraints must be encoded as
+    enforcing checks (`.specify/platform-constraints.md`)
 Templates Impact:
-  ✅ spec-template.md: Already includes "Key Entities" for i18n data modeling; no update needed
-  ✅ plan-template.md: Constitution Check already covers all principles generically; no update needed  
-  ✅ tasks-template.md: Updated Constitution Compliance note to include Brand Consistency and Internationalization & Accessibility principles
-Follow-up TODOs:
-  - Brand assets (logo, color palette, Discord server assets) to be created per FR-1.6 through FR-1.9 in spec 001-codepals-mvp
-  - i18n implementation details (translation file structure, locale detection, fallback strategy) to be specified in future product spec or architecture doc
-  - Community translation contribution workflow to be documented in CONTRIBUTING.md (post-MVP)
-  - Discord server customization (https://discord.com/channels/1439633906231021578/1439633906801578008) to apply brand assets once finalized
-Deferred Items: None (all principles complete and actionable)
+  ✅ .github/pull_request_template.md added with mandatory "Verified by" section
+  ✅ .specify/platform-constraints.md added as canonical list
+  ✅ api/src/lib/function-registrations.test.ts enforces the function-name constraint
+  ✅ src/staticwebapp.config.test.ts cross-references routes ↔ registrations
+  ✅ e2e/api-smoke.e2e.test.ts validates post-deploy reachability
+Rationale for adoption: Across PRs #48-#52 we shipped four classes of bug
+that should have been impossible to merge — inline scripts blocked by
+our own CSP, function-name collisions with Azure's reserved namespace,
+route declaration order causing 404s, and admin-roster state drift. Each
+bug surfaced via user console-paste in production rather than automated
+verification. P9 codifies the discipline: a PR's promises are mechanical,
+not narrative.
+Deferred Items: branch protection on `main` (operator action; tracked in
+PROJECT_STATUS operator items)
 -->
 
 # CodePals.io Constitution
@@ -46,6 +57,15 @@ Visual identity (logo, color palette, typography, design system) MUST be consist
 ### 8. Internationalization & Accessibility (NON-NEGOTIABLE)
 Architecture MUST support internationalization (i18n) from the outset to enable multi-language community growth. Initial locale support includes Portuguese (Portugal), English (Ireland), and French (France); Spanish (Spain) MAY be added based on community demand. All user-facing text MUST be externalized into locale-specific translation files (no hardcoded strings). Translation contributions from the community MUST follow a documented review and approval workflow. Designs MUST comply with WCAG 2.1 AA accessibility standards (keyboard navigation, screen reader support, sufficient contrast). Rationale: Global accessibility expands reach, inclusivity, and equitable access; early i18n architecture prevents costly refactoring; community-driven translation scales sustainably and fosters ownership.
 
+### 9. Verified Quality (NON-NEGOTIABLE)
+Every PR MUST include automated verification of the behavior it promises to deliver — not merely unit tests of internal logic, but a check that proves the user-facing outcome works. PR descriptions MUST name the specific test (file path + test name) that verifies the promise. PRs without verifiable claims MUST NOT be merged.
+
+When a bug is discovered in production, the fix MUST include a regression test that would have caught it before merge. If no such test is feasible at the current architecture, the underlying gap MUST be documented and a follow-up issue opened to close it.
+
+Platform-specific constraints (Azure Functions reserved names, SWA tier limitations, Astro bundling heuristics, Cosmos schema invariants) MUST be recorded in `.specify/platform-constraints.md` with a citation to the discovery, AND enforced by an automated check (unit test, build-time guard, or post-deploy E2E assertion). Re-learning the same constraint from a production failure twice constitutes a process failure.
+
+Rationale: Trust in a PR's correctness must be mechanical, not narrative. "Tests pass" without verifying the actual user-facing promise is hope, not quality. Treating each production bug as a missing test ratchets the discipline upward over time — eventually the only way for a bug to ship is for the platform itself to introduce a new failure mode.
+
 ## Mission & Vision
 
 **Mission**: Foster a respectful, values‑driven developer growth network where people learn by building relationships, receiving mentorship and coaching, and sharing their development journey—grounded in transparency, security, privacy, and community support. CodePals.io enables context‑rich help requests (clearly marked as work, school, or self‑development) and meaningful connections rather than transactional Q&A.
@@ -61,6 +81,7 @@ Architecture MUST support internationalization (i18n) from the outset to enable 
 - Brand consistency MUST be maintained across all platforms (website, Discord, documentation).
 - Internationalization (i18n) MUST be supported; no hardcoded user-facing strings permitted.
 - Accessibility (WCAG 2.1 AA) MUST be upheld in all user interfaces.
+- Verified Quality: PRs MUST include automated verification of the promised behavior; platform constraints MUST be encoded as enforcing checks (see Principle 9).
 
 **Technology Stack (Initial)**:
 - Primary Language: .NET ecosystem
@@ -79,9 +100,10 @@ Architecture MUST support internationalization (i18n) from the outset to enable 
 4. Internationalization requirements met (externalized strings, locale support verified).
 5. Accessibility validated (WCAG 2.1 AA compliance for UI changes).
 6. Documentation (feature + architectural impact) is updated.
-7. Automated checks (lint, tests, security scans) pass.
+7. Automated checks (lint, tests, security scans) pass — AND the PR description names the specific test that verifies the promised behavior (Principle 9).
 8. Peer review is completed and approved.
-9. Deployment to designated environment is successful and production behavior verified.
+9. Deployment to designated environment is successful and post-deploy smoke E2E (verifying every declared `/api/*` route reachable, etc.) passes.
+10. Any platform constraint discovered during the work is documented in `.specify/platform-constraints.md` with an accompanying enforcing test.
 
 **Quality Gates**:
 - Secret scanning MUST pass.
@@ -94,6 +116,7 @@ Architecture MUST support internationalization (i18n) from the outset to enable 
 - Brand assets MUST pass visual consistency review (color, typography, logo usage).
 - i18n changes MUST include locale coverage verification (all supported locales have translations or documented fallback).
 - Accessibility changes MUST pass automated WCAG checks and manual screen reader validation (where applicable).
+- Platform constraints (Azure Functions reserved names, SWA tier limits, Astro bundling, Cosmos schema invariants) MUST be encoded in `.specify/platform-constraints.md` and enforced by automated checks. Discovering a constraint via a production failure MUST result in BOTH a doc entry AND an enforcing test in the same fix PR.
 
 ## Governance
 
@@ -154,4 +177,4 @@ Architecture MUST support internationalization (i18n) from the outset to enable 
 - Locale coverage for supported languages ≥ 95% (core user-facing strings translated).
 - WCAG 2.1 AA compliance verified per release (automated + manual spot-check).
 
-**Version**: 1.3.0 | **Ratified**: 2025-11-16 | **Last Amended**: 2025-11-16
+**Version**: 1.4.0 | **Ratified**: 2025-11-16 | **Last Amended**: 2026-05-14
