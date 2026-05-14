@@ -1,10 +1,27 @@
 # CodePals.io Project Status
 
-**Last reconciled**: 2026-05-08 (PR #47)
-**Status**: Phase 1 (foundation) ✅ shipped. Phase 2 (core platform — profiles, directory, admin) ✅ mostly shipped. Public discovery + community-safety surface in flight via specs 002 + 003.
-**Live**: https://dev.codepals.io ✅. https://codepals.io ✅ (landing page; public discovery features not yet promoted to prod tier — promotion path is intentionally manual; see "Operator action items" below).
+**Last reconciled**: 2026-05-14 (PR draft adding specs 004 + 005 + 006)
+**Status**: Phase 1 (foundation) ✅ shipped. Phase 2 (core platform — profiles, directory, admin) ✅ shipped. Cost optimisation (Free tier) ✅ shipped. Public discovery + community-safety surface in flight. Multi-role admin, messaging, and presence specced — implementation queued.
+**Live**: https://dev.codepals.io ✅. https://codepals.io ✅ (landing page; full app not yet promoted to prod tier — promotion path is intentionally manual; see "Operator action items" below).
 
 This file is the **current source of truth** for project state. The other documents in `.specify/` (`IMPLEMENTATION_PLAN.md`, `QUICK_REFERENCE.md`, `spec/codepals-mvp.md`, `plan/codepals-mvp.md`, `tasks/phase-*-tasks.md`, `tasks/MVP_COMPLETE_TASK_BREAKDOWN.md`) predate the work tracked here and remain for historical context only — they are NOT reliable as a current-state reference.
+
+---
+
+## Hosting & cost
+
+| Concern | State |
+|---|---|
+| SWA tier (dev) | **Free** ✅ — flipped after PR #48 |
+| SWA tier (prod) | Free (no app deployed yet) |
+| Cosmos DB | Free Tier (1000 RU/s + 25 GB allowance) |
+| Key Vault | Standard (cheap; no purge protection — `Remove-Infra` can fully tear down) |
+| DNS zones | 2 (codepals.io, dev.codepals.io) |
+| **Total monthly** | **~$1-2/mo** (DNS + KV ops) |
+
+GitHub auth uses the SWA's **pre-configured GitHub provider** (Microsoft's shared OAuth app). No custom `auth.identityProviders` block, no custom OAuth app to manage. Login still works identically; consent screen reads "Authorize Azure Static Web Apps" for first-time users.
+
+Admin role assignment uses the **SWA invitation system** (Portal → Static Web App → "Role management"). Confirmed working on Free tier as of 2026-05-14 — invited users get the assigned role(s) in `principal.userRoles` on every sign-in. See spec 004 for the multi-role plan + roster-fallback contingency.
 
 ---
 
@@ -24,16 +41,19 @@ Each row links to the PR(s) that landed it.
 | Mobile-first responsive header | #20 | |
 | Avatar fallback to `github.com/{username}.png` | #16 | |
 | Profile page avatar id collision fix | #17 | |
+| **SWA reverted to Free tier** (~$9/mo saved per env) | **#48** | Drops `auth.identityProviders`, `auth.rolesSource`. Pre-configured GitHub provider replaces the custom OAuth app. |
+| **`Remove-Infra` PowerShell function** with KV purge | **#48** | Clean teardown; env-dependent KV retention (7d dev / 90d prod) |
 
 ### Auth
 
 | Item | PR(s) | Notes |
 |---|---|---|
 | Migration to SWA built-in auth (drop custom OAuth Functions) | #14 | |
-| Custom GitHub identityProviders block in `staticwebapp.config.json` | #36 | Closes the post-#32 login 404 — declares the OAuth registration explicitly |
+| Custom GitHub identityProviders block in `staticwebapp.config.json` | #36 | Initially landed to close the post-#32 login 404 — explicit OAuth registration |
 | CI gating + identity-proxy E2E | #37 | |
 | Pipeline rename + correct dev/prod conflation | #38, #42 (folded into #38) | |
 | AZURE_SETUP_GUIDE.md callback URL guidance corrected | #37, #40 | The right callback URL is `https://<swa-host>/.auth/login/github/callback` |
+| **Custom OAuth registration dropped; pre-configured provider on Free** | **#48** | OAuth consent screen now reads "Authorize Azure Static Web Apps" for first-time users |
 
 ### Profile + directory
 
@@ -54,6 +74,9 @@ Each row links to the PR(s) that landed it.
 | Persistent admin management (UI grant/revoke) | #33 | |
 | Race-safe admin roster with optimistic concurrency | #35 | `mutateRoster` CAS retry loop |
 | `findByGithubUsernameAcrossShapes` for legacy user records + roster repair on legacy migration + bootstrap-on-migration | #43 | Unblocks admin nav for the maintainer's pre-#32 user record |
+| **Admin enforcement via roster (handler-side `isAdminFor`)** instead of SWA `rolesSource` | **#48** | Required for Free tier (no rolesSource); roster remains as fallback |
+| **Frontend role enrichment** via `getPrincipalWithRoles()` calling `GET /api/get-roles` | **#48** | Replaces the SWA-driven rolesSource flow |
+| **Multi-role recognition** in Header + admin endpoints | **#49** (in flight) | Recognises `manager`/`moderator`/`messenger` from invitations alongside the legacy `admin` role |
 
 ### Security
 
@@ -63,33 +86,39 @@ Each row links to the PR(s) that landed it.
 | CSP phase 2 — drop `'unsafe-inline'` from script-src | #31 | |
 | CODEOWNERS extended with explicit ownership of auth/admin/role surfaces | #39 | Default `* @rmjoia` was already there; extended for grep-ability |
 | `npm audit fix --omit=dev` cleanup; audit gate tightened to `--audit-level=high` on prod deps | #38 | One remaining moderate astro XSS finding queued for the Astro 5→6 upgrade |
+| **KV `enablePurgeProtection: false` + env-dependent retention** | **#48** | Required for `Remove-Infra`'s teardown/reapply cycle |
 
 ### CI/CD pipeline
 
 | Item | PR(s) | Notes |
 |---|---|---|
 | Initial validate-only PR pipeline | (pre-#38) | |
-| Proper four-stage pipeline: validate → preview deploy → preview E2E → dev deploy → dev E2E | #38 | |
+| Four-stage pipeline: validate → preview deploy → preview E2E → dev deploy → dev E2E | #38 | Superseded — see below |
 | E2E suite — auth-flow tests, route-gate tests, SWA-config-invariant tests | #36, #37, #39 | Plus the `staticwebapp.config.test.ts` regression guard |
 | `npm test:e2e` separate runner with `vitest.e2e.config.ts` | #38 | Skips locally without `E2E_BASE_URL`, hits live SWA in CI |
 | Diagnostic curl step before E2E (auto-prints redirect chain on failure) | #37, #38 | |
 | CI resilience: readiness polling + E2E retry-with-backoff | #45 | Replaced fixed `sleep 60`; 3 attempts, 30s gap |
+| **Pipeline collapsed to single deploy target — every push deploys to dev SWA Production env** | **#48** | No per-PR preview environments (kept dev SWA within the Free tier's 3-env cap). PRs validated; the dev env is the preview. Trade-off: last-pushed-wins on dev with concurrent feature branches. |
+| **E2E walk recognises GitHub OAuth handshake without requiring chain-end at `/authorize`** | **#48** | Handles the natural `oauth/authorize → /login` bounce when CI lacks a GitHub session |
 
 ### IaC + automation
 
 | Item | PR(s) | Notes |
 |---|---|---|
-| `ADMIN_GITHUB_LOGINS` declared in Bicep (per-env via parameter) | #43 | |
-| MI granted Contributor on its own RG (control-plane) | #46 | Required for OIDC-driven Bicep apply from CI |
-| `infra_apply_dev` CI job (push-to-main / workflow_dispatch on main; OIDC; what-if + create) | #46 | |
+| `ADMIN_GITHUB_LOGINS` declared in Bicep (per-env via parameter) | #43 | Bootstraps first admin on fresh deploys (`rmjoia` default for dev) |
+| MI granted Contributor on its own RG (control-plane) | #46 (open, parked) | Required for OIDC-driven Bicep apply from CI; not yet merged |
+| `infra_apply_dev` CI job (push-to-main / workflow_dispatch on main; OIDC; what-if + create) | #46 (open, parked) | |
 
 ### Specs (governance)
 
 | Item | PR(s) | Notes |
 |---|---|---|
 | Constitution v1.3.0 (8 principles, 4 NON-NEGOTIABLE) | (pre-PR-#11) | `.specify/memory/constitution.md` |
-| Spec 002: Spoken Languages on Profile + Discovery Filter | #47 | This PR |
-| Spec 003: Community Safety & Anti-Abuse | #47 | This PR; cross-cutting |
+| Spec 002: Spoken Languages on Profile + Discovery Filter | #47 | |
+| Spec 003: Community Safety & Anti-Abuse | #47 | Cross-cutting |
+| **Spec 004: Invitation-Based Multi-Role Admin** | **(this PR)** | Defines `manager` / `moderator` / `messenger` per-role permissions. Cosmos roster path is **retained as a fallback** (US4 + FR-431) — not feature-flagged, just deprioritised. Full retirement is queued as a follow-up spec once invitations have been stable for ≥6 months (FR-432). |
+| **Spec 005: User-to-User Messaging + Admin CMS/Ticketing** | **(this PR)** | Async messaging via Cosmos `messages` container; admin tickets as a flag on the same model |
+| **Spec 006: Online Presence** | **(this PR)** | `lastSeenAt` field; "online if <5min"; surfaces on `/find` + profile |
 
 ---
 
@@ -97,55 +126,67 @@ Each row links to the PR(s) that landed it.
 
 | Item | PR | Status |
 |---|---|---|
-| Spec 002 + Spec 003 + plans + tasks | **#47** (this PR) | Awaiting final review/merge |
+| Multi-role recognition (manager/moderator/messenger as admin-equivalent) | **#49** | CI in progress |
+| Specs 004 + 005 + 006 + PROJECT_STATUS update | **(this PR)** | Drafting |
+| `infra_apply_dev` CI job | **#46** | Parked — depends on operator action items below |
 
 ---
 
 ## Operator action items (non-code)
 
-These unlock or are required for parts of the shipped chain to actually work end-to-end. Most are one-time:
+These unlock or are required for parts of the shipped chain to actually work end-to-end:
 
-- [ ] **GitHub Actions vars for `infra_apply_dev`**: `AZURE_CLIENT_ID_DEV`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` — Repo → Settings → Secrets and variables → Actions → Variables tab. Required for #46.
+**Done**
+- [x] **SWA tier flipped to Free** (dev, prod) — saves ~$9/mo per env
+- [x] **`ADMIN_GITHUB_LOGINS` set on dev + prod SWAs** — bootstraps the maintainer as first admin via the roster path
+- [x] **Maintainer invited via Portal Role management blade** with role `manager` — confirmed working (`principal.userRoles` includes `manager`)
+- [x] **Stale per-PR preview environments deleted** — required to flip dev SWA to Free
+
+**Pending**
+- [ ] **GitHub Actions vars for `infra_apply_dev`**: `AZURE_CLIENT_ID_DEV`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` — Repo → Settings → Secrets and variables → Actions → Variables tab. Required to ship #46.
 - [ ] **First Bicep apply with Owner perms**: `Initialize-Infra.ps1 -Environment dev` once locally, so the new MI Contributor role assignment from #46 lands. After that, CI auto-applies.
 - [ ] **Branch protection on `main`**: Settings → Branches → require Code Owner reviews. Pairs with #39's hardened CODEOWNERS.
-- [ ] **GitHub OAuth app callback URL** (dev): `https://dev.codepals.io/.auth/login/github/callback` — verified working post-#37.
-- [ ] **Set `ADMIN_GITHUB_LOGINS=rmjoia` on dev SWA** — once #46 has applied via CI + the operator has triggered the first apply, this is automatic from the Bicep param. Until then, set manually in Azure Portal → SWA → Configuration.
-- [ ] **Verify admin nav appears on dev** after the above (log out + log in to dev.codepals.io).
+- [ ] **Delete custom GitHub OAuth app** at github.com/settings/applications — no longer wired to anything after #48.
+- [ ] **Remove `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` from SWA app settings** — no longer used after #48.
+- [ ] **Prod-tier app deploy** — when ready, set up a second SWA `codepals-prod`, separate deploy token, a parallel `prod_deploy` + `e2e_prod` workflow gated on a `production` GitHub Environment with required reviewers.
 
 ---
 
 ## Roadmap — Now / Next / Future
 
-### NOW (this PR + close-by)
+### NOW
 
-- PR #47 (specs only) — awaiting your review/merge
-- Operator items above
+- **PR #49** — Multi-role recognition (admin menu unblock); merge when CI green
+- **(this PR)** — Specs 004 + 005 + 006 + status update; merge when reviewed
 
-### NEXT — after #47 merges, sequential
+### NEXT — sequential, after this PR + #49 merge
 
 1. **003 US1** — ToS clause appended to `TERMS.md` (1-line text PR, ~10 min) + onboarding link
-2. **002 US1** — Profile picker for spoken languages + badges (no public-discovery surface change yet, safe to ship anytime after #47 merges)
-3. **003 US2** — Reporting endpoint + button + new `reports` Cosmos container (Bicep + handler + UI)
-4. **003 US3** — Admin moderation queue at `/admin/reports` + `audit` Cosmos container + suspension via the `member` custom role + `/suspended` page + server-side `assertNotSuspended` (FR-124, FR-124a, FR-124b)
+2. **002 US1** — Profile picker for spoken languages + badges (no public-discovery surface change yet)
+3. **004** implementation — per-role permission split (moderator-only / messenger-only endpoints), deprecation flag for the Cosmos roster path
+4. **003 US2** — Reporting endpoint + button + new `reports` Cosmos container — gated on `moderator` role per spec 004
+5. **003 US3** — Admin moderation queue at `/admin/reports` + `audit` Cosmos container + suspension enforced via the revised FR-124: server-side `assertNotSuspended` (FR-124b, primary on Free) + a public `/suspended` page. The pre-revision `member`-custom-role / rolesSource design (FR-124a) is Standard-only / inactive; not part of this implementation.
+6. **006** implementation — `lastSeenAt` tracking + "online" indicator on `/find` + profile
 
-### AFTER NEXT — gates 002's public rollout
+### AFTER NEXT
 
-5. **002 US2** — `/find` filter + uniqueness guard, behind a `LANGUAGE_FILTER_ENABLED` kill-switch
-6. **003 US4** — User blocking + mutual-hide on `/find` (independent of 002 US2; can land any time)
+7. **002 US2** — `/find` filter + uniqueness guard, behind a `LANGUAGE_FILTER_ENABLED` kill-switch
+8. **003 US4** — User blocking + mutual-hide on `/find` (independent of 002 US2)
+9. **005** implementation — User-to-user messaging (inbox, conversation thread, async, no real-time)
+10. **005** extension — Admin CMS/ticketing on top of the messaging schema, gated on `messenger` role
 
 ### FUTURE (not yet specced)
 
 | Area | Notes |
 |---|---|
-| Connections (user ↔ user) | Bicep already provisions the `connections` container; no API/UI yet |
-| Connection requests with stated context | Spec 003 P3 deferred; prerequisite for any "messaging" feature |
-| In-app messaging | Substantial new moderation surface; do connections first |
+| Connections (user ↔ user) | Bicep already provisions the `connections` container; no API/UI yet. Often a prerequisite for messaging — spec 005 lets you message anyone but a future "connection request with stated context" tightens that. |
 | Notifications (in-app, then email) | Email pipeline (SendGrid or equivalent) not yet integrated |
+| Real-time chat (SignalR) | Free tier exists (20 concurrent / 20K msg/day); adds an Azure resource + websocket plumbing. Defer until messaging volume justifies it. |
 | Astro 5 → 6 upgrade | Clears the one remaining moderate audit finding (`define:vars` XSS); enables tightening the audit gate to `--audit-level=moderate` |
-| Prod-tier infra + deploy chain | Separate SWA, separate OAuth app, separate token, manual-approval gate, parallel `infra_apply_prod` + `prod_deploy` + `e2e_prod` jobs |
+| Prod-tier infra + deploy chain | Separate SWA, separate token, manual-approval gate, parallel `infra_apply_prod` + `prod_deploy` + `e2e_prod` jobs |
 | i18n translation files | Constitution Principle 8 — currently mostly aspirational; only English strings exist in code |
 | Brand assets (Discord, full visual identity) | Constitution Principle 7 — partially done (logo concept selected, palette set); polish + Discord branding outstanding |
-| Migration runner harness | Pattern for one-shot Cosmos schema migrations driven from CI; referenced in earlier PRs |
+| Migration runner harness | Pattern for one-shot Cosmos schema migrations driven from CI |
 | Behavioral anomaly detection | Spec 003 deferred — flagging accounts with N reports/hour, unusual filter activity |
 | Per-language proficiency, region subtags on profile | Spec 002 deferred |
 
@@ -155,21 +196,22 @@ These unlock or are required for parts of the shipped chain to actually work end
 
 | Container | Partition key | Purpose | Provisioned by |
 |---|---|---|---|
-| `users` | `/id` (= `gh-<lowercased-github-username>` post-#43; legacy = SWA principal hash) | UserRecord — roles, swaUserId backfill, AdminRoster doc (`id='roster'`) | `infra/main.bicep` |
+| `users` | `/id` (= `gh-<lowercased-github-username>` post-#43; legacy = SWA principal hash) | UserRecord — roles, swaUserId backfill, AdminRoster doc (`id='roster'`). Post-006 also carries `lastSeenAt` + `presenceVisible` (no separate container — see spec 006). | `infra/main.bicep` |
 | `profiles` | `/userId` | Profile docs — `id = profile-<uuid>` post-#40; legacy = SWA principal hash | `infra/main.bicep` |
 | `connections` | `/userId1` | (Reserved — no API/UI yet, future connections feature) | `infra/main.bicep` |
 | `reports` | `/reportedProfileId` | (Future — spec 003 US2) | spec 003 task T-310 |
 | `audit` | `/adminId` | (Future — spec 003 US3) | spec 003 task T-320 |
 | `blocks` | `/blockerId` | (Future — spec 003 US4) | spec 003 task T-340 |
+| `messages` | `/conversationId` | (Future — spec 005) | spec 005 task T-510 |
 
 ---
 
-## Test counts (as of PR #47 base)
+## Test counts (as of PR #49 base)
 
 | Suite | Count | Notes |
 |---|---|---|
-| `npm run test:run` (frontend + api via root vitest config) | 211+ | Includes the SWA-config-invariant tests |
-| `cd api && npm test` | 162 | api unit tests |
+| `npm run test:run` (frontend + api via root vitest config) | 248 | Includes the SWA-config-invariant tests + new `admin-roles.test.ts` (9 tests) |
+| `cd api && npm test` | 171 | api unit tests |
 | `npm run test:e2e` (locally; skipped without `E2E_BASE_URL`) | 4 | Hits the deployed SWA |
 
 ---
