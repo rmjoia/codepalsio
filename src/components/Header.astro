@@ -290,6 +290,15 @@
 		isAdminPrincipal,
 		deleteAccount,
 	} from '../services/api';
+	import { setupModalDelegation } from '../lib/modals';
+
+	// Initialize modal click-delegation. Moved here from Footer.astro because
+	// Astro was emitting the Footer's tiny standalone script inline rather
+	// than as a hashed external file — and our CSP (no 'unsafe-inline') blocks
+	// any inline <script>. Bundled here alongside the auth wiring, the
+	// combined script is big enough that Astro emits it externally where CSP
+	// allows it (script-src 'self').
+	setupModalDelegation();
 
 	(async () => {
 		// Use the enriched principal — both invitation-assigned roles (manager,
