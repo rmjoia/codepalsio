@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const repoRoot = resolve(__dirname, '..');
@@ -225,5 +225,62 @@ describe('staticwebapp.config.json — route role gates', () => {
 		expect(override, '401 response override must exist').toBeDefined();
 		expect(override?.statusCode).toBe(302);
 		expect(override?.redirect).toMatch(/\/\.auth\/login\//);
+	});
+});
+
+/**
+ * Cross-reference invariant: every `/api/X` route declared in
+ * staticwebapp.config.json MUST have a matching `app.http('X', ...)`
+ * registration in api/src/*.ts. And vice versa.
+ *
+ * Catches the class of silent regression where a function gets renamed
+ * but the route stays stale (or a route is added but no function
+ * exists), each of which yields a 404 in prod. See
+ * .specify/platform-constraints.md.
+ */
+describe('staticwebapp.config.json ↔ api/src/*.ts route/function consistency', () => {
+	const apiSrcDir = resolve(repoRoot, 'api/src');
+	const declaredApiRoutes = (config.routes ?? [])
+		.map((r) => r.route)
+		.filter((p) => p.startsWith('/api/') && p !== '/api/*');
+
+	function collectRegisteredFunctionNames(): Set<string> {
+		const re = /\bapp\.http\(\s*(['"])([^'"]+)\1\s*,/g;
+		const names = new Set<string>();
+		for (const entry of readdirSync(apiSrcDir, { withFileTypes: true })) {
+			if (!entry.isFile()) continue;
+			if (!entry.name.endsWith('.ts')) continue;
+			if (entry.name.endsWith('.test.ts')) continue;
+			if (entry.name.endsWith('.fake.ts')) continue;
+			if (entry.name === 'index.ts') continue;
+			const content = readFileSync(resolve(apiSrcDir, entry.name), 'utf8');
+			for (const match of content.matchAll(re)) {
+				names.add(match[2]);
+			}
+		}
+		return names;
+	}
+
+	const registered = collectRegisteredFunctionNames();
+
+	it.each(declaredApiRoutes)('route %s has a matching app.http() registration', (route) => {
+		const functionName = route.replace(/^\/api\//, '');
+		expect(
+			registered.has(functionName),
+			`route ${route} declared but no app.http('${functionName}', …) found in api/src/*.ts.\n` +
+				`Either remove the route or add the function.\n` +
+				`Registered functions: ${[...registered].sort().join(', ')}`
+		).toBe(true);
+	});
+
+	it('every app.http() registration has a matching /api/X route declaration', () => {
+		const routePaths = new Set(declaredApiRoutes.map((r) => r.replace(/^\/api\//, '')));
+		const orphans = [...registered].filter((name) => !routePaths.has(name));
+		expect(
+			orphans,
+			`Functions registered but missing route declaration in staticwebapp.config.json:\n` +
+				orphans.map((n) => `  - app.http('${n}', …) — expected '/api/${n}' in routes`).join('\n') +
+				`\n\nAdd a route entry so SWA applies role gates correctly.`
+		).toEqual([]);
 	});
 });
