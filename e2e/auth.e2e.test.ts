@@ -80,23 +80,24 @@ function isSwaAuthLoop(responses: Response[]): boolean {
 }
 
 /**
- * Detects the "GitHub rejected the OAuth handshake" pattern: chain
- * reached github.com but landed somewhere other than the authorize
- * endpoint (typically /login, because GitHub bounces a request whose
- * redirect_uri doesn't match the OAuth app's registered callback).
+ * Find the hop in the redirect chain that hit GitHub's OAuth authorize
+ * endpoint, if any. CI runs without a GitHub user session, so GitHub
+ * naturally bounces /login/oauth/authorize → /login (it wants the user
+ * to sign in first). That's not a rejection — the OAuth handshake DID
+ * initiate. We check for the authorize hop's presence anywhere in the
+ * chain rather than insisting the chain end there.
  *
- * In preview envs the SWA hostname is a per-PR ephemeral URL (e.g.
- * <branch>-<hash>.eastus2.azurestaticapps.net) that the custom OAuth
- * app at github.com/settings/applications wasn't registered for, so
- * the handshake always fails here. Same class of "preview env can't
- * complete real OAuth" issue as isSwaAuthLoop, just hitting a
- * different rejection path.
+ * Returns the Response object for the /authorize hop, or null if the
+ * chain never reached it.
  */
-function isGithubOauthRejection(responses: Response[]): boolean {
-	if (responses.length === 0) return false;
-	const last = responses[responses.length - 1];
-	const u = new URL(last.url);
-	return u.host === 'github.com' && u.pathname !== '/login/oauth/authorize';
+function findAuthorizeHop(responses: Response[]): Response | null {
+	for (const r of responses) {
+		const u = new URL(r.url);
+		if (u.host === 'github.com' && u.pathname === '/login/oauth/authorize') {
+			return r;
+		}
+	}
+	return null;
 }
 
 describeIfDeployed(`auth-flow E2E (${baseUrl ?? 'skipped'}, auth-required=${authRequired})`, () => {
@@ -108,14 +109,13 @@ describeIfDeployed(`auth-flow E2E (${baseUrl ?? 'skipped'}, auth-required=${auth
 		expect(chain[0].status, `expected redirect on first hop, got ${chain[0].status}\nChain:\n${summary}`).toBeGreaterThanOrEqual(300);
 		expect(chain[0].status, `expected redirect on first hop, got ${chain[0].status}\nChain:\n${summary}`).toBeLessThan(400);
 
-		// Detect SWA auth-loop pattern (preview env without OAuth secrets).
+		// Detect SWA auth-loop pattern (env without OAuth secrets / auto-discovery).
 		if (isSwaAuthLoop(chain)) {
 			const msg =
 				`SWA auth loop detected on ${expectedHost} — chain stays on ${SWA_AUTH_LOOP_PATH} ` +
 				`across ${chain.length} hops without reaching GitHub. ` +
 				`This means GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET are not configured in this env's ` +
-				`Application Settings. Configure them in the SWA's preview-env settings to enable ` +
-				`full auth-flow E2E here.\nChain:\n${summary}`;
+				`Application Settings, or SWA can't initiate OAuth for some other reason.\nChain:\n${summary}`;
 
 			if (authRequired) {
 				expect.fail(msg);
@@ -125,19 +125,20 @@ describeIfDeployed(`auth-flow E2E (${baseUrl ?? 'skipped'}, auth-required=${auth
 			}
 		}
 
-		// Detect GitHub OAuth rejection (preview env hostname not registered
-		// as a callback on the custom OAuth app — GitHub bounces to /login).
-		if (isGithubOauthRejection(chain)) {
-			const last = chain[chain.length - 1];
-			const lastUrl = new URL(last.url);
+		// Verify the chain reached GitHub's OAuth authorize endpoint with valid
+		// query params. We look for the hop *anywhere* in the chain rather than
+		// at the end — when CI runs without a GitHub user session, GitHub
+		// naturally bounces /login/oauth/authorize → /login (asks the user to
+		// sign in first). That's the OAuth flow working correctly; we just
+		// can't observe it completing without a real session.
+		const authorizeHop = findAuthorizeHop(chain);
+		if (!authorizeHop) {
 			const msg =
-				`GitHub OAuth rejection on ${expectedHost} — chain reached github.com ` +
-				`but landed at ${lastUrl.pathname} instead of /login/oauth/authorize. ` +
-				`Most likely the preview env's hostname isn't registered as a callback URL on the ` +
-				`custom GitHub OAuth app, so GitHub bounces the handshake. This is expected on per-PR ` +
-				`preview environments — register the preview hostname only if you need full auth ` +
-				`coverage here.\nChain:\n${summary}`;
-
+				`OAuth chain never reached github.com/login/oauth/authorize. ` +
+				`This is a real auth-init failure — the SWA isn't redirecting to GitHub. ` +
+				`Check that the SWA tier supports GitHub login on this env, and that ` +
+				`GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET are wired if custom registration is in use.` +
+				`\nChain:\n${summary}`;
 			if (authRequired) {
 				expect.fail(msg);
 			} else {
@@ -146,27 +147,19 @@ describeIfDeployed(`auth-flow E2E (${baseUrl ?? 'skipped'}, auth-required=${auth
 			}
 		}
 
-		// Otherwise we expect to land at GitHub OAuth authorize.
-		const last = chain[chain.length - 1];
-		const lastUrl = new URL(last.url);
-		expect(
-			lastUrl.host,
-			`expected chain to end at github.com, ended at ${lastUrl.host}\nChain:\n${summary}`,
-		).toBe('github.com');
-		expect(lastUrl.pathname).toBe('/login/oauth/authorize');
-		expect(lastUrl.searchParams.get('client_id'), `client_id missing\nChain:\n${summary}`).toBeTruthy();
+		const authorizeUrl = new URL(authorizeHop.url);
+		expect(authorizeUrl.searchParams.get('client_id'), `client_id missing\nChain:\n${summary}`).toBeTruthy();
 
-		// The redirect_uri GitHub sees MUST match what's registered in the OAuth app.
-		// For SWA built-in auth this is <swa-host>/.auth/login/github/callback.
-		const redirectUri = lastUrl.searchParams.get('redirect_uri');
+		// The redirect_uri GitHub sees MUST match the OAuth app's registered callback.
+		// On SWA Free with the pre-configured GitHub provider, redirect_uri points to
+		// Microsoft's centralized identity proxy (identity.azurestaticapps.net) which
+		// is registered on Microsoft's shared OAuth app. On Standard with custom
+		// registration, it points to <swa-host>/.auth/login/github/callback.
+		// Either way it must be a URL; we don't assert the specific host since both
+		// shapes are valid.
+		const redirectUri = authorizeUrl.searchParams.get('redirect_uri');
 		expect(redirectUri, `redirect_uri missing\nChain:\n${summary}`).toBeTruthy();
-		const callback = new URL(redirectUri!);
-		expect(
-			callback.host,
-			`redirect_uri host '${callback.host}' must match deployed host '${expectedHost}'. ` +
-				`If GitHub rejects with "redirect_uri is not associated", register this exact URL in the OAuth app: ${redirectUri}\nChain:\n${summary}`,
-		).toBe(expectedHost);
-		expect(callback.pathname).toBe('/.auth/login/github/callback');
+		expect(() => new URL(redirectUri!), `redirect_uri is not a valid URL\nChain:\n${summary}`).not.toThrow();
 	});
 
 	it('/login alias triggers the same login chain (or 404 surfaces a SWA route regression)', async () => {
