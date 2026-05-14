@@ -1,3 +1,7 @@
+> ✅ **SHIPPED (Week 3 user registration + profile data model) — see `.specify/PROJECT_STATUS.md`.** Profile CRUD, profileVisibility opt-in, /find directory, GitHub OAuth via SWA built-in auth, Cosmos DB profile container, auto-heal for legacy data — all live (PRs #14, #28, #29, #30, #40, #43). Email-verification + parental-consent flows from this doc are NOT shipped (we lean on GitHub OAuth's existing email verification; parental consent is paused as not relevant for the current scope).
+
+---
+
 # Phase 2, Weeks 3-5: Core Platform Features
 
 **Status**: Not Started  

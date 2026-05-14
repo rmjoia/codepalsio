@@ -1,3 +1,7 @@
+> 📋 **NOT STARTED — see `.specify/PROJECT_STATUS.md` Roadmap → FUTURE.** Public analytics + launch-polish remain valid product intent. The launch milestone is contingent on: prod-tier infra apply + e2e_prod chain (out of scope for current spec set); brand assets / Discord polish (Constitution Principle 7 follow-up); i18n translation rollout (Principle 8 follow-up). New work tracks via numbered specs.
+
+---
+
 # Phase 4, Weeks 9-10: Analytics, Dashboard & Launch Polish
 
 **Status**: Not Started  

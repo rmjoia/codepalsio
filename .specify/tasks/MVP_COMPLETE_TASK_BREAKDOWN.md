@@ -1,3 +1,8 @@
+> ⚠️ **HISTORICAL — see `.specify/PROJECT_STATUS.md` for current state** (reconciled 2026-05-08).
+> Phase 1 tasks here are fully shipped. Phase 2 is partially shipped (profiles, /find, admin done; connections / messaging not). Phase 3-4 remain unstarted. New work is tracked via numbered task lists (`tasks/002-...`, `tasks/003-...`).
+
+---
+
 # CodePals.io MVP: Complete Task Breakdown
 
 **Project**: CodePals.io MVP Platform  

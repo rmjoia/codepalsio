@@ -1,3 +1,8 @@
+> ⚠️ **HISTORICAL — see `.specify/PROJECT_STATUS.md` for current state** (reconciled 2026-05-08).
+> The 10-week schedule, technology choices, and risk register here are the original plan as written. Schedule + status are stale. New work tracks through numbered plans (`plan/002-...`, `plan/003-...`).
+
+---
+
 # Implementation Plan: CodePals.io MVP Platform
 
 **Feature Branch**: `plan/001-codepals-mvp`  

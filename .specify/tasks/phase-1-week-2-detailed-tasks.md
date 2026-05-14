@@ -1,3 +1,7 @@
+> ✅ **SHIPPED (mostly) — Phase 1 Week 2 is complete.** See `.specify/PROJECT_STATUS.md`. Landing page deployed to dev + prod, brand identity applied, policy modals integrated, responsive mobile layout (PR #20), admin dashboard shipped in Phase 2 work (PRs #32, #33, #35). i18n + email pipeline remain deferred (see Roadmap → FUTURE in PROJECT_STATUS.md).
+
+---
+
 # Phase 1, Week 2: Landing Page & Admin Dashboard
 
 **Status**: ✅ Landing Page COMPLETED | ⏳ Admin Dashboard Deferred to Phase 2  
