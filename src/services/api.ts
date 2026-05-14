@@ -167,9 +167,11 @@ export function hasRole(principal: ClientPrincipal | null, role: string): boolea
  *   - 'moderator' — handles reports + user bans (invitation system, future)
  *   - 'messenger' — admin → user messaging / tickets (invitation system, future)
  *
- * Spec 004 will refine per-role permissions. Until then, treat all four
- * as "admin-equivalent" for menu visibility — the API enforces specific
- * role gates per endpoint where it matters.
+ * In this PR all four are treated as admin-equivalent — both for menu
+ * visibility here and for API endpoint authorisation. Per-role gating
+ * (moderator-only moderation endpoints, messenger-only CMS endpoints,
+ * etc.) lands with the spec 004 implementation; until then any one of
+ * these roles unlocks the full admin surface.
  */
 export const ADMIN_ROLE_NAMES: readonly string[] = ['admin', 'manager', 'moderator', 'messenger'];
 
