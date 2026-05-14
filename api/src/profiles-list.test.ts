@@ -69,8 +69,9 @@ describe('GET /api/profiles privacy guard', () => {
 			expect(PROFILES_QUERY).not.toMatch(/c\.profileVisibility\s*!=\s*'public'/);
 		});
 
-		it('excludes the current user via parameter binding', () => {
-			expect(PROFILES_QUERY).toContain('c.userId != @currentUserId');
+		it('does NOT exclude the current user — own profile is visible in /find as a self-preview', () => {
+			expect(PROFILES_QUERY).not.toContain('c.userId != @currentUserId');
+			expect(PROFILES_QUERY).not.toContain('@currentUserId');
 		});
 
 		it('caps the result set with SELECT TOP', () => {
@@ -98,17 +99,17 @@ describe('GET /api/profiles privacy guard', () => {
 			expect(mocks.fetchAllMock).not.toHaveBeenCalled();
 		});
 
-		it('passes the canonical query unchanged to Cosmos and binds the current user', async () => {
+		it('passes the canonical query unchanged to Cosmos with no parameters', async () => {
 			mocks.fetchAllMock.mockResolvedValue({ resources: [] });
 			await profilesHandler(fakeRequest, fakeContext);
 
 			expect(mocks.queryMock).toHaveBeenCalledTimes(1);
+			// Query has no @currentUserId binding after dropping self-exclusion.
 			expect(mocks.queryMock).toHaveBeenCalledWith(
-				expect.objectContaining({
-					query: PROFILES_QUERY,
-					parameters: [{ name: '@currentUserId', value: 'current-user-id' }],
-				})
+				expect.objectContaining({ query: PROFILES_QUERY })
 			);
+			const callArg = mocks.queryMock.mock.calls[0][0];
+			expect(callArg.parameters ?? []).toEqual([]);
 		});
 
 		it('returns the resources array verbatim under {profiles: ...}', async () => {
