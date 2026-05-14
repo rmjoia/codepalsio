@@ -29,7 +29,7 @@
 		},
 		{
 			"route": "/admin/*",
-			"allowedRoles": ["authenticated"]
+			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		},
 		{
 			"route": "/api/profile-save",
@@ -49,19 +49,19 @@
 		},
 		{
 			"route": "/api/admin-users",
-			"allowedRoles": ["authenticated"]
+			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		},
 		{
 			"route": "/api/admins-list",
-			"allowedRoles": ["authenticated"]
+			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		},
 		{
 			"route": "/api/admins-grant",
-			"allowedRoles": ["authenticated"]
+			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		},
 		{
 			"route": "/api/admins-revoke",
-			"allowedRoles": ["authenticated"]
+			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		},
 		{
 			"route": "/api/get-roles",
