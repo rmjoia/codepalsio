@@ -159,6 +159,26 @@ export function hasRole(principal: ClientPrincipal | null, role: string): boolea
 }
 
 /**
+ * Admin-tier role names recognised across the platform. Any of these in
+ * `principal.userRoles` grants access to admin UI surfaces.
+ *
+ *   - 'admin'     — legacy roster-based grant (pre-invitation system)
+ *   - 'manager'   — full platform admin (invitation system)
+ *   - 'moderator' — handles reports + user bans (invitation system, future)
+ *   - 'messenger' — admin → user messaging / tickets (invitation system, future)
+ *
+ * Spec 004 will refine per-role permissions. Until then, treat all four
+ * as "admin-equivalent" for menu visibility — the API enforces specific
+ * role gates per endpoint where it matters.
+ */
+export const ADMIN_ROLE_NAMES: readonly string[] = ['admin', 'manager', 'moderator', 'messenger'];
+
+export function isAdminPrincipal(principal: ClientPrincipal | null): boolean {
+	if (!principal?.userRoles) return false;
+	return ADMIN_ROLE_NAMES.some((r) => principal.userRoles.includes(r));
+}
+
+/**
  * Subset of Profile returned by GET /api/profiles. The directory endpoint
  * intentionally projects only the fields the cards render — no userId,
  * no profileVisibility — to minimise data exposure.

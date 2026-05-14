@@ -9,6 +9,7 @@ import {
 	type AdminRosterRepository,
 } from './lib/admin-roster';
 import { isAdminFor, parseAdminLogins } from './lib/roles';
+import { principalHasAdminRole } from './lib/admin-roles';
 
 /**
  * Test seam — production handler builds these from env. The optional
@@ -112,8 +113,10 @@ export async function adminUsersHandler(
 		return { status: 500, jsonBody: { error: 'Server configuration error' } };
 	}
 
-	// Authoritative admin check via the roster. SWA Free has no rolesSource
-	// so principal.userRoles never carries 'admin' — we must verify here.
+	// Fast path: invitation-assigned admin-tier roles flow through
+	// principal.userRoles on every authenticated request — no Cosmos
+	// lookup needed. Falls through to the roster path only when no
+	// admin-tier role is present (legacy / pre-invitation users).
 	const authDeps: AdminAuthDeps = overrideAuthDeps ?? {
 		users: createUserRepository(cfg.connectionString, cfg.database),
 		roster: createAdminRosterRepository(cfg.connectionString, cfg.database),
@@ -121,7 +124,8 @@ export async function adminUsersHandler(
 	};
 	const isAdmin = authDeps.verifyAdmin
 		? await authDeps.verifyAdmin(principal)
-		: await isAdminFor(
+		: principalHasAdminRole(principal) ||
+			(await isAdminFor(
 				{
 					swaUserId: principal.userId,
 					githubUsername: principal.userDetails,
@@ -132,7 +136,7 @@ export async function adminUsersHandler(
 					roster: authDeps.roster,
 					bootstrapLogins: authDeps.bootstrapLogins ?? new Set(),
 				}
-			);
+			));
 	if (!isAdmin) {
 		return { status: 403, jsonBody: { error: 'Forbidden' } };
 	}

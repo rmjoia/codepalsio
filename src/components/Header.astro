@@ -284,17 +284,23 @@
 </header>
 
 <script>
-	import { getPrincipalWithRoles, getAvatarUrl, hasRole, deleteAccount } from '../services/api';
+	import {
+		getPrincipalWithRoles,
+		getAvatarUrl,
+		isAdminPrincipal,
+		deleteAccount,
+	} from '../services/api';
 
 	(async () => {
-		// Use the enriched principal — on SWA Free the built-in userRoles
-		// can't carry 'admin', so we ask /api/get-roles to fill it in.
+		// Use the enriched principal — both invitation-assigned roles (manager,
+		// moderator, etc.) and roster-enriched 'admin' flow through userRoles.
+		// isAdminPrincipal recognises any admin-tier role for menu visibility.
 		const principal = await getPrincipalWithRoles();
 		if (!principal) return;
 
 		const username = principal.userDetails || 'User';
 		const avatarUrl = getAvatarUrl(principal);
-		const isAdmin = hasRole(principal, 'admin');
+		const isAdmin = isAdminPrincipal(principal);
 
 		// === Desktop ===
 		document.getElementById('sign-in-btn')?.classList.add('hidden');

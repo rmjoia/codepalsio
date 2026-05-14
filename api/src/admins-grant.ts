@@ -9,6 +9,7 @@ import {
 	type AdminRosterRepository,
 } from './lib/admin-roster';
 import { isAdminFor, parseAdminLogins } from './lib/roles';
+import { principalHasAdminRole } from './lib/admin-roles';
 import type { ClientPrincipal } from './lib/types';
 
 /**
@@ -73,11 +74,13 @@ export async function adminsGrantHandler(
 		};
 	}
 
-	// Authoritative admin check via the roster. SWA Free has no rolesSource
-	// so principal.userRoles never carries 'admin' — we must verify here.
+	// Fast path: invitation-assigned admin-tier role grants access without
+	// a roster lookup. Falls through to the roster path only for legacy /
+	// pre-invitation users who don't have any admin role on the principal.
 	const isAdmin = repos.verifyAdmin
 		? await repos.verifyAdmin(principal)
-		: await isAdminFor(
+		: principalHasAdminRole(principal) ||
+			(await isAdminFor(
 				{
 					swaUserId: principal.userId,
 					githubUsername: principal.userDetails,
@@ -88,7 +91,7 @@ export async function adminsGrantHandler(
 					roster: repos.roster,
 					bootstrapLogins: repos.bootstrapLogins ?? new Set(),
 				}
-			);
+			));
 	if (!isAdmin) {
 		return { status: 403, jsonBody: { error: 'Forbidden' } };
 	}
