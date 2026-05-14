@@ -28,10 +28,6 @@
 			"allowedRoles": ["authenticated"]
 		},
 		{
-			"route": "/admin/*",
-			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
-		},
-		{
 			"route": "/api/profile-save",
 			"allowedRoles": ["authenticated"]
 		},
@@ -70,6 +66,10 @@
 		{
 			"route": "/api/*",
 			"allowedRoles": ["anonymous", "authenticated"]
+		},
+		{
+			"route": "/admin/*",
+			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		}
 	],
 	"responseOverrides": {

@@ -192,6 +192,34 @@ describe('staticwebapp.config.json — route role gates', () => {
 		}
 	});
 
+	it('places /admin/* AFTER all /api/ routes (avoids route-pattern bleed)', () => {
+		// SWA matches routes in declaration order; the first match wins. If
+		// /admin/* is declared BEFORE the /api/admin-users (etc.) routes,
+		// SWA can incorrectly match /api/admin-users against /admin/* and
+		// route it to the static handler — which then 404s because no
+		// static file matches /api/admin-users. We observed this in
+		// production after PR #48: every /api/admin-* endpoint returned
+		// 404 even though the functions were registered (verified in the
+		// SWA Portal's APIs → Managed Functions list).
+		//
+		// Fix: /admin/* must come AFTER all /api/* routes so the specific
+		// /api/admin-* rules match first. This invariant is the regression
+		// guard.
+		const adminPageRouteIndex = routes.findIndex((r) => r.route === '/admin/*');
+		if (adminPageRouteIndex === -1) return; // optional rule; skip if absent
+
+		const apiRouteIndices = routes
+			.map((r, i) => ({ route: r.route, index: i }))
+			.filter((x) => x.route.startsWith('/api/'));
+
+		for (const r of apiRouteIndices) {
+			expect(
+				r.index,
+				`${r.route} (index ${r.index}) must come before /admin/* (index ${adminPageRouteIndex}) — otherwise SWA's pattern matcher bleeds /admin/* into /api/admin-* paths`
+			).toBeLessThan(adminPageRouteIndex);
+		}
+	});
+
 	it('redirects 401 responses to the login flow', () => {
 		const override = config.responseOverrides?.['401'];
 		expect(override, '401 response override must exist').toBeDefined();
