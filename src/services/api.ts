@@ -83,11 +83,16 @@ export interface ProfileInput {
 }
 
 let principalPromise: Promise<ClientPrincipal | null> | null = null;
+let enrichedPrincipalPromise: Promise<ClientPrincipal | null> | null = null;
 
 /**
  * Resolve the current SWA client principal, memoized for the page lifetime.
  * Returns null for anonymous sessions or any network/parse failure — callers
  * decide how to react (redirect to login, show signed-out UI, etc.).
+ *
+ * Note: on SWA Free `userRoles` only carries the built-in `anonymous` /
+ * `authenticated` roles. To know whether the caller is admin, use
+ * {@link getPrincipalWithRoles} which enriches via /api/get-roles.
  */
 export function getPrincipal(): Promise<ClientPrincipal | null> {
 	if (!principalPromise) {
@@ -97,6 +102,39 @@ export function getPrincipal(): Promise<ClientPrincipal | null> {
 			.catch(() => null);
 	}
 	return principalPromise;
+}
+
+/**
+ * Resolve the principal AND enrich it with application-level roles
+ * (e.g. 'admin') by calling /api/get-roles. On SWA Free there's no
+ * rolesSource feature, so principal.userRoles never carries 'admin' —
+ * the frontend asks the API for the real role set.
+ *
+ * The enriched roles are MERGED with the built-in SWA roles; we keep
+ * 'authenticated' / 'anonymous' so call sites that already check those
+ * keep working. Memoised per page like getPrincipal.
+ */
+export function getPrincipalWithRoles(): Promise<ClientPrincipal | null> {
+	if (enrichedPrincipalPromise) return enrichedPrincipalPromise;
+
+	enrichedPrincipalPromise = (async () => {
+		const principal = await getPrincipal();
+		if (!principal) return null;
+		try {
+			const r = await fetch('/api/get-roles');
+			if (!r.ok) return principal;
+			const body = (await r.json()) as { roles?: unknown };
+			if (!Array.isArray(body.roles)) return principal;
+			const extra = body.roles.filter((x): x is string => typeof x === 'string');
+			const merged = Array.from(new Set([...(principal.userRoles ?? []), ...extra]));
+			return { ...principal, userRoles: merged };
+		} catch {
+			// Soft-fail: return the un-enriched principal. Admin UI will be
+			// hidden (no 'admin' in userRoles), which is the safe default.
+			return principal;
+		}
+	})();
+	return enrichedPrincipalPromise;
 }
 
 /**

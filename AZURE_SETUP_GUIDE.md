@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide shows you how to configure Azure Static Web Apps with **secure, built-in GitHub authentication**. No custom OAuth code needed - Azure handles everything for you.
+This guide shows you how to configure Azure Static Web Apps with **secure, built-in GitHub authentication** on the **Free tier**. No custom OAuth code, no GitHub OAuth app of your own, no Standard-tier costs — Azure handles everything via its pre-configured GitHub provider.
 
 ---
 
@@ -14,29 +14,24 @@ This guide shows you how to configure Azure Static Web Apps with **secure, built
 
 ---
 
-## Step 1: Create GitHub OAuth App
+## Step 1: Authentication — Pre-configured GitHub provider (recommended, Free tier)
 
-Before deploying to Azure, you need to register a GitHub OAuth application.
+On the **Free** plan, SWA ships with a pre-configured GitHub OAuth app maintained by Microsoft. Users click "Sign in with GitHub", authorize "Azure Static Web Apps" on the consent screen, and come back signed in. **You don't need to register your own GitHub OAuth app.** Skip ahead to Step 2.
 
-### 1.1 Register OAuth App
+### Optional: bring your own OAuth app (Standard tier only)
 
-1. Go to **GitHub Settings** → **Developer settings** → **OAuth Apps**
-2. Click **New OAuth App**
-3. Fill in the details:
-   - **Application name**: `CodePals.io` (or any name)
-   - **Homepage URL**: `https://your-site-name.azurestaticapps.net` (you'll get this after creating the Static Web App, or your custom domain like `https://codepals.io`)
-   - **Authorization callback URL**: `https://<your-swa-host>/.auth/login/github/callback`
-     > Use the SWA's hostname (custom domain like `https://codepals.io` if bound, otherwise the
-     > default `<name>.azurestaticapps.net` URL). The path `/.auth/login/github/callback` is the
-     > built-in SWA auth callback — **not** `/api/auth/callback` (that was the old custom OAuth
-     > flow, removed in commit 7410e99). SWA's centralized identity tier (`identity.<N>.azurestaticapps.net`)
-     > is an **internal proxy** that GitHub never sees as the redirect_uri — don't register that URL.
-4. Click **Register application**
-5. **Save the Client ID** (you'll need this)
-6. Click **Generate a new client secret**
-7. **Copy and save the Client Secret immediately** (you won't see it again)
+You only need a custom GitHub OAuth app if you want the consent screen to say "CodePals" instead of "Azure Static Web Apps", or you need extra OAuth scopes. This requires the **Standard** plan (~$9/app/month) and is **not recommended** for low-budget setups. If you do want it:
 
-> ⚠️ **Important**: Keep your Client Secret secure! Never commit it to source control.
+1. Go to **GitHub Settings** → **Developer settings** → **OAuth Apps** → **New OAuth App**
+2. Application name: `CodePals.io`
+3. Homepage URL: `https://codepals.io` (your custom domain or the default `<name>.azurestaticapps.net`)
+4. Authorization callback URL: `https://<your-swa-host>/.auth/login/github/callback`
+5. Save the Client ID and generate a Client Secret
+6. In Azure: set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` as SWA app settings
+7. Add `auth.identityProviders.github.registration` referencing those setting names in `staticwebapp.config.json`
+8. Flip the SWA SKU to Standard
+
+> Keep the Client Secret out of source control.
 
 ---
 
@@ -55,9 +50,7 @@ Before deploying to Azure, you need to register a GitHub OAuth application.
 - **Resource Group**: Create new or use existing (e.g., `codepals-resources`)
 - **Name**: `codepals` (or your preferred name)
   - This becomes your URL: `https://codepals.azurestaticapps.net`
-- **Plan type**: 
-  - **Free** for development/testing
-  - **Standard** for production (required for custom auth, SLA)
+- **Plan type**: **Free** (recommended). Standard is only needed if you want custom auth registration, `rolesSource` function-based roles, or a paid SLA — none of which CodePals requires.
 - **Region**: Choose closest to your users
 - **Source**: **GitHub**
 
@@ -101,11 +94,12 @@ Click **+ Add** for each of the following:
 
 | Name | Value | Notes |
 |------|-------|-------|
-| `GITHUB_CLIENT_ID` | `<your-github-client-id>` | From Step 1 |
-| `GITHUB_CLIENT_SECRET` | `<your-github-client-secret>` | From Step 1 |
 | `COSMOS_DB_CONNECTION_STRING` | `AccountEndpoint=https://...` | Your Cosmos DB connection string |
 | `COSMOS_DB_DATABASE_NAME` | `codepals-db` | Your database name |
-| `ENVIRONMENT` | `production` | Set to `prod` or `production` |
+| `ENVIRONMENT` | `dev` or `prod` | Used by the API + admin bootstrap |
+| `ADMIN_GITHUB_LOGINS` | `your-github-login` | Comma-separated. First admin(s) get bootstrapped on first sign-in; after that the persistent roster (Cosmos) is authoritative. |
+
+> **Free tier note:** `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` are **NOT** needed when using the pre-configured GitHub provider. Only set those (and the corresponding `auth.identityProviders` config) if you've opted into custom registration on Standard tier (Step 1 optional path).
 
 > 💡 **Tip**: Use Azure Key Vault for production secrets (see advanced security section)
 
@@ -116,18 +110,17 @@ Click **+ Add** for each of the following:
 
 ---
 
-## Step 4: Update GitHub OAuth App Callback URL
+## Step 4: Update GitHub OAuth App Callback URL (Standard tier only)
 
-Now that you have your Azure URL, update the GitHub OAuth app:
+**Skip this step if you're on Free tier.** Microsoft's pre-configured GitHub OAuth app already has the right callback registered — you don't own that app and can't (and don't need to) change it.
+
+If you opted into custom registration (Step 1 optional path) on Standard tier:
 
 1. Go back to **GitHub Settings** → **Developer settings** → **OAuth Apps**
 2. Click on your CodePals.io app
 3. Update the URLs:
-   - **Homepage URL**: `https://codepals.azurestaticapps.net` (or your actual URL — e.g. `https://codepals.io` once a custom domain is bound)
+   - **Homepage URL**: your actual URL (e.g. `https://codepals.io`)
    - **Authorization callback URL**: `https://<your-swa-host>/.auth/login/github/callback`
-     > Use the SWA's hostname directly (default `*.azurestaticapps.net` or your bound custom
-     > domain). SWA's internal identity tier proxies the OAuth flow but the `redirect_uri` GitHub
-     > sees is your SWA's URL.
 4. Click **Update application**
 
 ---
@@ -292,13 +285,17 @@ Instead of storing secrets in Application Settings:
 
 ### Authentication Not Working
 
-**Problem**: Clicking login doesn't redirect to GitHub
-- **Solution**: Check that `GITHUB_CLIENT_ID` is set in Application Settings
-- **Solution**: Verify GitHub OAuth app callback URL matches exactly
+**Problem**: Clicking login doesn't redirect to GitHub (Free tier)
+- **Solution**: Verify the SWA tier is actually Free (`az staticwebapp show --name <swa> --query sku.name`). If it's Standard with a stale `auth.identityProviders` block in `staticwebapp.config.json`, the custom registration fails closed.
+- **Solution**: Make sure `staticwebapp.config.json` does NOT contain `auth.rolesSource` or `auth.identityProviders` — those are Standard-only features that, when present on Free, can break the redirect.
+- **Solution**: Anonymous user route `/_astro/*` must include `["anonymous"]` so the login UI's static assets load.
 
-**Problem**: After GitHub authorization, getting 401 errors
-- **Solution**: Check that `GITHUB_CLIENT_SECRET` is set correctly
-- **Solution**: Verify the secret hasn't expired
+**Problem**: After GitHub authorization, getting 401 errors on `/api/admin-*` endpoints
+- **Solution**: Verify your GitHub login is in `ADMIN_GITHUB_LOGINS` (env var) for the bootstrap path, or in the Cosmos `adminRoster` document after first sign-in. The handler resolves admin status via the roster, NOT via `principal.userRoles` (rolesSource is Standard-only).
+
+**Problem (Standard tier custom registration only)**: 404 after clicking login
+- **Solution**: Check that `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are set in Application Settings.
+- **Solution**: Verify the OAuth app's callback URL matches `https://<your-swa-host>/.auth/login/github/callback` exactly.
 
 ### API Calls Failing
 
@@ -356,16 +353,47 @@ Instead of storing secrets in Application Settings:
 
 ## Cost Estimation
 
-### Free Tier
-- **Static Web App**: Free tier includes 100 GB bandwidth/month
-- **Cosmos DB**: Serverless mode ~$0.25/month for low traffic
-- **Total**: ~$0-5/month for development
+### Free Tier (recommended setup)
+- **Static Web App**: $0 — Free plan, 100 GB bandwidth/month, pre-configured GitHub auth, 500K function executions/month
+- **Cosmos DB**: $0 — Free Tier provisioned (1000 RU/s + 25 GB lifetime free, one account per subscription) OR a few cents/month on serverless for very low traffic
+- **Key Vault**: ~$0.10/month for a handful of secrets
+- **DNS zones**: $0.50/zone/month (one zone for `codepals.io`, optionally one for `dev.codepals.io`)
+- **Total**: ~$1-2/month
 
-### Production (Standard Tier)
-- **Static Web App**: $9/month (includes SLA, custom auth)
-- **Cosmos DB**: Serverless or provisioned based on usage
-- **Application Insights**: First 5 GB/month free
-- **Total**: ~$10-30/month for moderate traffic
+### If you flip to Standard tier (NOT recommended unless you need it)
+- **Static Web App**: $9/app/month (Standard plan)
+- Adds custom auth registration, `rolesSource`, BYO Functions, more staging envs
+- Reasons to take this on: corporate SSO via custom OIDC, custom OAuth branding, paid SLA
+- **Total**: ~$10-20/month per environment
+
+### Cost levers to know
+- **One Cosmos Free Tier per subscription.** If you have prod + dev, only one can be Free Tier — the other goes serverless (cheap at idle but charges per request).
+- **Cosmos serverless backup storage** is metered. The default 7-day periodic backup is included free up to 2 copies; continuous backup costs extra.
+- **DNS zones** cost the same idle or active. Drop the `dev.codepals.io` zone and use the auto-generated `<name>.azurestaticapps.net` URL for dev if you want to save $0.50/month.
+
+---
+
+## Tearing Down an Environment
+
+To completely remove an environment (resource group + soft-deleted Key Vault), use the `Remove-Infra` PowerShell function:
+
+```powershell
+Import-Module ./infra/CodePals.Infra.psd1
+
+# Tear down dev — prompts for confirmation
+Remove-Infra -Environment dev
+
+# Tear down prod — requires -Force AND a typed confirmation ('destroy prod')
+Remove-Infra -Environment prod -Force
+```
+
+This deletes:
+- The resource group and every contained resource (SWA, Cosmos, MI, etc.)
+- The soft-deleted Key Vault (purged so the name is reusable immediately)
+
+After `Remove-Infra`, you can run `Initialize-Infra -Environment dev` again and reuse all the same names.
+
+> The Bicep template sets `enablePurgeProtection: false` and `softDeleteRetentionInDays: 7` for dev (90 for prod) to enable this teardown/reapply cycle. Don't turn purge protection on unless you have a compliance reason — it would block `Remove-Infra` for the full retention window.
 
 ---
 

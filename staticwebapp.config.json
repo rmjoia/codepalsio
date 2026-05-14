@@ -2,17 +2,6 @@
 	"platform": {
 		"apiRuntime": "node:20"
 	},
-	"auth": {
-		"rolesSource": "/api/get-roles",
-		"identityProviders": {
-			"github": {
-				"registration": {
-					"clientIdSettingName": "GITHUB_CLIENT_ID",
-					"clientSecretSettingName": "GITHUB_CLIENT_SECRET"
-				}
-			}
-		}
-	},
 	"routes": [
 		{
 			"route": "/login",
@@ -40,7 +29,7 @@
 		},
 		{
 			"route": "/admin/*",
-			"allowedRoles": ["admin"]
+			"allowedRoles": ["authenticated"]
 		},
 		{
 			"route": "/api/profile-save",
@@ -60,19 +49,19 @@
 		},
 		{
 			"route": "/api/admin-users",
-			"allowedRoles": ["admin"]
+			"allowedRoles": ["authenticated"]
 		},
 		{
 			"route": "/api/admins-list",
-			"allowedRoles": ["admin"]
+			"allowedRoles": ["authenticated"]
 		},
 		{
 			"route": "/api/admins-grant",
-			"allowedRoles": ["admin"]
+			"allowedRoles": ["authenticated"]
 		},
 		{
 			"route": "/api/admins-revoke",
-			"allowedRoles": ["admin"]
+			"allowedRoles": ["authenticated"]
 		},
 		{
 			"route": "/api/get-roles",

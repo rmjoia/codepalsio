@@ -25,6 +25,9 @@ vi.mock('./lib/principal', () => ({
 }));
 
 import { adminUsersHandler, ADMIN_USERS_QUERY, ADMIN_PAGE_SIZE } from './admin-users';
+import { FakeUserRepository } from './lib/users.fake';
+import { FakeAdminRosterRepository } from './lib/admin-roster.fake';
+import { userIdForGithub } from './lib/users';
 
 const fakeRequest = {} as HttpRequest;
 const fakeContext = { error: vi.fn() } as unknown as InvocationContext;
@@ -33,16 +36,24 @@ const adminPrincipal = {
 	identityProvider: 'github',
 	userId: 'admin-user-id',
 	userDetails: 'rmjoia',
-	userRoles: ['authenticated', 'admin'],
+	// userRoles intentionally has no 'admin' — on SWA Free the rolesSource
+	// feature is unavailable, so 'admin' never lands here. The handler must
+	// resolve admin status from the roster, not from this array.
+	userRoles: ['authenticated'],
 	claims: [],
 };
 
-const nonAdminPrincipal = {
+// A different user who's NOT in the roster — used to drive the 403 path.
+const outsiderPrincipal = {
 	...adminPrincipal,
-	userRoles: ['authenticated'],
+	userId: 'outsider-user-id',
+	userDetails: 'outsider',
 };
 
 describe('GET /api/admin-users', () => {
+	let users: FakeUserRepository;
+	let roster: FakeAdminRosterRepository;
+
 	beforeEach(() => {
 		mocks.fetchAllMock.mockReset();
 		mocks.queryMock.mockReset();
@@ -53,7 +64,14 @@ describe('GET /api/admin-users', () => {
 		mocks.getCosmosConfigMock.mockReturnValue({ connectionString: 'cs', database: 'db' });
 		mocks.getClientPrincipalMock.mockReset();
 		mocks.getClientPrincipalMock.mockReturnValue(adminPrincipal);
+		users = new FakeUserRepository();
+		roster = new FakeAdminRosterRepository();
+		// Seed rmjoia as admin — the default success path requires this since
+		// the handler now verifies admin from the roster, not principal.userRoles.
+		roster.seed([userIdForGithub('rmjoia')]);
 	});
+
+	const authDeps = () => ({ users, roster });
 
 	describe('Cosmos query structural invariants', () => {
 		it('caps with SELECT TOP', () => {
@@ -82,15 +100,15 @@ describe('GET /api/admin-users', () => {
 	describe('authorization', () => {
 		it('rejects unauthenticated with 401', async () => {
 			mocks.getClientPrincipalMock.mockReturnValueOnce(null);
-			const res = await adminUsersHandler(fakeRequest, fakeContext);
+			const res = await adminUsersHandler(fakeRequest, fakeContext, authDeps());
 			expect(res.status).toBe(401);
 			expect(res.jsonBody).toEqual({ error: 'Not authenticated' });
 			expect(mocks.queryMock).not.toHaveBeenCalled();
 		});
 
 		it('rejects authenticated non-admin with 403', async () => {
-			mocks.getClientPrincipalMock.mockReturnValueOnce(nonAdminPrincipal);
-			const res = await adminUsersHandler(fakeRequest, fakeContext);
+			mocks.getClientPrincipalMock.mockReturnValueOnce(outsiderPrincipal);
+			const res = await adminUsersHandler(fakeRequest, fakeContext, authDeps());
 			expect(res.status).toBe(403);
 			expect(res.jsonBody).toEqual({ error: 'Forbidden' });
 			expect(mocks.queryMock).not.toHaveBeenCalled();
@@ -98,7 +116,7 @@ describe('GET /api/admin-users', () => {
 
 		it('accepts admin role', async () => {
 			mocks.fetchAllMock.mockResolvedValue({ resources: [] });
-			const res = await adminUsersHandler(fakeRequest, fakeContext);
+			const res = await adminUsersHandler(fakeRequest, fakeContext, authDeps());
 			expect(res.status).toBe(200);
 			expect(mocks.queryMock).toHaveBeenCalledTimes(1);
 		});
@@ -107,14 +125,14 @@ describe('GET /api/admin-users', () => {
 	describe('error handling', () => {
 		it('returns 500 when Cosmos config is missing', async () => {
 			mocks.getCosmosConfigMock.mockReturnValueOnce(null);
-			const res = await adminUsersHandler(fakeRequest, fakeContext);
+			const res = await adminUsersHandler(fakeRequest, fakeContext, authDeps());
 			expect(res.status).toBe(500);
 			expect(res.jsonBody).toEqual({ error: 'Server configuration error' });
 		});
 
 		it('returns 500 with generic message when the Cosmos query throws', async () => {
 			mocks.fetchAllMock.mockRejectedValue(new Error('network down'));
-			const res = await adminUsersHandler(fakeRequest, fakeContext);
+			const res = await adminUsersHandler(fakeRequest, fakeContext, authDeps());
 			expect(res.status).toBe(500);
 			expect(res.jsonBody).toEqual({ error: 'Failed to load admin users' });
 		});
@@ -137,21 +155,21 @@ describe('GET /api/admin-users', () => {
 
 		it('marks complete when bio≥50, skills≥2, interests≥2, has location + timezone', async () => {
 			mocks.fetchAllMock.mockResolvedValue({ resources: [completeRow] });
-			const res = await adminUsersHandler(fakeRequest, fakeContext);
+			const res = await adminUsersHandler(fakeRequest, fakeContext, authDeps());
 			const body = res.jsonBody as { profiles: { complete: boolean }[] };
 			expect(body.profiles[0].complete).toBe(true);
 		});
 
 		it('marks incomplete when bio < 50', async () => {
 			mocks.fetchAllMock.mockResolvedValue({ resources: [{ ...completeRow, bioLength: 49 }] });
-			const res = await adminUsersHandler(fakeRequest, fakeContext);
+			const res = await adminUsersHandler(fakeRequest, fakeContext, authDeps());
 			const body = res.jsonBody as { profiles: { complete: boolean }[] };
 			expect(body.profiles[0].complete).toBe(false);
 		});
 
 		it('marks incomplete when skills < 2', async () => {
 			mocks.fetchAllMock.mockResolvedValue({ resources: [{ ...completeRow, skillsCount: 1 }] });
-			const res = await adminUsersHandler(fakeRequest, fakeContext);
+			const res = await adminUsersHandler(fakeRequest, fakeContext, authDeps());
 			const body = res.jsonBody as { profiles: { complete: boolean }[] };
 			expect(body.profiles[0].complete).toBe(false);
 		});
@@ -160,21 +178,21 @@ describe('GET /api/admin-users', () => {
 			mocks.fetchAllMock.mockResolvedValue({
 				resources: [{ ...completeRow, interestsCount: 1 }],
 			});
-			const res = await adminUsersHandler(fakeRequest, fakeContext);
+			const res = await adminUsersHandler(fakeRequest, fakeContext, authDeps());
 			const body = res.jsonBody as { profiles: { complete: boolean }[] };
 			expect(body.profiles[0].complete).toBe(false);
 		});
 
 		it('marks incomplete when location is missing', async () => {
 			mocks.fetchAllMock.mockResolvedValue({ resources: [{ ...completeRow, location: undefined }] });
-			const res = await adminUsersHandler(fakeRequest, fakeContext);
+			const res = await adminUsersHandler(fakeRequest, fakeContext, authDeps());
 			const body = res.jsonBody as { profiles: { complete: boolean }[] };
 			expect(body.profiles[0].complete).toBe(false);
 		});
 
 		it('marks incomplete when timezone is missing', async () => {
 			mocks.fetchAllMock.mockResolvedValue({ resources: [{ ...completeRow, timezone: undefined }] });
-			const res = await adminUsersHandler(fakeRequest, fakeContext);
+			const res = await adminUsersHandler(fakeRequest, fakeContext, authDeps());
 			const body = res.jsonBody as { profiles: { complete: boolean }[] };
 			expect(body.profiles[0].complete).toBe(false);
 		});
@@ -192,7 +210,7 @@ describe('GET /api/admin-users', () => {
 					{ id: '4', userId: 'u4', displayName: 'D', profileVisibility: 'private', availability: 'unavailable', bioLength: 0, skillsCount: 0, interestsCount: 0, location: undefined, timezone: undefined, updatedAt: '' },
 				],
 			});
-			const res = await adminUsersHandler(fakeRequest, fakeContext);
+			const res = await adminUsersHandler(fakeRequest, fakeContext, authDeps());
 			const body = res.jsonBody as { kpis: { totalProfiles: number; publicProfiles: number; privateProfiles: number; completeProfiles: number } };
 			expect(body.kpis).toEqual({
 				totalProfiles: 4,
@@ -208,7 +226,7 @@ describe('GET /api/admin-users', () => {
 					{ id: '1', userId: 'u1', displayName: 'Legacy', profileVisibility: undefined, availability: 'active', bioLength: 0, skillsCount: 0, interestsCount: 0, updatedAt: '' },
 				],
 			});
-			const res = await adminUsersHandler(fakeRequest, fakeContext);
+			const res = await adminUsersHandler(fakeRequest, fakeContext, authDeps());
 			const body = res.jsonBody as { profiles: { profileVisibility: string }[]; kpis: { publicProfiles: number; privateProfiles: number } };
 			expect(body.profiles[0].profileVisibility).toBe('private');
 			expect(body.kpis.privateProfiles).toBe(1);

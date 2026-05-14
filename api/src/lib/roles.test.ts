@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { resolveRoles, parseAdminLogins } from './roles';
+import { resolveRoles, isAdminFor, parseAdminLogins } from './roles';
 import { FakeUserRepository } from './users.fake';
 import { FakeAdminRosterRepository } from './admin-roster.fake';
 import { userIdForGithub } from './users';
@@ -519,5 +519,50 @@ describe('parseAdminLogins', () => {
 	it('drops empty entries from extra commas', () => {
 		const set = parseAdminLogins(',alice,,bob,');
 		expect([...set].sort()).toEqual(['alice', 'bob']);
+	});
+});
+
+describe('isAdminFor', () => {
+	let repo: FakeUserRepository;
+	let roster: FakeAdminRosterRepository;
+	const now = () => '2026-01-01T00:00:00.000Z';
+
+	beforeEach(() => {
+		repo = new FakeUserRepository();
+		roster = new FakeAdminRosterRepository();
+	});
+
+	it('returns true when the user is in the roster', async () => {
+		roster.seed([userIdForGithub('rmjoia')]);
+		const ok = await isAdminFor(
+			{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+			{ repo, roster, bootstrapLogins: new Set(), now }
+		);
+		expect(ok).toBe(true);
+	});
+
+	it('returns false when the user is not in the roster and has no record', async () => {
+		const ok = await isAdminFor(
+			{ swaUserId: 'u1', githubUsername: 'stranger', identityProvider: 'github' },
+			{ repo, roster, bootstrapLogins: new Set(), now }
+		);
+		expect(ok).toBe(false);
+	});
+
+	it('returns false for non-GitHub identity providers even if the username is in the roster', async () => {
+		roster.seed([userIdForGithub('rmjoia')]);
+		const ok = await isAdminFor(
+			{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'aad' },
+			{ repo, roster, bootstrapLogins: new Set(['rmjoia']), now }
+		);
+		expect(ok).toBe(false);
+	});
+
+	it('returns true via bootstrap when env var lists the user on a fresh deploy', async () => {
+		const ok = await isAdminFor(
+			{ swaUserId: 'u1', githubUsername: 'rmjoia', identityProvider: 'github' },
+			{ repo, roster, bootstrapLogins: new Set(['rmjoia']), now }
+		);
+		expect(ok).toBe(true);
 	});
 });

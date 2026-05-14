@@ -82,6 +82,18 @@ var keyVaultAccessPolicies = empty(currentUserObjectId) ? [ managedIdentityAcces
 // require a Private Endpoint (not set up here).
 var keyVaultIpRules = empty(operatorPublicIp) ? [] : [ { value: operatorPublicIp } ]
 
+// Key Vault soft-delete retention is env-dependent:
+//   - dev: 7 days (minimum allowed) so Remove-Infra → reapply cycles
+//     are not blocked by a soft-deleted name lingering for 90 days
+//   - prod: 90 days, the standard hardening default
+// Purge protection is explicitly OFF on both: required so that
+// `Remove-AzKeyVault -InRemovedState -Force` can release the name
+// immediately after RG deletion. If we ever turn this on for prod, the
+// retention window becomes a hard floor and Remove-Infra would fail to
+// fully clean up — keep `enablePurgeProtection: false` until/unless we
+// have a compelling compliance reason to lock the vault.
+var keyVaultRetentionDays = environment == 'prod' ? 90 : 7
+
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
   location: location
@@ -94,7 +106,8 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     }
     accessPolicies: keyVaultAccessPolicies
     enableSoftDelete: true
-    softDeleteRetentionInDays: 90
+    softDeleteRetentionInDays: keyVaultRetentionDays
+    enablePurgeProtection: false
     publicNetworkAccess: 'Enabled'
     networkAcls: {
       defaultAction: 'Deny'

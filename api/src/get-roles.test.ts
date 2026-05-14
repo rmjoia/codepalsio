@@ -36,7 +36,22 @@ import { userIdForGithub } from './lib/users';
 const fakeContext = { error: vi.fn(), log: vi.fn() } as unknown as InvocationContext;
 
 function reqWith(body: unknown): HttpRequest {
-	return { json: () => Promise.resolve(body) } as unknown as HttpRequest;
+	return { method: 'POST', json: () => Promise.resolve(body) } as unknown as HttpRequest;
+}
+
+/**
+ * Build a GET request with an optional x-ms-client-principal header.
+ * The frontend uses this shape on Free tier where rolesSource is
+ * unavailable and the principal must be enriched from a regular call.
+ */
+function reqGetWith(principal: object | null): HttpRequest {
+	const header = principal ? Buffer.from(JSON.stringify(principal)).toString('base64') : null;
+	const headers = {
+		get(name: string) {
+			return name.toLowerCase() === 'x-ms-client-principal' ? header : null;
+		},
+	};
+	return { method: 'GET', headers } as unknown as HttpRequest;
 }
 
 /** Realistic SWA rolesSource payload — only varying userDetails per test. */
@@ -120,7 +135,10 @@ describe('POST /api/get-roles', () => {
 		});
 
 		it('returns [] when JSON parsing throws', async () => {
-			const req = { json: () => Promise.reject(new Error('not json')) } as unknown as HttpRequest;
+			const req = {
+				method: 'POST',
+				json: () => Promise.reject(new Error('not json')),
+			} as unknown as HttpRequest;
 			const res = await getRolesHandler(req, fakeContext);
 			expect(res.jsonBody).toEqual({ roles: [] });
 		});
@@ -180,6 +198,55 @@ describe('POST /api/get-roles', () => {
 		it('returns [] for non-github identity providers', async () => {
 			process.env.ADMIN_GITHUB_LOGINS = 'rmjoia';
 			const res = await getRolesHandler(reqWith(swaPayload('rmjoia', 'aad')), fakeContext);
+			expect(res.jsonBody).toEqual({ roles: [] });
+		});
+	});
+
+	describe('GET /api/get-roles (frontend role enrichment for SWA Free)', () => {
+		// SWA Free has no rolesSource. The frontend calls GET /api/get-roles
+		// after /.auth/me to enrich its principal with the real roles. Same
+		// roster lookup, different transport.
+
+		const githubPrincipal = (userDetails: string, identityProvider = 'github') => ({
+			identityProvider,
+			userId: 'hashed-id-123',
+			userDetails,
+			userRoles: ['authenticated'],
+			claims: [],
+		});
+
+		it('returns [] when no client principal header is present (anonymous)', async () => {
+			process.env.ADMIN_GITHUB_LOGINS = 'rmjoia';
+			const res = await getRolesHandler(reqGetWith(null), fakeContext);
+			expect(res.status).toBe(200);
+			expect(res.jsonBody).toEqual({ roles: [] });
+		});
+
+		it("returns ['admin'] for a bootstrap-listed login on first sign-in", async () => {
+			process.env.ADMIN_GITHUB_LOGINS = 'rmjoia';
+			const res = await getRolesHandler(reqGetWith(githubPrincipal('rmjoia')), fakeContext);
+			expect(res.jsonBody).toEqual({ roles: ['admin'] });
+		});
+
+		it("returns ['admin'] for a user with an existing admin DB record", async () => {
+			await repo.upsert({
+				id: userIdForGithub('alice'),
+				githubUsername: 'alice',
+				roles: ['admin'],
+				updatedAt: '2026-01-01T00:00:00Z',
+			});
+			const res = await getRolesHandler(reqGetWith(githubPrincipal('alice')), fakeContext);
+			expect(res.jsonBody).toEqual({ roles: ['admin'] });
+		});
+
+		it('returns [] for non-github identity providers', async () => {
+			process.env.ADMIN_GITHUB_LOGINS = 'rmjoia';
+			const res = await getRolesHandler(reqGetWith(githubPrincipal('rmjoia', 'aad')), fakeContext);
+			expect(res.jsonBody).toEqual({ roles: [] });
+		});
+
+		it('returns [] for an unlisted, unrecorded user', async () => {
+			const res = await getRolesHandler(reqGetWith(githubPrincipal('mallory')), fakeContext);
 			expect(res.jsonBody).toEqual({ roles: [] });
 		});
 	});

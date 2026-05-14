@@ -69,11 +69,34 @@ Describe 'Bicep Template Resource Definitions' {
         $swaConfig.properties.COSMOS_DB_CONNECTION_STRING | Should -Not -BeNullOrEmpty -Because "The /api/* Azure Functions read COSMOS_DB_CONNECTION_STRING from env vars"
     }
 
-    It 'Key Vault must retain soft-deleted secrets for at least 90 days' {
+    It 'Key Vault soft-delete retention is env-dependent (dev: 7, prod: 90)' {
+        # Verified by inspecting the Bicep source directly — `az bicep build`
+        # turns parameter-dependent values into ARM expressions
+        # (`[variables('...')]`), so asserting a literal int on the compiled
+        # JSON would fail even when the logic is correct. (Copilot review)
+        $bicepFile = Join-Path $PSScriptRoot 'main.bicep'
+        $bicepSource = Get-Content -Path $bicepFile -Raw
+
+        # The Bicep variable encodes the env-dependent retention: prod=90, else=7.
+        # Match the exact ternary so a future drift (e.g. someone bumping dev
+        # to 14 days) trips this test rather than slipping silently through.
+        $bicepSource | Should -Match "(?ms)keyVaultRetentionDays\s*=\s*environment\s*==\s*'prod'\s*\?\s*90\s*:\s*7" `
+            -Because "dev retention must be 7 days (fast teardown/reapply); prod retention must be 90 days (compliance baseline)"
+
+        # And confirm the variable is what the KV resource actually reads.
+        $bicepSource | Should -Match "softDeleteRetentionInDays:\s*keyVaultRetentionDays" `
+            -Because "the KV resource must consume the env-dependent variable, not a hardcoded value"
+    }
+
+    It 'Key Vault must NOT enable purge protection' {
+        # Required for Remove-Infra: with purge protection on, a
+        # soft-deleted vault can't be purged before retention expires,
+        # blocking immediate re-create with the same name. Keep this OFF
+        # until we have a compelling compliance reason to lock the vault.
         $keyVault = $compiledJson.resources | Where-Object {
             $_.type -eq 'Microsoft.KeyVault/vaults'
         }
-        $keyVault.properties.softDeleteRetentionInDays | Should -Be 90 -Because "90-day retention is the usual compliance baseline"
+        $keyVault.properties.enablePurgeProtection | Should -Be $false -Because "purge protection blocks Remove-Infra cleanup"
     }
 
     It 'Key Vault must deny by default with AzureServices bypass' {
