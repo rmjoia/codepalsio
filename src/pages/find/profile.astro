@@ -20,20 +20,31 @@ import Footer from '../../components/Footer.astro';
 		</div>
 
 		<!-- Not found (404) — profile doesn't exist -->
-		<main id="not-found-state" class="hidden flex-1 mx-auto max-w-2xl w-full px-4 py-16 text-center">
+		<main
+			id="not-found-state"
+			class="hidden flex-1 mx-auto max-w-2xl w-full px-4 py-16 text-center"
+		>
 			<div class="text-6xl font-bold text-slate-300 mb-2">404</div>
 			<h1 class="text-2xl sm:text-3xl font-bold text-slate-900 mb-3">No CodePal here</h1>
 			<p class="text-slate-600 mb-2">
-				No profile exists for <code id="not-found-username" class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-sm"></code>.
+				No profile exists for <code
+					id="not-found-username"
+					class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-sm"></code>.
 			</p>
 			<p class="text-slate-500 text-sm mb-8">
 				Either the username is off, or this person hasn't joined CodePals yet.
 			</p>
 			<div class="flex flex-wrap gap-3 justify-center">
-				<a href="/find" class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors">
+				<a
+					href="/find"
+					class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+				>
 					Browse CodePals
 				</a>
-				<a href="/" class="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">
+				<a
+					href="/"
+					class="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+				>
 					Back home
 				</a>
 			</div>
@@ -44,17 +55,24 @@ import Footer from '../../components/Footer.astro';
 			<div class="text-6xl font-bold text-slate-300 mb-2">403</div>
 			<h1 class="text-2xl sm:text-3xl font-bold text-slate-900 mb-3">This profile is private</h1>
 			<p class="text-slate-600 mb-2">
-				<code id="private-username" class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-sm"></code>
+				<code id="private-username" class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-sm"
+				></code>
 				is a CodePal, but they've kept their profile private.
 			</p>
 			<p class="text-slate-500 text-sm mb-8">
 				Only the profile owner can change visibility settings.
 			</p>
 			<div class="flex flex-wrap gap-3 justify-center">
-				<a href="/find" class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors">
+				<a
+					href="/find"
+					class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+				>
 					Browse public CodePals
 				</a>
-				<a href="/" class="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">
+				<a
+					href="/"
+					class="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+				>
 					Back home
 				</a>
 			</div>
@@ -63,7 +81,9 @@ import Footer from '../../components/Footer.astro';
 		<!-- Generic error (500, network) -->
 		<main id="error-state" class="hidden flex-1 mx-auto max-w-2xl w-full px-4 py-16 text-center">
 			<h1 class="text-2xl font-bold text-red-700 mb-2">Couldn't load this profile</h1>
-			<p class="text-slate-600 mb-6">Something went wrong on our side. Please try again in a moment.</p>
+			<p class="text-slate-600 mb-6">
+				Something went wrong on our side. Please try again in a moment.
+			</p>
 			<button
 				id="profile-refresh-btn"
 				class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
@@ -73,23 +93,36 @@ import Footer from '../../components/Footer.astro';
 		</main>
 
 		<!-- Profile detail -->
-		<main id="profile-state" class="hidden flex-1 mx-auto max-w-3xl w-full px-4 sm:px-6 lg:px-8 py-12">
+		<main
+			id="profile-state"
+			class="hidden flex-1 mx-auto max-w-3xl w-full px-4 sm:px-6 lg:px-8 py-12"
+		>
 			<div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
 				<!-- Header: avatar + name + availability -->
 				<div class="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
 					<div id="profile-avatar-slot" class="flex-shrink-0"></div>
 					<div class="min-w-0 flex-1">
-						<h1 id="profile-display-name" class="text-2xl sm:text-3xl font-bold text-slate-900 truncate"></h1>
+						<h1
+							id="profile-display-name"
+							class="text-2xl sm:text-3xl font-bold text-slate-900 truncate"
+						>
+						</h1>
 						<p id="profile-handle" class="text-slate-500 truncate"></p>
 					</div>
-					<span id="profile-availability" class="text-sm font-medium px-3 py-1 rounded-full whitespace-nowrap"></span>
+					<span
+						id="profile-availability"
+						class="text-sm font-medium px-3 py-1 rounded-full whitespace-nowrap"></span>
 				</div>
 
 				<!-- Bio -->
 				<p id="profile-bio" class="text-slate-700 whitespace-pre-wrap mb-6"></p>
 
 				<!-- Meta: location, timezone, experience -->
-				<dl id="profile-meta" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 p-4 bg-slate-50 rounded-lg text-sm"></dl>
+				<dl
+					id="profile-meta"
+					class="hidden grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 p-4 bg-slate-50 rounded-lg text-sm"
+				>
+				</dl>
 
 				<!-- Skills -->
 				<section id="profile-skills-section" class="hidden mb-6">
@@ -99,7 +132,9 @@ import Footer from '../../components/Footer.astro';
 
 				<!-- Interests -->
 				<section id="profile-interests-section" class="hidden mb-6">
-					<h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">Interested in</h2>
+					<h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">
+						Interested in
+					</h2>
 					<div id="profile-interests" class="flex flex-wrap gap-2"></div>
 				</section>
 
@@ -116,7 +151,11 @@ import Footer from '../../components/Footer.astro';
 				</section>
 
 				<!-- Footer: last updated -->
-				<p id="profile-updated" class="hidden text-xs text-slate-400 pt-4 border-t border-slate-100"></p>
+				<p
+					id="profile-updated"
+					class="hidden text-xs text-slate-400 pt-4 border-t border-slate-100"
+				>
+				</p>
 			</div>
 		</main>
 
@@ -152,7 +191,10 @@ import Footer from '../../components/Footer.astro';
 				}
 			}
 
-			function availabilityBadge(availability: PublicProfile['availability']): { label: string; cls: string } {
+			function availabilityBadge(availability: PublicProfile['availability']): {
+				label: string;
+				cls: string;
+			} {
 				switch (availability) {
 					case 'active':
 						return { label: '🟢 Active', cls: 'bg-green-100 text-green-700' };
@@ -210,7 +252,8 @@ import Footer from '../../components/Footer.astro';
 
 				const links: Array<[string, string]> = [];
 				if (profile.githubUrl) links.push(['GitHub', profile.githubUrl]);
-				else if (profile.githubUsername) links.push(['GitHub', `https://github.com/${profile.githubUsername}`]);
+				else if (profile.githubUsername)
+					links.push(['GitHub', `https://github.com/${profile.githubUsername}`]);
 				if (profile.linkedinUrl) links.push(['LinkedIn', profile.linkedinUrl]);
 				if (profile.websiteUrl) links.push(['Website', profile.websiteUrl]);
 
@@ -251,7 +294,8 @@ import Footer from '../../components/Footer.astro';
 						avatarSlot.appendChild(img);
 					} else {
 						const placeholder = document.createElement('div');
-						placeholder.className = 'w-20 h-20 rounded-full bg-primary-500 text-white flex items-center justify-center text-2xl font-semibold';
+						placeholder.className =
+							'w-20 h-20 rounded-full bg-primary-500 text-white flex items-center justify-center text-2xl font-semibold';
 						placeholder.textContent = (profile.displayName || '?').charAt(0).toUpperCase();
 						avatarSlot.appendChild(placeholder);
 					}
@@ -297,12 +341,16 @@ import Footer from '../../components/Footer.astro';
 					const el = document.getElementById('profile-updated');
 					if (el) {
 						const d = new Date(profile.updatedAt);
-						el.textContent = Number.isNaN(d.getTime()) ? '' : 'Last updated ' + d.toLocaleDateString();
+						el.textContent = Number.isNaN(d.getTime())
+							? ''
+							: 'Last updated ' + d.toLocaleDateString();
 						el.classList.remove('hidden');
 					}
 				}
 
-				const title = profile.githubUsername ? `${profile.displayName} (@${profile.githubUsername}) — CodePals` : `${profile.displayName} — CodePals`;
+				const title = profile.githubUsername
+					? `${profile.displayName} (@${profile.githubUsername}) — CodePals`
+					: `${profile.displayName} — CodePals`;
 				document.title = title;
 			}
 
@@ -343,7 +391,9 @@ import Footer from '../../components/Footer.astro';
 				}
 			}
 
-			document.getElementById('profile-refresh-btn')?.addEventListener('click', () => window.location.reload());
+			document
+				.getElementById('profile-refresh-btn')
+				?.addEventListener('click', () => window.location.reload());
 			init();
 		</script>
 	</body>
