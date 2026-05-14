@@ -28,7 +28,9 @@
 
 - **T-530 [P]**: `api/src/messages-send.test.ts` — auth 401, blocked-by-recipient 403 (mock spec-003 block check), oversize 400, happy-path 200, returns the persisted message including server-assigned id + createdAt.
 - **T-531**: `api/src/messages-send.ts` — `POST /api/messages` handler. Validates body, runs block check, derives `conversationId = sort([fromUserId, toUserId]).join(':')`, upserts conversation doc + appends message in a single sproc (or write-through helper with CAS retry; pick in implementation review).
-- **T-532**: Spec 003 block-check integration — if spec 003's `POST /api/blocks` hasn't shipped yet, stub `isBlockedBy(toUserId, fromUserId)` to return false with an inline TODO + comment referencing the spec. Replace with the real check once 003 US4 lands.
+- **T-532**: Spec 003 block-check integration — wire `isBlockedBy(toUserId, fromUserId)` to spec 003's real block-list query. **This is a hard prerequisite for shipping the public endpoint per FR-530.** Do NOT stub-to-`false`; that would launch messaging without block enforcement. Two acceptable paths if 003 US4 isn't yet landed:
+  - **(preferred)** Land 003 US4 first, then 005-B with the real check wired up from the start.
+  - **(fallback)** Land 005-B's code with the endpoint and UI gated behind a `MESSAGING_ENABLED` env-var feature flag defaulting to `false`. The handler can return early with 503 when disabled. The flag flips to `true` only after 003 US4 is live and the real block check is wired in.
 
 ### Inbox + thread endpoints
 
@@ -92,6 +94,9 @@
 
 - **T-600 [P]**: `src/pages/inbox/[conversationId].astro` — "Block this user" button. POSTs to `/api/blocks` then refreshes the inbox.
 - **T-601 [P]**: Wire the resulting block list into `/api/messages` send check (already covered by FR-530 / T-532).
+- **T-602**: Update `api/src/conversations-list.ts` to **filter out** conversations where the other participant is in the caller's block list. Spec 005 US5 acceptance scenarios 1 and 3 require that blocking hides the conversation from `/inbox` AND that unblocking makes it reappear (soft-hide, not delete). Implementation: after the conversation query, fetch the caller's block list once, filter out matching conversations in-memory. RU budget: +1-2 for the block-list point-read; well within FR-551's ≤20.
+- **T-603**: Update `api/src/conversations-list.test.ts` to add the soft-hide cases — blocked party's conversation hidden, unblocking restores it on next call.
+- **T-604 [P]**: `src/pages/inbox/index.astro` — no change needed for the hide behaviour itself (server filters), but verify the page handles the empty-after-block case gracefully (was 1 conversation; now 0 → show the empty state).
 
 ---
 

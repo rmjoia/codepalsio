@@ -17,6 +17,8 @@ Tasks are grouped by user story. `[P]` marks tasks that can run in parallel with
 - **T-411 [P]**: Add cases `isManager(p)`, `isModerator(p)`, `isMessenger(p)` — convenience wrappers; mirror the existing `principalHasAdminRole` test shape.
 - **T-412**: In `api/src/admins-list.test.ts`, add a case "user with role `moderator` (no `manager`) calling GET /api/admins-list returns 403". The current test uses `verifyAdmin` seam; for this we'll either remove the seam or set it to call the real helper. **NEEDS CLARIFICATION**: keep `verifyAdmin` and just add explicit principal-role check tests, OR drop the seam to exercise the real path.
 - **T-413**: Same shape for `admins-grant.test.ts` and `admins-revoke.test.ts` — moderator/messenger gets 403, manager gets 200.
+- **T-414 [P]**: In `admins-list.test.ts` (or a new dedicated test file), add a case for the **roster-fallback path with insufficient invitation role**: principal with `userRoles: ['messenger']`, no `manager`, user id present in the Cosmos roster → call `GET /api/admins-list` → expect 200 (FR-414's "fall through to roster when invited role is insufficient" path).
+- **T-415 [P]**: New cross-file invariant test (location: `src/services/api.cross-sync.test.ts` or similar) that reads both `api/src/lib/admin-roles.ts` and `src/services/api.ts` as text, extracts the `ADMIN_ROLE_NAMES` literal from each, asserts deep-equality. Fails CI on any drift (FR-401, plan 004 risk row).
 
 ### Implementation
 

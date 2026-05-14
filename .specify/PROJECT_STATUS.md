@@ -116,7 +116,7 @@ Each row links to the PR(s) that landed it.
 | Constitution v1.3.0 (8 principles, 4 NON-NEGOTIABLE) | (pre-PR-#11) | `.specify/memory/constitution.md` |
 | Spec 002: Spoken Languages on Profile + Discovery Filter | #47 | |
 | Spec 003: Community Safety & Anti-Abuse | #47 | Cross-cutting |
-| **Spec 004: Invitation-Based Multi-Role Admin** | **(this PR)** | Defines `manager` / `moderator` / `messenger` per-role permissions; deprecates the Cosmos roster path on a feature flag |
+| **Spec 004: Invitation-Based Multi-Role Admin** | **(this PR)** | Defines `manager` / `moderator` / `messenger` per-role permissions. Cosmos roster path is **retained as a fallback** (US4 + FR-431) — not feature-flagged, just deprioritised. Full retirement is queued as a follow-up spec once invitations have been stable for ≥6 months (FR-432). |
 | **Spec 005: User-to-User Messaging + Admin CMS/Ticketing** | **(this PR)** | Async messaging via Cosmos `messages` container; admin tickets as a flag on the same model |
 | **Spec 006: Online Presence** | **(this PR)** | `lastSeenAt` field; "online if <5min"; surfaces on `/find` + profile |
 
@@ -165,7 +165,7 @@ These unlock or are required for parts of the shipped chain to actually work end
 2. **002 US1** — Profile picker for spoken languages + badges (no public-discovery surface change yet)
 3. **004** implementation — per-role permission split (moderator-only / messenger-only endpoints), deprecation flag for the Cosmos roster path
 4. **003 US2** — Reporting endpoint + button + new `reports` Cosmos container — gated on `moderator` role per spec 004
-5. **003 US3** — Admin moderation queue at `/admin/reports` + `audit` Cosmos container + suspension via the `member` custom role + `/suspended` page + server-side `assertNotSuspended`
+5. **003 US3** — Admin moderation queue at `/admin/reports` + `audit` Cosmos container + suspension enforced via the revised FR-124: server-side `assertNotSuspended` (FR-124b, primary on Free) + a public `/suspended` page. The pre-revision `member`-custom-role / rolesSource design (FR-124a) is Standard-only / inactive; not part of this implementation.
 6. **006** implementation — `lastSeenAt` tracking + "online" indicator on `/find` + profile
 
 ### AFTER NEXT
@@ -196,14 +196,13 @@ These unlock or are required for parts of the shipped chain to actually work end
 
 | Container | Partition key | Purpose | Provisioned by |
 |---|---|---|---|
-| `users` | `/id` (= `gh-<lowercased-github-username>` post-#43; legacy = SWA principal hash) | UserRecord — roles, swaUserId backfill, AdminRoster doc (`id='roster'`) | `infra/main.bicep` |
+| `users` | `/id` (= `gh-<lowercased-github-username>` post-#43; legacy = SWA principal hash) | UserRecord — roles, swaUserId backfill, AdminRoster doc (`id='roster'`). Post-006 also carries `lastSeenAt` + `presenceVisible` (no separate container — see spec 006). | `infra/main.bicep` |
 | `profiles` | `/userId` | Profile docs — `id = profile-<uuid>` post-#40; legacy = SWA principal hash | `infra/main.bicep` |
 | `connections` | `/userId1` | (Reserved — no API/UI yet, future connections feature) | `infra/main.bicep` |
 | `reports` | `/reportedProfileId` | (Future — spec 003 US2) | spec 003 task T-310 |
 | `audit` | `/adminId` | (Future — spec 003 US3) | spec 003 task T-320 |
 | `blocks` | `/blockerId` | (Future — spec 003 US4) | spec 003 task T-340 |
 | `messages` | `/conversationId` | (Future — spec 005) | spec 005 task T-510 |
-| `presence` | `/userId` (or denormalised onto `users`) | (Future — spec 006; final shape decided in plan 006) | spec 006 task T-610 |
 
 ---
 

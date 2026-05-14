@@ -37,7 +37,7 @@ As a signed-in codepal browsing /find, I can see at-a-glance which other codepal
 
 1. **Given** B has interacted with the platform within the last 5 minutes, **When** I view /find, **Then** B's card shows an "online" indicator (green dot or similar).
 2. **Given** B's last interaction was 6 minutes ago, **When** I view /find, **Then** B's card does NOT show the online indicator.
-3. **Given** I'm viewing /find, **When** I scroll past 50 cards, **Then** the presence-indicator rendering doesn't introduce noticeable lag (presence is derived from a single field already on each profile doc, no additional fetch).
+3. **Given** I'm viewing /find, **When** the directory loads, **Then** each card's `isOnline` flag is already populated by the server (the API joins profiles with user docs server-side per FR-610 + FR-631 and projects only the derived boolean — no client-side fanout, no extra request, no flicker as indicators appear).
 4. **Given** B has `profileVisibility: 'private'`, **When** I view /find, **Then** B's card doesn't appear at all (existing privacy guard — presence doesn't change visibility).
 
 ---
@@ -57,9 +57,9 @@ As a signed-in codepal viewing another codepal's profile, I can see whether they
 
 ---
 
-### User Story 3 — Presence is opt-out via profileVisibility (Priority: P2)
+### User Story 3 — Presence opt-out (Priority: P2)
 
-As a codepal who wants to be discoverable but not have my presence broadcast (e.g. "I'm here but don't want to be pinged"), I can keep my profile public and toggle a "show online status" preference off. **NEEDS CLARIFICATION**: do we want this opt-out at MVP, or accept that visible-profile = visible-presence as the simpler stance?
+As a codepal who wants to be discoverable but not have my presence broadcast (e.g. "I'm here but don't want to be pinged"), I can keep my profile public AND independently toggle a "show online status" preference off via a separate `presenceVisible` flag — distinct from `profileVisibility`, which controls directory inclusion. **NEEDS CLARIFICATION**: do we want this opt-out at MVP, or accept that visible-profile = visible-presence as the simpler stance?
 
 **Why this priority**: P2 — privacy-respecting, but adds UX surface. Defer if reasonable; preserve as a future toggle.
 
@@ -95,7 +95,7 @@ As a codepal who wants to be discoverable but not have my presence broadcast (e.
 
 ### API surface
 
-- **FR-610**: `GET /api/profiles` (existing) MUST add `isOnline: boolean` to each returned profile. `isOnline = (now - lastSeenAt) < 5min AND presenceVisible !== false`.
+- **FR-610**: `GET /api/profiles` (existing) MUST add `isOnline: boolean` to each returned profile. `isOnline = (now - lastSeenAt) <= 5min AND presenceVisible !== false`. The boundary is **inclusive** (`<=`) so the exact 5-minute mark counts as online — matches task T-610's boundary test (`lastSeenAt 5m ago → online`).
 - **FR-611**: `GET /api/profile-get/:username` (if/when this endpoint exists for viewing others' profiles) MUST include `isOnline`. For viewing self, omit (no point indicating yourself online to yourself).
 - **FR-612**: New endpoint `POST /api/presence/visibility` — body `{visible: boolean}` — updates the calling user's `presenceVisible`. Requires `authenticated`. (Conditional on US3.)
 
@@ -108,8 +108,8 @@ As a codepal who wants to be discoverable but not have my presence broadcast (e.
 ### Performance + cost
 
 - **FR-630**: `lastSeenAt` write coalescing (FR-602) MUST keep per-user write rate at ≤1 per minute.
-- **FR-631**: `/find`'s join with user docs MUST batch by partition where possible. (User docs are partitioned by `/id`; a batch of 50 user-id point-reads is parallel-safe.)
-- **FR-632**: Total RU per /find call MUST stay under 50 RU (the current baseline is ~20 RU; presence join adds ~25 RU for a full page of 50 profiles).
+- **FR-631**: `/find`'s join with user docs MUST batch user-doc point-reads in parallel. User docs are partitioned by `/id`; each is ~1 RU. The current `DIRECTORY_PAGE_SIZE` is 100 (see `api/src/profiles-list.ts`); a full page therefore costs ~100 RU for the join alone.
+- **FR-632**: Total RU per /find call MUST stay under 100 RU at the current `DIRECTORY_PAGE_SIZE` of 100 (current baseline is ~20 RU for the profile query; presence join adds up to ~100 RU at full page). If we want a tighter budget, the path is to **lower** `DIRECTORY_PAGE_SIZE` (e.g. to 50) — a UI pagination change tracked as a follow-up, NOT something this spec forces. For 006-A's MVP, accept the 100 RU/call ceiling; revisit if traffic warrants.
 
 ---
 

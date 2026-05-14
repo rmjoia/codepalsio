@@ -77,6 +77,6 @@ See spec 004 §"Constitution Compliance Check" — all 8 principles pass.
 | Risk | Mitigation |
 |---|---|
 | Test churn explosion | Helpers are pure functions; tests are local. ~10-15 new test cases total. |
-| Frontend role logic divergence | `ADMIN_ROLE_NAMES` lives in two places (api + frontend). Mitigation: file-level comment "keep in sync"; CI test that asserts equality across the two files is a P3 hardening item — for now manual hygiene. |
+| Frontend role logic divergence | `ADMIN_ROLE_NAMES` lives in two places (`api/src/lib/admin-roles.ts` + `src/services/api.ts`). FR-401 says they MUST stay in sync; divergence would silently break UI (admin nav hidden) or mis-gate endpoints. Mitigation is an **explicit cross-file invariant test** (task T-415): parse both files as text, extract the `ADMIN_ROLE_NAMES` array literal from each, assert deep-equal. Fails CI on any drift. Not deferred. |
 | Moderator gates referenced but spec 003 not yet shipped | Deferred to PR-C. Document in spec 004 that PR-C is conditional. |
 | Operator confusion (two onboarding paths: Portal + UI) | Banner on `/admin/manage-admins` (FR-430) explains the precedence. |

@@ -114,14 +114,14 @@ As a codepal, I can mute or delete a conversation, blocking the other user from 
 
 ## Edge Cases & Decisions
 
-- **Conversation id derivation**: deterministic from the pair of user ids — `convId = sort([userIdA, userIdB]).join(':')`. Avoids duplicate conversations for the same pair. Admin messages: `convId = 'admin:' + targetUserId` (distinct namespace; one admin conversation per user).
+- **Conversation id derivation**: deterministic from the pair of user ids — `convId = sort([userIdA, userIdB]).join(':')`. Avoids duplicate conversations for the same pair. **Admin conversations** use `convId = 'admin:' + targetUserId` (distinct namespace; one admin conversation per user). For schema purposes, admin conversations carry `participants: [targetUserId, 'admin:*']` — `'admin:*'` is a synthetic pseudo-participant meaning "any user with `messenger` or `manager` role". The targetUserId can read normally (FR-512 participant check); any actual admin with `messenger` or `manager` MUST also be permitted to read (server-side: `participants.includes(callerId) || (participants.includes('admin:*') && (isMessenger(caller) || isManager(caller)))`). Individual admin identity is preserved on each `message` doc via `fromAdminLogin` for audit; the conversation is "the user's appeal/ticket thread", not "user-to-specific-admin".
 - **Message ordering**: server-side `createdAt` timestamp. Display strictly ascending; we don't permit edit/delete in MVP (immutable thread).
 - **Message length**: 4000 chars per message (FR-510). Long-form content (markdown? code blocks?) deferred — plain text only for MVP.
 - **Read receipts**: yes for user↔user (lightweight trust signal). Admin messages also track read state, used in ticket transitions.
 - **Multi-device**: a user may have the app open in two browsers. The first to open a conversation marks messages as read; the second sees the updated state on next poll. No conflict.
 - **Deleted user**: messages persist (other party can still view their side of the conversation). The sender's display becomes "[deleted user]". Profile photo falls back.
 - **Polling interval**: 30s while a conversation is open, 60s on `/inbox`. Configurable via a single `MESSAGING_POLL_INTERVAL` constant.
-- **Storage cap**: 200 messages per conversation in the MVP. Older messages remain in Cosmos but UI only loads the latest 200. Pagination is queued for a later iteration. Note: 200 × ~4KB per doc ≈ 800KB per conversation hard cap (well within Cosmos doc-size limits).
+- **UI message load cap**: the MVP loads the latest 200 messages per conversation on open; "load more" pagination is deferred. Older messages remain in Cosmos as separate `message` documents in the conversation's partition — there's no aggregating-doc constraint here (each message is its own ≤4 KB doc, well under Cosmos's per-doc limits). The 200-message cap is a *UI* and *RU-budget* decision (FR-512), not a storage one.
 - **No real-time push**: deliberately. Adding SignalR is a separate spec (queued, future).
 
 ---
@@ -156,8 +156,11 @@ As a codepal, I can mute or delete a conversation, blocking the other user from 
 ### Privacy + safety
 
 - **FR-530**: Spec 003's `POST /api/blocks` check MUST run on every `POST /api/messages` — blocked sender → 403, message not stored.
-- **FR-531**: Suspended users (spec 003's `member`-role removal) MUST be unable to send peer-to-peer messages. Admins remain reachable from suspended users (so they can appeal) — admin → suspended user direction is unrestricted.
-- **FR-532**: Messages are NOT readable by anyone other than the two participants (or `manager` per future moderation tooling — out of scope here; tracked as a follow-up).
+- **FR-531**: Suspended users (`users.suspended === true`, enforced by spec 003 FR-124b's `assertNotSuspended`) MUST be unable to send **peer-to-peer** messages. Two carve-outs are explicit:
+  - **Suspended → admin direction (appeal path, FR-531a below)**: a suspended user CAN reply on an existing admin conversation (`convId` starting with `admin:`) and CAN create a new admin conversation if none exists. This is the appeal channel — without it, suspension is unappealable on-platform.
+  - **Admin → suspended direction**: a `messenger`/`manager` admin can always send to a suspended user (e.g. to notify of the suspension or respond to an appeal). `assertNotSuspended` doesn't apply to admin actions on admin conversations.
+- **FR-531a (Appeal endpoint carve-out)**: `POST /api/messages` MUST permit a suspended caller IFF the target conversation is an admin conversation (i.e. `toUserId === 'admin:*'` semantic, or the caller is opening a new conversation that resolves to an `admin:<callerId>` convId). For any peer-to-peer convId, suspended callers are rejected with 403. The handler MUST short-circuit `assertNotSuspended` on the admin-conversation branch but enforce it on the peer branch.
+- **FR-532**: Messages are NOT readable by anyone other than the conversation's participants. For admin conversations (per "Conversation id derivation" above), the participant check expands to include any user with the `messenger` or `manager` role on the calling principal, since `'admin:*'` is a synthetic pseudo-participant. Future moderation tooling that would let a `moderator` read peer conversations for reported-message review is out of scope here; tracked as a follow-up.
 - **FR-533**: No notification/webhook to third-party services. Messages stay inside the platform.
 - **FR-534**: Conversation participants MUST be locked at conversation-doc creation. A future feature that "adds a third party to the conversation" (group chat) is OUT OF SCOPE; MVP is strictly 1:1.
 
@@ -168,7 +171,7 @@ As a codepal, I can mute or delete a conversation, blocking the other user from 
 
 ### Performance
 
-- **FR-550**: Opening a conversation MUST be a single point-read (one `convId` partition + range on `createdAt`). RU budget per open: ≤5.
+- **FR-550**: Opening a conversation MUST be a **single in-partition query** (the conversation's `/conversationId` partition, returning the latest ≤200 `message` docs ordered by `createdAt` DESC, plus optionally a point-read on the conversation metadata doc within the same partition). RU budget per open: ≤10 RU (revised from the original 5 — separate `message` docs cost more than a single point-read but still stay cheap because the partition is tight and we cap at 200).
 - **FR-551**: `/inbox` MUST be a single cross-partition query on `participants` filtered by `lastActivityAt`. Cap at 50; RU budget ≤20 per request.
 - **FR-552**: Poll-on-open MUST be a delta query — only fetch messages with `createdAt > lastSeenTimestamp` (passed in by client). RU budget ≤1 per idle poll.
 
@@ -184,7 +187,7 @@ As a codepal, I can mute or delete a conversation, blocking the other user from 
 | Admin message impersonation | Admin display name is controlled by the admin (FR-514's `fromDisplay`), but the underlying `fromAdminLogin` is always the actual admin's GitHub login. Spec 003 audit log records the action. |
 | 4000-char limit too short | Tunable. 4000 was picked as "enough for a thoughtful message, short of an email essay". Easy to bump if logs show users hitting it. |
 | Real-time expectation creep | Set expectation in UI: "Polls every 30s while open." Future spec 007 (SignalR) adds push. |
-| Suspended user can't reach admins for appeal | FR-531 explicitly carves out admin → suspended direction. Suspension page links to the admin inbox. |
+| Suspended user can't reach admins for appeal | FR-531a defines the suspended → admin appeal path: `POST /api/messages` short-circuits `assertNotSuspended` when the target is an admin conversation. The `/suspended` page links to the admin inbox so the user lands there directly after sign-in. |
 
 ---
 

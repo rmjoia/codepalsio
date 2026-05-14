@@ -114,7 +114,7 @@ As the maintainer, if Microsoft retires the SWA invitation system, I can still g
 - **FR-411**: `GET /api/admins-list`, `POST /api/admins-grant`, `POST /api/admins-revoke` MUST require `manager` (or `admin` legacy). Moderators/messengers MUST get 403.
 - **FR-412**: `GET /api/admin/reports`, `POST /api/admin/reports/:id/action`, `POST /api/admin/ban` (spec 003) MUST require `moderator` OR `manager`.
 - **FR-413**: `POST /api/admin/messages`, `GET /api/admin/tickets`, `POST /api/admin/tickets/:id/resolve` (spec 005) MUST require `messenger` OR `manager`.
-- **FR-414**: Every admin endpoint MUST short-circuit on `principalHasAdminRole(principal)` checking the specific roles it allows, then fall through to `isAdminFor()` (roster lookup) only for callers with no admin-tier role at all. The roster fallback grants the legacy `admin` capability (== `manager`-equivalent) only.
+- **FR-414**: Every admin endpoint MUST first check the **specific** roles it requires (e.g. `manager` for `/api/admins-grant`; `moderator OR manager` for moderation; `messenger OR manager` for CMS). If the principal's `userRoles` contains one of the required roles, grant access. **If not — even if the principal has some other admin-tier role** — fall through to `isAdminFor()` (roster lookup) and grant only if the roster lists the user. This ensures legitimate legacy admins (who hold `admin` in the Cosmos roster but were invited as `messenger`) still pass a manager-only endpoint via the roster path, because the roster fallback is `manager`-equivalent (FR-402). Worked example: a user with `principal.userRoles: ['messenger']` calling `POST /api/admins-grant` — the principal-only check fails (messenger isn't manager), but if their user id is in the roster they pass via the roster fallback.
 
 ### UI
 
@@ -182,5 +182,5 @@ As the maintainer, if Microsoft retires the SWA invitation system, I can still g
 
 - **SC-401**: A user invited with `manager` can perform every action the legacy `admin` role could, with no functional regression.
 - **SC-402**: A user invited only with `moderator` can address a report queue end-to-end (when spec 003 lands) but receives 403 on every manager-only endpoint.
-- **SC-403**: The maintainer can revoke any admin's access by removing them from the Portal Role management — no code deployment needed.
+- **SC-403**: The maintainer can revoke any admin's access by removing them from the Portal Role management **AND** from the Cosmos roster (via `POST /api/admins-revoke`). Both surfaces must be cleared because the roster is intentionally retained as a fallback (FR-431, US4). A hard-revoke runbook entry MUST exist documenting both steps; partial revocation (Portal only, or roster only) leaves access intact.
 - **SC-404**: If invitations are unavailable (simulated by disabling the role in `staticwebapp.config.json`), the maintainer can still onboard a new admin via `/admin/manage-admins` — no code change needed.

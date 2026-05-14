@@ -45,7 +45,7 @@ No new Cosmos container, no new Azure resources, no new dependencies.
 | `src/pages/profile/[username].astro` (if it exists for viewing others) or `src/pages/profile/index.astro` | Render online dot next to display name (only for others, not self) |
 | `src/pages/profile/edit.astro` | Add "Show my online status to others" toggle, calls `togglePresenceVisibility` |
 | `infra/main.bicep` | No change (schema add is field-level, Cosmos doesn't enforce schema) |
-| `.specify/PROJECT_STATUS.md` | Move 006 to shipped on completion. Add `presence` row to the Cosmos containers table noting the denormalisation strategy (lives on `users`, not a separate container). |
+| `.specify/PROJECT_STATUS.md` | Move 006 to shipped on completion. **Do NOT** add a `presence` row to the Cosmos containers table — there's no new container. Instead, add a note next to the `users` row that it carries `lastSeenAt` + `presenceVisible` post-006. |
 
 ### Add
 

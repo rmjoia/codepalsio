@@ -27,8 +27,9 @@
 
 ### /api/profiles join
 
-- **T-630 [P]**: `api/src/profiles-list.test.ts` — add cases: profile with online user → `isOnline: true`, with offline user → `isOnline: false`, with `presenceVisible: false` → `isOnline: false`. Invariant: `lastSeenAt` MUST NOT appear in any response object.
-- **T-631**: `api/src/profiles-list.ts` — after the profile query, batch point-read user docs for each `userId`; map onto profiles; derive `isOnline`. Project `lastSeenAt` OUT of the response.
+- **T-630 [P]**: `api/src/profiles-list.test.ts` — add cases: profile with online user → `isOnline: true`, with offline user → `isOnline: false`, with `presenceVisible: false` → `isOnline: false`. Invariants: `lastSeenAt` MUST NOT appear in any response object; `userId` MUST NOT appear in any response object (existing privacy guard preserved despite the new server-side use of `userId`).
+- **T-631a**: `api/src/profiles-list.ts` — update the `PROFILES_QUERY` to include `c.userId` in the SELECT projection. (The current query intentionally omits it for response privacy; we need it server-side now for the user-doc point-read fanout.) Adjust the intermediate type accordingly.
+- **T-631b**: `api/src/profiles-list.ts` — after the profile query, batch point-read user docs for each `userId`; map `lastSeenAt` + `presenceVisible` onto profiles via `derivePresence`. **Strip `userId` and `lastSeenAt`** from the final response objects (response privacy preserved). T-630's invariant test catches any regression.
 
 ### Visibility toggle endpoint
 
@@ -52,7 +53,7 @@
 ## Cross-cutting
 
 - **T-670**: `npm run test:run` + `cd api && npm test` + `npm run format` + `npm run lint` — green.
-- **T-671**: `.specify/PROJECT_STATUS.md` — move 006 to shipped table; note the denormalisation strategy on the Cosmos containers table.
+- **T-671**: `.specify/PROJECT_STATUS.md` — move 006 to shipped table. **Do NOT** add a `presence` row to the Cosmos containers table (006 adds no new container). Instead, annotate the existing `users` row to mention it now also carries `lastSeenAt` + `presenceVisible`.
 
 ---
 
