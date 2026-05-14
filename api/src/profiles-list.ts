@@ -23,18 +23,22 @@ export const DIRECTORY_PAGE_SIZE = 100;
  * test (profiles-list.test.ts) can assert the structural invariants
  * directly — preventing a future refactor from accidentally:
  *   - removing or weakening `WHERE c.profileVisibility = 'public'`
- *   - dropping the `c.userId != @currentUserId` self-exclusion
  *   - removing `SELECT TOP` (would let response size grow unbounded)
  *   - adding `c.userId` or `c.profileVisibility` to the projection (PII / metadata leak)
+ *
+ * Note: self-exclusion (`c.userId != @currentUserId`) was removed —
+ * users should see their own profile in the directory as a "how do I
+ * appear to others" preview. Visibility (public-only) is still strictly
+ * enforced.
  */
-export const PROFILES_QUERY = `SELECT TOP ${DIRECTORY_PAGE_SIZE} c.id, c.githubUsername, c.displayName, c.bio, c.skills, c.availability, c.location, c.timezone, c.updatedAt FROM c WHERE c.profileVisibility = 'public' AND c.userId != @currentUserId ORDER BY c.updatedAt DESC`;
+export const PROFILES_QUERY = `SELECT TOP ${DIRECTORY_PAGE_SIZE} c.id, c.githubUsername, c.displayName, c.bio, c.skills, c.availability, c.location, c.timezone, c.updatedAt FROM c WHERE c.profileVisibility = 'public' ORDER BY c.updatedAt DESC`;
 
 /**
  * GET /api/profiles → returns the public profiles directory.
  *
  * Filtering is done **server-side** in the Cosmos query — private profiles
- * never leave the database. The current user's own profile is also excluded
- * (it's at /profile; no need to duplicate in /find).
+ * never leave the database. The caller's own profile IS included (useful as
+ * a self-preview); only the visibility flag gates inclusion.
  *
  * Auth: the SWA route gate already requires authenticated; the principal
  * check below is defense in depth.
@@ -57,10 +61,7 @@ export async function profilesHandler(
 	try {
 		const container = getContainer(cfg.connectionString, cfg.database, 'profiles');
 		const { resources } = await container.items
-			.query<DirectoryProfile>({
-				query: PROFILES_QUERY,
-				parameters: [{ name: '@currentUserId', value: principal.userId }],
-			})
+			.query<DirectoryProfile>({ query: PROFILES_QUERY })
 			.fetchAll();
 
 		return { status: 200, jsonBody: { profiles: resources } };
