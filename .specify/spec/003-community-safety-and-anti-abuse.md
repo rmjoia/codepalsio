@@ -160,11 +160,19 @@ This serves two purposes: (1) friction against drive-by outreach, (2) gives the 
 
 #### Moderation
 
-- **FR-120**: Admins MUST have a `/admin/reports` route showing open reports, sortable, filterable by reason / age / report-count.
-- **FR-121**: Admins MUST be able to dismiss / unlist / suspend with one click from the queue.
-- **FR-122**: Every moderator action MUST write a row to a `audit` Cosmos container: `{id, adminId, action, targetUserId?, targetProfileId?, reportId?, reason?, timestamp}`.
-- **FR-123**: An admin MUST NOT be able to suspend or unlist themselves (server-side check).
-- **FR-124**: Suspension MUST be enforced via SWA's role-based route gating, not via `roles: []` from rolesSource alone. SWA's built-in `authenticated` role is granted to every signed-in user regardless of what the rolesSource handler returns; gating user-facing routes on `authenticated` therefore does NOT prevent a suspended user from reaching them. To enforce suspension:
+> **Cross-reference to spec 004**: every endpoint and UI surface in this Moderation section gates on the **`moderator`** role (or `manager`, which subsumes moderator capabilities). Generic references to "admin" below are shorthand for "user with `moderator` or `manager` role" per spec 004's role taxonomy. The role check uses `isModerator(principal) || isManager(principal)` as the fast path with the existing `isAdminFor` roster fallback for legacy admins.
+
+- **FR-120**: `moderator`s and `manager`s MUST have a `/admin/reports` route showing open reports, sortable, filterable by reason / age / report-count.
+- **FR-121**: `moderator`s and `manager`s MUST be able to dismiss / unlist / suspend with one click from the queue.
+- **FR-122**: Every moderator action MUST write a row to a `audit` Cosmos container: `{id, adminId, action, targetUserId?, targetProfileId?, reportId?, reason?, timestamp}`. `adminId` records the actual moderator's user id regardless of their specific role (manager/moderator). [Note: pre-spec-004 the rolesSource-based suspension mechanism is unavailable on SWA Free — see FR-124 update below for the post-spec-004 enforcement path.]
+- **FR-123**: A moderator MUST NOT be able to suspend or unlist themselves (server-side check).
+- **FR-124**: Suspension enforcement MUST work without relying on `rolesSource` (which is unavailable on SWA Free — see PROJECT_STATUS.md). The original spec sketched a `member` custom role flipped via rolesSource; that's now infeasible. Revised approach for Free tier:
+
+  - **Server-side defense-in-depth (PRIMARY)**: every authenticated handler MUST call `assertNotSuspended(principal)` early, returning HTTP 403 with `{reason: 'suspended'}` if the user's `users.suspended === true`. This is the actual enforcement layer.
+  - **`/suspended` static page**: when a frontend page receives a 403 with `reason: 'suspended'`, redirect to `/suspended` (a public route, accessible by `anonymous` + `authenticated`). The page explains the suspension state and links to the admin inbox for appeals (spec 005).
+  - **No `member` custom role on Free**: leave this requirement as a future-work item for if/when the platform moves back to Standard tier with rolesSource available.
+
+  The original sketch below is preserved for historical context and applies only if we adopt rolesSource on Standard:
   - Introduce a custom role **`member`** that the rolesSource handler grants to signed-in, non-suspended users (and `admin` continues to imply `member`).
   - Gate all user-facing routes (`/profile/*`, `/find`, `/welcome`, `/api/profile-*`, `/api/profiles`, `/api/account-delete`, `/api/reports*`, `/api/blocks*`) on `member` instead of `authenticated`.
   - Introduce a public route **`/suspended`** with `allowedRoles: ['anonymous', 'authenticated']` — accessible by anyone signed in (even without `member`), so suspended users can land on it after login.
