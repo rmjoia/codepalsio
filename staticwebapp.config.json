@@ -28,10 +28,6 @@
 			"allowedRoles": ["authenticated"]
 		},
 		{
-			"route": "/admin/*",
-			"allowedRoles": ["authenticated"]
-		},
-		{
 			"route": "/api/profile-save",
 			"allowedRoles": ["authenticated"]
 		},
@@ -48,20 +44,20 @@
 			"allowedRoles": ["authenticated"]
 		},
 		{
-			"route": "/api/admin-users",
-			"allowedRoles": ["authenticated"]
+			"route": "/api/manage-users",
+			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		},
 		{
-			"route": "/api/admins-list",
-			"allowedRoles": ["authenticated"]
+			"route": "/api/roster-list",
+			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		},
 		{
-			"route": "/api/admins-grant",
-			"allowedRoles": ["authenticated"]
+			"route": "/api/roster-grant",
+			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		},
 		{
-			"route": "/api/admins-revoke",
-			"allowedRoles": ["authenticated"]
+			"route": "/api/roster-revoke",
+			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		},
 		{
 			"route": "/api/get-roles",
@@ -70,6 +66,10 @@
 		{
 			"route": "/api/*",
 			"allowedRoles": ["anonymous", "authenticated"]
+		},
+		{
+			"route": "/admin/*",
+			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		}
 	],
 	"responseOverrides": {

@@ -8,8 +8,7 @@ import {
 	createAdminRosterRepository,
 	type AdminRosterRepository,
 } from './lib/admin-roster';
-import { isAdminFor, parseAdminLogins } from './lib/roles';
-import { principalHasAdminRole } from './lib/admin-roles';
+import { isAdminFor, parseAdminLogins, principalHasAdminRole } from './lib/roles';
 
 /**
  * Test seam — production handler builds these from env. The optional
@@ -197,7 +196,7 @@ export async function adminUsersHandler(
 	}
 }
 
-app.http('admin-users', {
+app.http('manage-users', {
 	methods: ['GET'],
 	authLevel: 'anonymous',
 	handler: adminUsersHandler,

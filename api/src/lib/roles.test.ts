@@ -1,8 +1,25 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { resolveRoles, isAdminFor, parseAdminLogins } from './roles';
+import {
+	resolveRoles,
+	isAdminFor,
+	parseAdminLogins,
+	ADMIN_ROLE_NAMES,
+	principalHasAdminRole,
+} from './roles';
 import { FakeUserRepository } from './users.fake';
 import { FakeAdminRosterRepository } from './admin-roster.fake';
 import { userIdForGithub } from './users';
+import type { ClientPrincipal } from './types';
+
+function makePrincipal(userRoles: string[]): ClientPrincipal {
+	return {
+		identityProvider: 'github',
+		userId: 'u1',
+		userDetails: 'someone',
+		userRoles,
+		claims: [],
+	};
+}
 
 const FROZEN_NOW = '2026-01-01T00:00:00.000Z';
 
@@ -564,5 +581,33 @@ describe('isAdminFor', () => {
 			{ repo, roster, bootstrapLogins: new Set(['rmjoia']), now }
 		);
 		expect(ok).toBe(true);
+	});
+});
+
+describe("ADMIN_ROLE_NAMES", () => {
+	it("covers the legacy roster role and the invitation roles", () => {
+		expect([...ADMIN_ROLE_NAMES].sort()).toEqual(["admin", "manager", "messenger", "moderator"]);
+	});
+});
+
+describe("principalHasAdminRole", () => {
+	it("returns false for null", () => {
+		expect(principalHasAdminRole(null)).toBe(false);
+	});
+
+	it("returns false when userRoles only has built-in roles", () => {
+		expect(principalHasAdminRole(makePrincipal(["anonymous", "authenticated"]))).toBe(false);
+	});
+
+	it.each(ADMIN_ROLE_NAMES)("returns true when userRoles includes %s", (role) => {
+		expect(principalHasAdminRole(makePrincipal(["authenticated", role]))).toBe(true);
+	});
+
+	it("returns true when any admin-tier role is present alongside others", () => {
+		expect(principalHasAdminRole(makePrincipal(["anonymous", "authenticated", "manager"]))).toBe(true);
+	});
+
+	it("returns false for an unrelated custom role (e.g. \"member\")", () => {
+		expect(principalHasAdminRole(makePrincipal(["authenticated", "member"]))).toBe(false);
 	});
 });

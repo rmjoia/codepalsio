@@ -8,8 +8,7 @@ import {
 	RosterContendedError,
 	type AdminRosterRepository,
 } from './lib/admin-roster';
-import { isAdminFor, parseAdminLogins } from './lib/roles';
-import { principalHasAdminRole } from './lib/admin-roles';
+import { isAdminFor, parseAdminLogins, principalHasAdminRole } from './lib/roles';
 import type { ClientPrincipal } from './lib/types';
 
 const GITHUB_USERNAME_RE = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
@@ -151,7 +150,7 @@ export async function adminsRevokeHandler(
 	}
 }
 
-app.http('admins-revoke', {
+app.http('roster-revoke', {
 	methods: ['POST'],
 	authLevel: 'anonymous',
 	handler: adminsRevokeHandler,

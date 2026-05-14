@@ -126,41 +126,54 @@ describe('staticwebapp.config.json — route role gates', () => {
 		['/profile/*', 'authenticated'],
 		['/welcome', 'authenticated'],
 		['/find', 'authenticated'],
-		// On SWA Free the custom 'admin' role can't be assigned (rolesSource
-		// is Standard-only). Admin routes are gated on 'authenticated' at the
-		// SWA layer; the actual admin check runs server-side in each handler
-		// via isAdminFor() (see api/src/lib/roles.ts).
-		['/admin/*', 'authenticated'],
 		['/api/profile-save', 'authenticated'],
 		['/api/profile-get', 'authenticated'],
 		['/api/profiles', 'authenticated'],
 		['/api/account-delete', 'authenticated'],
-		['/api/admin-users', 'authenticated'],
-		['/api/admins-list', 'authenticated'],
-		['/api/admins-grant', 'authenticated'],
-		['/api/admins-revoke', 'authenticated'],
-	])('gates %s on role %s', (path, role) => {
+	])('gates user-facing route %s on role %s', (path, role) => {
 		const route = findRoute(path);
 		expect(route, `route ${path} must exist`).toBeDefined();
 		expect(route?.allowedRoles, `route ${path} must have allowedRoles`).toContain(role);
 	});
 
+	const ADMIN_TIER_ROLES = ['admin', 'manager', 'moderator', 'messenger'];
+
 	it.each([
 		'/admin/*',
-		'/api/admin-users',
-		'/api/admins-list',
-		'/api/admins-grant',
-		'/api/admins-revoke',
-	])('does NOT declare a SWA-level admin role on %s (handler enforces)', (path) => {
-		// On SWA Free the custom 'admin' role is unreachable from rolesSource.
-		// If any of these routes carry allowedRoles: ['admin'] the SWA gate
-		// would 401 every signed-in user including the actual admin. Handler
-		// enforcement is the source of truth — verifying no leftover gate.
+		'/api/manage-users',
+		'/api/roster-list',
+		'/api/roster-grant',
+		'/api/roster-revoke',
+	])('gates admin route %s on the admin-tier role set', (path) => {
+		// Invitation roles (manager / moderator / messenger) are deliverable
+		// on SWA Free via the Portal Role management blade — confirmed
+		// working as of 2026-05-14. SWA route gate denies non-admin signed-in
+		// users at the perimeter; handler enforces specifically (defense in
+		// depth). 'admin' kept in the set for legacy roster-granted users.
+		const route = findRoute(path);
+		expect(route, `route ${path} must exist`).toBeDefined();
+		expect(route?.allowedRoles, `route ${path} must allow the admin-tier role set`).toEqual(
+			expect.arrayContaining(ADMIN_TIER_ROLES)
+		);
+	});
+
+	it.each([
+		'/admin/*',
+		'/api/manage-users',
+		'/api/roster-list',
+		'/api/roster-grant',
+		'/api/roster-revoke',
+	])('does NOT degrade admin route %s to a permissive authenticated gate', (path) => {
+		// Regression guard: PR #48 widened these routes to 'authenticated'
+		// because we (wrongly) assumed Free tier couldn't deliver custom
+		// roles. Invitation roles DO work on Free — re-narrowed in the CSP+
+		// route-gate hardening PR. This invariant prevents a future change
+		// from accidentally weakening the route back to 'authenticated'.
 		const route = findRoute(path);
 		expect(
 			route?.allowedRoles,
-			`route ${path} must not gate on 'admin' (Free tier can't grant it)`
-		).not.toContain('admin');
+			`route ${path} must not gate solely on 'authenticated' — restrict to admin-tier roles`
+		).not.toContain('authenticated');
 	});
 
 	it('places /api/* catch-all after all specific /api/ routes', () => {
@@ -176,6 +189,34 @@ describe('staticwebapp.config.json — route role gates', () => {
 				r.index,
 				`${r.route} (index ${r.index}) must come before /api/* (index ${catchAllIndex})`
 			).toBeLessThan(catchAllIndex);
+		}
+	});
+
+	it('places /admin/* AFTER all /api/ routes (avoids route-pattern bleed)', () => {
+		// SWA matches routes in declaration order; the first match wins. If
+		// /admin/* is declared BEFORE the /api/admin-users (etc.) routes,
+		// SWA can incorrectly match /api/admin-users against /admin/* and
+		// route it to the static handler — which then 404s because no
+		// static file matches /api/admin-users. We observed this in
+		// production after PR #48: every /api/admin-* endpoint returned
+		// 404 even though the functions were registered (verified in the
+		// SWA Portal's APIs → Managed Functions list).
+		//
+		// Fix: /admin/* must come AFTER all /api/* routes so the specific
+		// /api/admin-* rules match first. This invariant is the regression
+		// guard.
+		const adminPageRouteIndex = routes.findIndex((r) => r.route === '/admin/*');
+		if (adminPageRouteIndex === -1) return; // optional rule; skip if absent
+
+		const apiRouteIndices = routes
+			.map((r, i) => ({ route: r.route, index: i }))
+			.filter((x) => x.route.startsWith('/api/'));
+
+		for (const r of apiRouteIndices) {
+			expect(
+				r.index,
+				`${r.route} (index ${r.index}) must come before /admin/* (index ${adminPageRouteIndex}) — otherwise SWA's pattern matcher bleeds /admin/* into /api/admin-* paths`
+			).toBeLessThan(adminPageRouteIndex);
 		}
 	});
 

@@ -299,14 +299,20 @@ export interface AdminUsersResponse {
 }
 
 /**
- * GET /api/admin-users → admin-only KPIs + per-user moderation table.
+ * GET /api/manage-users → admin-only KPIs + per-user moderation table.
  * SWA route gate enforces the `admin` role; the backend handler also
  * checks the principal's roles for defense in depth.
  */
 export async function getAdminUsers(): Promise<AdminUsersResponse> {
-	const res = await fetch('/api/admin-users');
+	// Route renamed from /api/admin-users → /api/manage-users to avoid an
+	// observed conflict where SWA's frontend proxy returned 404 for every
+	// /api/admin-* path despite the function being registered in the SWA
+	// Function host (verified in Portal → APIs → Managed Functions list).
+	// Possible collision with Azure Functions reserved /admin/* host
+	// management namespace. Same rename applied across the admin endpoints.
+	const res = await fetch('/api/manage-users');
 	if (!res.ok) {
-		throw new ApiError(res.status, 'admin-users', await safeJson(res));
+		throw new ApiError(res.status, 'manage-users', await safeJson(res));
 	}
 	return await res.json();
 }
@@ -322,28 +328,28 @@ export interface AdminListEntry {
 }
 
 export async function listAdmins(): Promise<AdminListEntry[]> {
-	const res = await fetch('/api/admins-list');
-	if (!res.ok) throw new ApiError(res.status, 'admins-list', await safeJson(res));
+	const res = await fetch('/api/roster-list');
+	if (!res.ok) throw new ApiError(res.status, 'roster-list', await safeJson(res));
 	const data = await res.json();
 	return data?.admins ?? [];
 }
 
 export async function grantAdmin(githubUsername: string): Promise<AdminListEntry> {
-	const res = await fetch('/api/admins-grant', {
+	const res = await fetch('/api/roster-grant', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ githubUsername }),
 	});
-	if (!res.ok) throw new ApiError(res.status, 'admins-grant', await safeJson(res));
+	if (!res.ok) throw new ApiError(res.status, 'roster-grant', await safeJson(res));
 	const data = await res.json();
 	return data.admin;
 }
 
 export async function revokeAdmin(githubUsername: string): Promise<void> {
-	const res = await fetch('/api/admins-revoke', {
+	const res = await fetch('/api/roster-revoke', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ githubUsername }),
 	});
-	if (!res.ok) throw new ApiError(res.status, 'admins-revoke', await safeJson(res));
+	if (!res.ok) throw new ApiError(res.status, 'roster-revoke', await safeJson(res));
 }

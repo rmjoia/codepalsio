@@ -7,8 +7,7 @@ import {
 	getOrSeedRoster,
 	type AdminRosterRepository,
 } from './lib/admin-roster';
-import { isAdminFor, parseAdminLogins } from './lib/roles';
-import { principalHasAdminRole } from './lib/admin-roles';
+import { isAdminFor, parseAdminLogins, principalHasAdminRole } from './lib/roles';
 import type { ClientPrincipal } from './lib/types';
 
 /**
@@ -136,7 +135,7 @@ export async function adminsListHandler(
 	}
 }
 
-app.http('admins-list', {
+app.http('roster-list', {
 	methods: ['GET'],
 	authLevel: 'anonymous',
 	handler: adminsListHandler,
