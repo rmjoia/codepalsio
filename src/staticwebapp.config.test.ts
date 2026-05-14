@@ -128,10 +128,12 @@ describe('staticwebapp.config.json — route role gates', () => {
 		['/profile/*', 'authenticated'],
 		['/welcome', 'authenticated'],
 		['/find', 'authenticated'],
+		['/find/*', 'authenticated'],
 		['/admin/*', 'admin'],
 		['/api/profile-save', 'authenticated'],
 		['/api/profile-get', 'authenticated'],
 		['/api/profiles', 'authenticated'],
+		['/api/profile-by-username', 'authenticated'],
 		['/api/account-delete', 'authenticated'],
 		['/api/admin-users', 'admin'],
 		['/api/admins-list', 'admin'],
@@ -161,5 +163,27 @@ describe('staticwebapp.config.json — route role gates', () => {
 		expect(override, '401 response override must exist').toBeDefined();
 		expect(override?.statusCode).toBe(302);
 		expect(override?.redirect).toMatch(/\/\.auth\/login\//);
+	});
+
+	it('rewrites /find/* to the profile-detail page (SWA dynamic-route pattern)', () => {
+		// /find/<username> is runtime-dynamic. With Astro's static output we
+		// can't pre-render one HTML per username, so SWA rewrites every
+		// /find/<anything> to the single profile-detail page and the page
+		// reads window.location.pathname client-side. If this rewrite is
+		// removed, /find/<username> returns 404 instead of the page.
+		const route = routes.find((r) => r.route === '/find/*');
+		expect(route?.rewrite, '/find/* must rewrite to the profile-detail page').toBeTruthy();
+		expect(route?.rewrite).toMatch(/\/find\/profile/);
+	});
+
+	it('declares 403 and 404 response overrides pointing at custom pages', () => {
+		// PR #54: the per-status custom error pages explain HTTP semantics
+		// (404 vs 403) for the dev-community audience. If the overrides
+		// disappear, visitors see SWA's blank default error pages — losing
+		// brand and the friendly explanation.
+		const r404 = config.responseOverrides?.['404'];
+		const r403 = config.responseOverrides?.['403'];
+		expect(r404?.rewrite, '404 override must rewrite to a custom page').toBeTruthy();
+		expect(r403?.rewrite, '403 override must rewrite to a custom page').toBeTruthy();
 	});
 });

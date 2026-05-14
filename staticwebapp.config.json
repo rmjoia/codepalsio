@@ -39,6 +39,11 @@
 			"allowedRoles": ["authenticated"]
 		},
 		{
+			"route": "/find/*",
+			"allowedRoles": ["authenticated"],
+			"rewrite": "/find/profile/index.html"
+		},
+		{
 			"route": "/admin/*",
 			"allowedRoles": ["admin"]
 		},
@@ -52,6 +57,10 @@
 		},
 		{
 			"route": "/api/profiles",
+			"allowedRoles": ["authenticated"]
+		},
+		{
+			"route": "/api/profile-by-username",
 			"allowedRoles": ["authenticated"]
 		},
 		{
@@ -87,6 +96,9 @@
 		"401": {
 			"redirect": "/.auth/login/github?post_login_redirect_uri=.referrer",
 			"statusCode": 302
+		},
+		"403": {
+			"rewrite": "/403/index.html"
 		},
 		"404": {
 			"rewrite": "/404.html"
