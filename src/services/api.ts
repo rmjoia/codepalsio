@@ -328,28 +328,28 @@ export interface AdminListEntry {
 }
 
 export async function listAdmins(): Promise<AdminListEntry[]> {
-	const res = await fetch('/api/admins-list');
-	if (!res.ok) throw new ApiError(res.status, 'admins-list', await safeJson(res));
+	const res = await fetch('/api/roster-list');
+	if (!res.ok) throw new ApiError(res.status, 'roster-list', await safeJson(res));
 	const data = await res.json();
 	return data?.admins ?? [];
 }
 
 export async function grantAdmin(githubUsername: string): Promise<AdminListEntry> {
-	const res = await fetch('/api/admins-grant', {
+	const res = await fetch('/api/roster-grant', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ githubUsername }),
 	});
-	if (!res.ok) throw new ApiError(res.status, 'admins-grant', await safeJson(res));
+	if (!res.ok) throw new ApiError(res.status, 'roster-grant', await safeJson(res));
 	const data = await res.json();
 	return data.admin;
 }
 
 export async function revokeAdmin(githubUsername: string): Promise<void> {
-	const res = await fetch('/api/admins-revoke', {
+	const res = await fetch('/api/roster-revoke', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ githubUsername }),
 	});
-	if (!res.ok) throw new ApiError(res.status, 'admins-revoke', await safeJson(res));
+	if (!res.ok) throw new ApiError(res.status, 'roster-revoke', await safeJson(res));
 }

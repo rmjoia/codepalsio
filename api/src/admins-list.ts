@@ -135,7 +135,7 @@ export async function adminsListHandler(
 	}
 }
 
-app.http('admins-list', {
+app.http('roster-list', {
 	methods: ['GET'],
 	authLevel: 'anonymous',
 	handler: adminsListHandler,

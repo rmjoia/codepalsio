@@ -150,7 +150,7 @@ export async function adminsRevokeHandler(
 	}
 }
 
-app.http('admins-revoke', {
+app.http('roster-revoke', {
 	methods: ['POST'],
 	authLevel: 'anonymous',
 	handler: adminsRevokeHandler,

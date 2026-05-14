@@ -48,15 +48,15 @@
 			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		},
 		{
-			"route": "/api/admins-list",
+			"route": "/api/roster-list",
 			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		},
 		{
-			"route": "/api/admins-grant",
+			"route": "/api/roster-grant",
 			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		},
 		{
-			"route": "/api/admins-revoke",
+			"route": "/api/roster-revoke",
 			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		},
 		{

@@ -196,7 +196,7 @@ function toPublic(r: UserRecord) {
 	};
 }
 
-app.http('admins-grant', {
+app.http('roster-grant', {
 	methods: ['POST'],
 	authLevel: 'anonymous',
 	handler: adminsGrantHandler,

@@ -141,9 +141,9 @@ describe('staticwebapp.config.json — route role gates', () => {
 	it.each([
 		'/admin/*',
 		'/api/manage-users',
-		'/api/admins-list',
-		'/api/admins-grant',
-		'/api/admins-revoke',
+		'/api/roster-list',
+		'/api/roster-grant',
+		'/api/roster-revoke',
 	])('gates admin route %s on the admin-tier role set', (path) => {
 		// Invitation roles (manager / moderator / messenger) are deliverable
 		// on SWA Free via the Portal Role management blade — confirmed
@@ -160,9 +160,9 @@ describe('staticwebapp.config.json — route role gates', () => {
 	it.each([
 		'/admin/*',
 		'/api/manage-users',
-		'/api/admins-list',
-		'/api/admins-grant',
-		'/api/admins-revoke',
+		'/api/roster-list',
+		'/api/roster-grant',
+		'/api/roster-revoke',
 	])('does NOT degrade admin route %s to a permissive authenticated gate', (path) => {
 		// Regression guard: PR #48 widened these routes to 'authenticated'
 		// because we (wrongly) assumed Free tier couldn't deliver custom
