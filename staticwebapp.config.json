@@ -44,7 +44,7 @@
 			"allowedRoles": ["authenticated"]
 		},
 		{
-			"route": "/api/admin-users",
+			"route": "/api/manage-users",
 			"allowedRoles": ["admin", "manager", "moderator", "messenger"]
 		},
 		{

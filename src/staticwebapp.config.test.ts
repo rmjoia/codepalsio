@@ -140,7 +140,7 @@ describe('staticwebapp.config.json — route role gates', () => {
 
 	it.each([
 		'/admin/*',
-		'/api/admin-users',
+		'/api/manage-users',
 		'/api/admins-list',
 		'/api/admins-grant',
 		'/api/admins-revoke',
@@ -159,7 +159,7 @@ describe('staticwebapp.config.json — route role gates', () => {
 
 	it.each([
 		'/admin/*',
-		'/api/admin-users',
+		'/api/manage-users',
 		'/api/admins-list',
 		'/api/admins-grant',
 		'/api/admins-revoke',

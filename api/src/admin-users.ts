@@ -196,7 +196,7 @@ export async function adminUsersHandler(
 	}
 }
 
-app.http('admin-users', {
+app.http('manage-users', {
 	methods: ['GET'],
 	authLevel: 'anonymous',
 	handler: adminUsersHandler,

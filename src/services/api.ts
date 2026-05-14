@@ -299,14 +299,20 @@ export interface AdminUsersResponse {
 }
 
 /**
- * GET /api/admin-users → admin-only KPIs + per-user moderation table.
+ * GET /api/manage-users → admin-only KPIs + per-user moderation table.
  * SWA route gate enforces the `admin` role; the backend handler also
  * checks the principal's roles for defense in depth.
  */
 export async function getAdminUsers(): Promise<AdminUsersResponse> {
-	const res = await fetch('/api/admin-users');
+	// Route renamed from /api/admin-users → /api/manage-users to avoid an
+	// observed conflict where SWA's frontend proxy returned 404 for every
+	// /api/admin-* path despite the function being registered in the SWA
+	// Function host (verified in Portal → APIs → Managed Functions list).
+	// Possible collision with Azure Functions reserved /admin/* host
+	// management namespace. Same rename applied across the admin endpoints.
+	const res = await fetch('/api/manage-users');
 	if (!res.ok) {
-		throw new ApiError(res.status, 'admin-users', await safeJson(res));
+		throw new ApiError(res.status, 'manage-users', await safeJson(res));
 	}
 	return await res.json();
 }
