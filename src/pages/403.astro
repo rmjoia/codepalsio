@@ -1,0 +1,53 @@
+---
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>403 — Forbidden | CodePals</title>
+		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+	</head>
+	<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen flex flex-col">
+		<Header />
+
+		<main class="flex-1 mx-auto max-w-2xl w-full px-4 py-16 text-center">
+			<div class="text-6xl font-bold text-slate-300 mb-2">403</div>
+			<h1 class="text-2xl sm:text-3xl font-bold text-slate-900 mb-3">You don't have access</h1>
+			<p class="text-slate-600 mb-8">
+				This page or profile exists, but it's not visible to you. The owner may have set it private,
+				or your account may not have the role required to view it.
+			</p>
+
+			<div
+				class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 text-left text-sm text-slate-600 mb-8"
+			>
+				<p class="font-medium text-slate-800 mb-2">What HTTP 403 means</p>
+				<p>
+					The server understood the request but refuses to authorise it. Unlike 404, this confirms
+					the resource exists — you just can't see it from where you are.
+				</p>
+			</div>
+
+			<div class="flex flex-wrap gap-3 justify-center">
+				<a
+					href="/"
+					class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+				>
+					Back home
+				</a>
+				<a
+					href="/find"
+					class="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+				>
+					Browse public CodePals
+				</a>
+			</div>
+		</main>
+
+		<Footer />
+	</body>
+</html>

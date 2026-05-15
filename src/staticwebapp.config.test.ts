@@ -126,9 +126,11 @@ describe('staticwebapp.config.json — route role gates', () => {
 		['/profile/*', 'authenticated'],
 		['/welcome', 'authenticated'],
 		['/find', 'authenticated'],
+		['/find/*', 'authenticated'],
 		['/api/profile-save', 'authenticated'],
 		['/api/profile-get', 'authenticated'],
 		['/api/profiles', 'authenticated'],
+		['/api/profile-by-username', 'authenticated'],
 		['/api/account-delete', 'authenticated'],
 	])('gates user-facing route %s on role %s', (path, role) => {
 		const route = findRoute(path);
@@ -225,6 +227,30 @@ describe('staticwebapp.config.json — route role gates', () => {
 		expect(override, '401 response override must exist').toBeDefined();
 		expect(override?.statusCode).toBe(302);
 		expect(override?.redirect).toMatch(/\/\.auth\/login\//);
+	});
+
+	it('rewrites /find/* to the profile-detail page (SWA dynamic-route pattern)', () => {
+		// /find/<username> is runtime-dynamic. Astro's static output can't
+		// pre-render one HTML per username, so SWA rewrites every
+		// /find/<anything> to the single profile-detail page; the page
+		// reads window.location.pathname client-side. If this rewrite is
+		// removed, /find/<username> returns 404 instead of the page.
+		const route = findRoute('/find/*');
+		expect(route?.rewrite, '/find/* must rewrite to the profile-detail page').toBeTruthy();
+		expect(route?.rewrite).toMatch(/\/find\/profile/);
+	});
+
+	it('declares both 403 and 404 response overrides pointing at custom pages', () => {
+		// Custom error pages explain HTTP semantics (404 vs 403) for the
+		// dev-community audience. If these overrides are removed, visitors
+		// see SWA's blank default error pages — losing brand and the
+		// friendly explanation. Build outputs:
+		//   - /404.html (Astro special-cases 404.astro to root)
+		//   - /403/index.html (Astro's directory format for other pages)
+		const r404 = config.responseOverrides?.['404'];
+		const r403 = config.responseOverrides?.['403'];
+		expect(r404?.rewrite, '404 override must rewrite to a custom page').toBeTruthy();
+		expect(r403?.rewrite, '403 override must rewrite to a custom page').toBeTruthy();
 	});
 });
 

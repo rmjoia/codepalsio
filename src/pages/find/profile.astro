@@ -1,0 +1,400 @@
+---
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>CodePal profile</title>
+		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+	</head>
+	<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen flex flex-col">
+		<Header />
+
+		<!-- Loading -->
+		<div id="loading-state" class="flex-1 flex justify-center items-center min-h-[60vh]">
+			<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+		</div>
+
+		<!-- Not found (404) — profile doesn't exist -->
+		<main
+			id="not-found-state"
+			class="hidden flex-1 mx-auto max-w-2xl w-full px-4 py-16 text-center"
+		>
+			<div class="text-6xl font-bold text-slate-300 mb-2">404</div>
+			<h1 class="text-2xl sm:text-3xl font-bold text-slate-900 mb-3">No CodePal here</h1>
+			<p class="text-slate-600 mb-2">
+				No profile exists for <code
+					id="not-found-username"
+					class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-sm"></code>.
+			</p>
+			<p class="text-slate-500 text-sm mb-8">
+				Either the username is off, or this person hasn't joined CodePals yet.
+			</p>
+			<div class="flex flex-wrap gap-3 justify-center">
+				<a
+					href="/find"
+					class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+				>
+					Browse CodePals
+				</a>
+				<a
+					href="/"
+					class="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+				>
+					Back home
+				</a>
+			</div>
+		</main>
+
+		<!-- Private (403) — profile exists but isn't public -->
+		<main id="private-state" class="hidden flex-1 mx-auto max-w-2xl w-full px-4 py-16 text-center">
+			<div class="text-6xl font-bold text-slate-300 mb-2">403</div>
+			<h1 class="text-2xl sm:text-3xl font-bold text-slate-900 mb-3">This profile is private</h1>
+			<p class="text-slate-600 mb-2">
+				<code id="private-username" class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-sm"
+				></code>
+				is a CodePal, but they've kept their profile private.
+			</p>
+			<p class="text-slate-500 text-sm mb-8">
+				Only the profile owner can change visibility settings.
+			</p>
+			<div class="flex flex-wrap gap-3 justify-center">
+				<a
+					href="/find"
+					class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+				>
+					Browse public CodePals
+				</a>
+				<a
+					href="/"
+					class="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+				>
+					Back home
+				</a>
+			</div>
+		</main>
+
+		<!-- Generic error (500, network) -->
+		<main id="error-state" class="hidden flex-1 mx-auto max-w-2xl w-full px-4 py-16 text-center">
+			<h1 class="text-2xl font-bold text-red-700 mb-2">Couldn't load this profile</h1>
+			<p class="text-slate-600 mb-6">
+				Something went wrong on our side. Please try again in a moment.
+			</p>
+			<button
+				id="profile-refresh-btn"
+				class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+			>
+				Refresh
+			</button>
+		</main>
+
+		<!-- Profile detail -->
+		<main
+			id="profile-state"
+			class="hidden flex-1 mx-auto max-w-3xl w-full px-4 sm:px-6 lg:px-8 py-12"
+		>
+			<div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
+				<!-- Header: avatar + name + availability -->
+				<div class="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
+					<div id="profile-avatar-slot" class="flex-shrink-0"></div>
+					<div class="min-w-0 flex-1">
+						<h1
+							id="profile-display-name"
+							class="text-2xl sm:text-3xl font-bold text-slate-900 truncate"
+						>
+						</h1>
+						<p id="profile-handle" class="text-slate-500 truncate"></p>
+					</div>
+					<span
+						id="profile-availability"
+						class="text-sm font-medium px-3 py-1 rounded-full whitespace-nowrap"></span>
+				</div>
+
+				<!-- Bio -->
+				<p id="profile-bio" class="text-slate-700 whitespace-pre-wrap mb-6"></p>
+
+				<!-- Meta: location, timezone, experience -->
+				<dl
+					id="profile-meta"
+					class="hidden grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 p-4 bg-slate-50 rounded-lg text-sm"
+				>
+				</dl>
+
+				<!-- Skills -->
+				<section id="profile-skills-section" class="hidden mb-6">
+					<h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">Skills</h2>
+					<div id="profile-skills" class="flex flex-wrap gap-2"></div>
+				</section>
+
+				<!-- Interests -->
+				<section id="profile-interests-section" class="hidden mb-6">
+					<h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">
+						Interested in
+					</h2>
+					<div id="profile-interests" class="flex flex-wrap gap-2"></div>
+				</section>
+
+				<!-- Spoken languages -->
+				<section id="profile-languages-section" class="hidden mb-6">
+					<h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">Speaks</h2>
+					<div id="profile-languages" class="flex flex-wrap gap-2"></div>
+				</section>
+
+				<!-- Social links -->
+				<section id="profile-links-section" class="hidden mb-6">
+					<h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">Links</h2>
+					<ul id="profile-links" class="flex flex-col gap-2 text-sm"></ul>
+				</section>
+
+				<!-- Footer: last updated -->
+				<p
+					id="profile-updated"
+					class="hidden text-xs text-slate-400 pt-4 border-t border-slate-100"
+				>
+				</p>
+			</div>
+		</main>
+
+		<Footer />
+
+		<script>
+			import {
+				getPublicProfileByUsername,
+				getProfileAvatarUrl,
+				type PublicProfile,
+			} from '../../services/api';
+
+			/**
+			 * Extract the username segment from /find/<username>. Trailing
+			 * slashes are tolerated (filter(Boolean) drops the empty piece).
+			 * Invalid shapes return null so the page falls through to the
+			 * not-found branch — single error path, same UX as a missing
+			 * profile. Rejects:
+			 *   - empty path (parts[0] !== 'find')
+			 *   - /find with no segment (parts.length !== 2)
+			 *   - /find/<u>/<more> (parts.length !== 2)
+			 *   - malformed percent-encoding e.g. /find/%E0%A4 — decodeURIComponent
+			 *     throws URIError on invalid sequences; treat as not-found
+			 */
+			function getUsernameFromPath(): string | null {
+				const parts = window.location.pathname.split('/').filter(Boolean);
+				if (parts[0] !== 'find' || parts.length !== 2) return null;
+				try {
+					const username = decodeURIComponent(parts[1]);
+					return username || null;
+				} catch {
+					return null;
+				}
+			}
+
+			function availabilityBadge(availability: PublicProfile['availability']): {
+				label: string;
+				cls: string;
+			} {
+				switch (availability) {
+					case 'active':
+						return { label: '🟢 Active', cls: 'bg-green-100 text-green-700' };
+					case 'casual':
+						return { label: '🟡 Casual', cls: 'bg-amber-100 text-amber-700' };
+					case 'unavailable':
+						return { label: '⚪ Not available', cls: 'bg-slate-100 text-slate-600' };
+					default:
+						return { label: '⚪ Unknown', cls: 'bg-slate-100 text-slate-600' };
+				}
+			}
+
+			function renderChips(container: HTMLElement, items: string[], cls: string): void {
+				items.forEach((item) => {
+					const chip = document.createElement('span');
+					chip.className = `px-2.5 py-1 text-xs rounded-full ${cls}`;
+					chip.textContent = item;
+					container.appendChild(chip);
+				});
+			}
+
+			function renderMeta(profile: PublicProfile): void {
+				const dl = document.getElementById('profile-meta');
+				if (!dl) return;
+
+				const rows: Array<[string, string]> = [];
+				if (profile.location) rows.push(['Location', profile.location]);
+				if (profile.timezone) rows.push(['Timezone', profile.timezone]);
+				if (typeof profile.yearsOfExperience === 'number') {
+					const yrs = profile.yearsOfExperience;
+					rows.push(['Experience', yrs === 1 ? '1 year' : `${yrs} years`]);
+				}
+
+				if (rows.length === 0) return;
+
+				rows.forEach(([label, value]) => {
+					const wrap = document.createElement('div');
+					const dt = document.createElement('dt');
+					dt.className = 'text-xs font-semibold text-slate-500 uppercase tracking-wide';
+					dt.textContent = label;
+					const dd = document.createElement('dd');
+					dd.className = 'text-slate-800';
+					dd.textContent = value;
+					wrap.appendChild(dt);
+					wrap.appendChild(dd);
+					dl.appendChild(wrap);
+				});
+				dl.classList.remove('hidden');
+			}
+
+			function renderLinks(profile: PublicProfile): void {
+				const list = document.getElementById('profile-links');
+				const section = document.getElementById('profile-links-section');
+				if (!list || !section) return;
+
+				const links: Array<[string, string]> = [];
+				if (profile.githubUrl) links.push(['GitHub', profile.githubUrl]);
+				else if (profile.githubUsername)
+					links.push(['GitHub', `https://github.com/${profile.githubUsername}`]);
+				if (profile.linkedinUrl) links.push(['LinkedIn', profile.linkedinUrl]);
+				if (profile.websiteUrl) links.push(['Website', profile.websiteUrl]);
+
+				if (links.length === 0) return;
+
+				links.forEach(([label, href]) => {
+					const li = document.createElement('li');
+					const a = document.createElement('a');
+					a.href = href;
+					a.target = '_blank';
+					a.rel = 'noopener noreferrer';
+					a.className = 'text-primary-600 hover:text-primary-700 hover:underline';
+					a.textContent = `${label}: ${href}`;
+					li.appendChild(a);
+					list.appendChild(li);
+				});
+				section.classList.remove('hidden');
+			}
+
+			function renderProfile(profile: PublicProfile): void {
+				const nameEl = document.getElementById('profile-display-name');
+				const handleEl = document.getElementById('profile-handle');
+				const avatarSlot = document.getElementById('profile-avatar-slot');
+				const availabilityEl = document.getElementById('profile-availability');
+				const bioEl = document.getElementById('profile-bio');
+
+				if (nameEl) nameEl.textContent = profile.displayName;
+				if (handleEl && profile.githubUsername) handleEl.textContent = '@' + profile.githubUsername;
+				if (bioEl) bioEl.textContent = profile.bio;
+
+				if (avatarSlot) {
+					const avatarUrl = getProfileAvatarUrl(profile);
+					if (avatarUrl) {
+						const img = document.createElement('img');
+						img.src = avatarUrl;
+						img.alt = profile.displayName;
+						img.className = 'w-20 h-20 rounded-full border-2 border-primary-100';
+						avatarSlot.appendChild(img);
+					} else {
+						const placeholder = document.createElement('div');
+						placeholder.className =
+							'w-20 h-20 rounded-full bg-primary-500 text-white flex items-center justify-center text-2xl font-semibold';
+						placeholder.textContent = (profile.displayName || '?').charAt(0).toUpperCase();
+						avatarSlot.appendChild(placeholder);
+					}
+				}
+
+				if (availabilityEl) {
+					const badge = availabilityBadge(profile.availability);
+					availabilityEl.textContent = badge.label;
+					availabilityEl.classList.add(...badge.cls.split(' '));
+				}
+
+				if (profile.skills.length > 0) {
+					const skills = document.getElementById('profile-skills');
+					const section = document.getElementById('profile-skills-section');
+					if (skills && section) {
+						renderChips(skills, profile.skills, 'bg-primary-50 text-primary-700');
+						section.classList.remove('hidden');
+					}
+				}
+
+				if (profile.interests.length > 0) {
+					const interests = document.getElementById('profile-interests');
+					const section = document.getElementById('profile-interests-section');
+					if (interests && section) {
+						renderChips(interests, profile.interests, 'bg-accent-50 text-accent-700');
+						section.classList.remove('hidden');
+					}
+				}
+
+				if (profile.preferredLanguages && profile.preferredLanguages.length > 0) {
+					const langs = document.getElementById('profile-languages');
+					const section = document.getElementById('profile-languages-section');
+					if (langs && section) {
+						renderChips(langs, profile.preferredLanguages, 'bg-slate-100 text-slate-700');
+						section.classList.remove('hidden');
+					}
+				}
+
+				renderMeta(profile);
+				renderLinks(profile);
+
+				if (profile.updatedAt) {
+					const el = document.getElementById('profile-updated');
+					if (el) {
+						const d = new Date(profile.updatedAt);
+						el.textContent = Number.isNaN(d.getTime())
+							? ''
+							: 'Last updated ' + d.toLocaleDateString();
+						el.classList.remove('hidden');
+					}
+				}
+
+				const title = profile.githubUsername
+					? `${profile.displayName} (@${profile.githubUsername}) — CodePals`
+					: `${profile.displayName} — CodePals`;
+				document.title = title;
+			}
+
+			function show(id: string, usernameForLabel?: string): void {
+				const loading = document.getElementById('loading-state');
+				loading?.classList.add('hidden');
+				const target = document.getElementById(id);
+				target?.classList.remove('hidden');
+				if (usernameForLabel) {
+					const label = id === 'not-found-state' ? 'not-found-username' : 'private-username';
+					const el = document.getElementById(label);
+					if (el) el.textContent = '@' + usernameForLabel;
+				}
+			}
+
+			async function init(): Promise<void> {
+				const username = getUsernameFromPath();
+				if (!username) {
+					show('not-found-state', '');
+					return;
+				}
+
+				try {
+					const result = await getPublicProfileByUsername(username);
+					if (result.kind === 'not-found') {
+						show('not-found-state', username);
+						return;
+					}
+					if (result.kind === 'private') {
+						show('private-state', username);
+						return;
+					}
+					show('profile-state');
+					renderProfile(result.profile);
+				} catch (err) {
+					console.error('Profile load failed:', err);
+					show('error-state');
+				}
+			}
+
+			document
+				.getElementById('profile-refresh-btn')
+				?.addEventListener('click', () => window.location.reload());
+			init();
+		</script>
+	</body>
+</html>

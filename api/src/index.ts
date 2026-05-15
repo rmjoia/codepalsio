@@ -8,6 +8,7 @@
 import './profile-get';
 import './profile-save';
 import './profiles-list';
+import './profile-by-username';
 import './account-delete';
 import './get-roles';
 import './admin-users';

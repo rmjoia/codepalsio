@@ -212,6 +212,56 @@ export async function getPublicProfiles(): Promise<DirectoryProfile[]> {
 }
 
 /**
+ * Public profile returned by GET /api/profile-by-username. Backend
+ * projects to this shape — internal identifiers (userId) and visibility
+ * metadata are intentionally absent. Matches PublicProfile in
+ * api/src/profile-by-username.ts; duplicated by convention (see comment
+ * at the top of api/src/lib/types.ts about cross-project sharing).
+ */
+export type PublicProfile = Pick<
+	Profile,
+	| 'id'
+	| 'githubUsername'
+	| 'displayName'
+	| 'bio'
+	| 'skills'
+	| 'interests'
+	| 'availability'
+	| 'location'
+	| 'timezone'
+	| 'githubUrl'
+	| 'linkedinUrl'
+	| 'websiteUrl'
+	| 'preferredLanguages'
+	| 'yearsOfExperience'
+	| 'updatedAt'
+>;
+
+/**
+ * GET /api/profile-by-username?username=<login> → the public profile.
+ *
+ * The page renders different UI per HTTP status, so the helper returns
+ * a discriminated result instead of throwing on 403/404 — those are
+ * expected, on-the-happy-path outcomes for this endpoint, not errors.
+ * Genuine errors (500, 400, network) still throw via ApiError.
+ */
+export type PublicProfileResult =
+	| { kind: 'found'; profile: PublicProfile }
+	| { kind: 'not-found' }
+	| { kind: 'private' };
+
+export async function getPublicProfileByUsername(username: string): Promise<PublicProfileResult> {
+	const res = await fetch(`/api/profile-by-username?username=${encodeURIComponent(username)}`);
+	if (res.status === 404) return { kind: 'not-found' };
+	if (res.status === 403) return { kind: 'private' };
+	if (!res.ok) {
+		throw new ApiError(res.status, 'profile-by-username', await safeJson(res));
+	}
+	const data = await res.json();
+	return { kind: 'found', profile: data.profile };
+}
+
+/**
  * Avatar URL for a directory profile. Returns the GitHub profile picture
  * for users with a stored `githubUsername`, or an empty string for legacy
  * docs that predate the field — callers should fall back to their own

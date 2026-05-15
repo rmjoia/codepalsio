@@ -7,11 +7,17 @@ import type { UserRepository } from './users';
  * Profile fields we read in the user-facing handlers. Mirrors the SELECT
  * list in profile-get to make the projection a single point of change.
  *
+ * Exported so adjacent endpoints (profile-by-username) that need a
+ * different WHERE clause — e.g. case-insensitive github username
+ * lookup — share the projection. Without sharing, adding a Profile
+ * field would require updating both queries and they could silently
+ * drift.
+ *
  * Kept in sync with src/services/api.ts (frontend type) — see the note
  * in lib/types.ts about why duplication is preferred over a shared
  * module here.
  */
-const PROFILE_FIELDS =
+export const PROFILE_FIELDS =
 	'c.id, c.userId, c.githubUsername, c.displayName, c.bio, c.skills, c.interests, c.availability, c.location, c.timezone, c.githubUrl, c.linkedinUrl, c.websiteUrl, c.preferredLanguages, c.yearsOfExperience, c.profileVisibility, c.updatedAt';
 
 export const PROFILE_BY_USERID_QUERY = `SELECT ${PROFILE_FIELDS} FROM c WHERE c.userId = @userId`;
