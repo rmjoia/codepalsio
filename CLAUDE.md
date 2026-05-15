@@ -57,6 +57,12 @@ merge time would have caught it on whichever branch was up next.
 - **Never force-push** unless the user explicitly asks for it.
 - **GitHub MCP only** for repo interactions (no `gh` CLI in this
   environment). Scope is restricted to `rmjoia/codepalsio`.
+- **Assign the PR owner on creation.** GitHub blocks the PR author
+  from being added as a reviewer on their own PR, but `assignees`
+  works. `mcp__github__create_pull_request` has no assignees field —
+  call `mcp__github__issue_write` with `method: 'update'` and
+  `assignees: ['rmjoia']` right after creation so the PR shows up in
+  the owner's "assigned to you" view.
 
 ## Where else to look
 
