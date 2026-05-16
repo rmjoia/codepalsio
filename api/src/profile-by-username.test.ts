@@ -258,6 +258,68 @@ describe('GET /api/profile-by-username', () => {
 			expect(body.profile).not.toHaveProperty('profileVisibility');
 		});
 
+		it('strips fields marked private when viewer is NOT the owner', async () => {
+			// Per-field visibility kicks in: baseProfile.userId is
+			// 'owner-user-id', principal.userId is 'current-user-id', so the
+			// viewer is not the owner. bio marked private must not return.
+			mocks.fetchAllMock.mockResolvedValue({
+				resources: [
+					{
+						...baseProfile,
+						bio: 'secret bio',
+						fieldVisibility: { bio: 'private' },
+					},
+				],
+			});
+			const res = await profileByUsernameHandler(makeRequest({ username: 'alice' }), fakeContext);
+			expect(res.status).toBe(200);
+			const body = res.jsonBody as { profile: Record<string, unknown> };
+			expect(body.profile.bio).toBeUndefined();
+			expect(JSON.parse(JSON.stringify(body.profile))).not.toHaveProperty('bio');
+		});
+
+		it('returns ALL fields to the owner viewing their own detail page (self-preview bypass)', async () => {
+			// If the principal's userId matches the profile's userId, no
+			// filtering applies — the owner sees the unfiltered view. Useful
+			// when previewing what someone has saved without needing to
+			// detour through the edit form.
+			mocks.fetchAllMock.mockResolvedValue({
+				resources: [
+					{
+						...baseProfile,
+						userId: authedPrincipal.userId, // viewer == owner
+						bio: 'my private bio',
+						fieldVisibility: { bio: 'private', location: 'private' },
+						location: 'NYC',
+					},
+				],
+			});
+			const res = await profileByUsernameHandler(makeRequest({ username: 'alice' }), fakeContext);
+			expect(res.status).toBe(200);
+			const body = res.jsonBody as { profile: Record<string, unknown> };
+			expect(body.profile.bio).toBe('my private bio');
+			expect(body.profile.location).toBe('NYC');
+		});
+
+		it('keeps authenticated-level fields for non-owner authenticated viewers', async () => {
+			// Detail page is auth-gated; every viewer is signed in. The
+			// 'authenticated' level passes through. Confirms the level
+			// hierarchy (authenticated >= public for signed-in viewers).
+			mocks.fetchAllMock.mockResolvedValue({
+				resources: [
+					{
+						...baseProfile,
+						location: 'NYC',
+						fieldVisibility: { location: 'authenticated' },
+					},
+				],
+			});
+			const res = await profileByUsernameHandler(makeRequest({ username: 'alice' }), fakeContext);
+			expect(res.status).toBe(200);
+			const body = res.jsonBody as { profile: Record<string, unknown> };
+			expect(body.profile.location).toBe('NYC');
+		});
+
 		it('returns 500 when Cosmos config is missing', async () => {
 			mocks.getCosmosConfigMock.mockReturnValueOnce(null);
 			const res = await profileByUsernameHandler(makeRequest({ username: 'alice' }), fakeContext);

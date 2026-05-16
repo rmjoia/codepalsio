@@ -30,6 +30,55 @@ export type Availability = (typeof AVAILABILITY_VALUES)[number];
 export const PROFILE_VISIBILITY_VALUES = ['public', 'private'] as const;
 export type ProfileVisibility = (typeof PROFILE_VISIBILITY_VALUES)[number];
 
+/**
+ * Per-field audience levels for finer-grained "show what to whom" control.
+ * Operates as a second filter on top of `profileVisibility`:
+ *
+ *   - `profileVisibility = 'private'` → profile never appears anywhere
+ *     (per-field settings are moot)
+ *   - `profileVisibility = 'public'` → profile is listable in /find, AND
+ *     each hideable field is filtered by its `fieldVisibility[<field>]`:
+ *       - `public`        → anyone who can see the profile
+ *       - `authenticated` → signed-in viewers only (today the directory
+ *         + detail page are already authenticated-gated, so this collapses
+ *         with `public` in practice — kept for future routes that may
+ *         expose profiles anonymously)
+ *       - `private`       → owner only
+ *
+ * Defaults to `public` for every field (missing entries treated as public)
+ * so legacy docs and brand-new profiles behave like they always have.
+ */
+export const FIELD_VISIBILITY_VALUES = ['public', 'authenticated', 'private'] as const;
+export type FieldVisibility = (typeof FIELD_VISIBILITY_VALUES)[number];
+
+/**
+ * Fields a user can hide independently. Identity + status fields
+ * (`id`, `userId`, `githubUsername`, `displayName`, `availability`) are
+ * intentionally NOT hideable — they're the minimum needed for the profile
+ * to identify itself when it appears (display name on a card, github
+ * handle for the avatar URL, availability as the badge). Hiding them
+ * would either break the card entirely or invite confusing "ghost"
+ * profiles in the directory.
+ */
+export const HIDEABLE_FIELDS = [
+	'bio',
+	'skills',
+	'interests',
+	'location',
+	'timezone',
+	'githubUrl',
+	'linkedinUrl',
+	'websiteUrl',
+	'preferredLanguages',
+	'yearsOfExperience',
+] as const;
+export type HideableField = (typeof HIDEABLE_FIELDS)[number];
+
+/** Partial map: missing entries default to `public`. Values that ARE
+ * `public` are dropped on save (see normalizeFieldVisibility) to keep
+ * stored docs lean — the empty map and an all-public map are equivalent. */
+export type FieldVisibilityMap = Partial<Record<HideableField, FieldVisibility>>;
+
 export interface Profile {
 	id: string;
 	userId: string;
@@ -45,6 +94,8 @@ export interface Profile {
 	interests: string[];
 	availability: Availability;
 	profileVisibility: ProfileVisibility;
+	/** Per-field audience filter; missing/empty means all fields are public. */
+	fieldVisibility?: FieldVisibilityMap;
 	location?: string;
 	timezone?: string;
 	githubUrl?: string;

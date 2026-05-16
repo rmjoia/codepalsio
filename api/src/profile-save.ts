@@ -13,6 +13,7 @@ import {
 	LIMITS,
 	isAvailability,
 	isProfileVisibility,
+	normalizeFieldVisibility,
 	normalizeStringList,
 	sanitizedUrl,
 	trimmedString,
@@ -68,6 +69,10 @@ app.http('profile-save', {
 		const profileVisibility = isProfileVisibility(body.profileVisibility)
 			? body.profileVisibility
 			: 'private';
+		// Per-field visibility map: garbage in → empty map (= all public,
+		// the safe default that preserves pre-feature behaviour). Only
+		// stores non-`public` entries to keep doc size lean.
+		const fieldVisibility = normalizeFieldVisibility(body.fieldVisibility);
 
 		try {
 			const container = getContainer(cfg.connectionString, cfg.database, 'profiles');
@@ -101,6 +106,7 @@ app.http('profile-save', {
 				interests,
 				availability,
 				profileVisibility,
+				fieldVisibility,
 				location: trimmedString(body.location, LIMITS.location),
 				timezone: trimmedString(body.timezone, LIMITS.timezone),
 				githubUrl: sanitizedUrl(body.githubUrl, LIMITS.url),

@@ -47,6 +47,38 @@ export interface ClientPrincipal {
 export type Availability = 'active' | 'casual' | 'unavailable';
 export type ProfileVisibility = 'public' | 'private';
 
+/**
+ * Per-field audience levels. Mirrors the backend type in api/src/lib/types.ts —
+ * see the note in that file about why types are duplicated rather than shared.
+ *
+ *   - 'public'        → anyone who can see the profile
+ *   - 'authenticated' → signed-in viewers only
+ *   - 'private'       → owner only
+ */
+export type FieldVisibility = 'public' | 'authenticated' | 'private';
+
+/**
+ * Fields a user can hide independently. Identity/status fields (displayName,
+ * githubUsername, availability) are intentionally NOT hideable — the profile
+ * card needs them to identify itself.
+ */
+export const HIDEABLE_FIELDS = [
+	'bio',
+	'skills',
+	'interests',
+	'location',
+	'timezone',
+	'githubUrl',
+	'linkedinUrl',
+	'websiteUrl',
+	'preferredLanguages',
+	'yearsOfExperience',
+] as const;
+export type HideableField = (typeof HIDEABLE_FIELDS)[number];
+
+/** Partial map of field → audience. Missing entries default to 'public'. */
+export type FieldVisibilityMap = Partial<Record<HideableField, FieldVisibility>>;
+
 export interface Profile {
 	id: string;
 	userId: string;
@@ -58,6 +90,8 @@ export interface Profile {
 	interests: string[];
 	availability: Availability;
 	profileVisibility: ProfileVisibility;
+	/** Per-field audience filter; missing/empty means all fields are public. */
+	fieldVisibility?: FieldVisibilityMap;
 	location?: string;
 	timezone?: string;
 	githubUrl?: string;
@@ -75,6 +109,7 @@ export interface ProfileInput {
 	interests: string[];
 	availability?: Availability;
 	profileVisibility?: ProfileVisibility;
+	fieldVisibility?: FieldVisibilityMap;
 	location?: string;
 	timezone?: string;
 	githubUrl?: string;

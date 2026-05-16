@@ -29,6 +29,20 @@ vi.mock('./lib/principal', () => ({
 
 // SUT — must be imported AFTER the mocks above are registered.
 import { profilesHandler, PROFILES_QUERY, DIRECTORY_PAGE_SIZE } from './profiles-list';
+import type { Profile } from './lib/types';
+
+/** Minimal Profile factory for tests — fills in the required fields. */
+function makeProfile(over: Partial<Profile> & Pick<Profile, 'id' | 'userId'>): Profile {
+	return {
+		displayName: 'Test',
+		bio: 'hi',
+		skills: ['ts'],
+		interests: ['rust'],
+		availability: 'active',
+		profileVisibility: 'public',
+		...over,
+	};
+}
 
 const fakeRequest = {} as HttpRequest;
 const fakeContext = { error: vi.fn() } as unknown as InvocationContext;
@@ -78,9 +92,23 @@ describe('GET /api/profiles privacy guard', () => {
 			expect(PROFILES_QUERY).toMatch(new RegExp(`SELECT\\s+TOP\\s+${DIRECTORY_PAGE_SIZE}\\b`));
 		});
 
-		it('does NOT project c.userId in the returned columns (no internal id leak)', () => {
+		it('DOES project c.userId — handler needs it for owner detection (response strips it)', () => {
+			// Per-field visibility (PR adding fieldVisibility) requires the
+			// handler to compare each row's userId against the caller's. The
+			// query must select it; the response must NOT include it. The
+			// privacy invariant moved from the query layer to the response
+			// layer — see the corresponding "response does not contain userId"
+			// test in the handler-behavior block.
 			const selectClause = PROFILES_QUERY.split(/\bFROM\b/)[0];
-			expect(selectClause).not.toMatch(/\bc\.userId\b/);
+			expect(selectClause).toMatch(/\bc\.userId\b/);
+		});
+
+		it('DOES project c.fieldVisibility — needed to apply the per-field filter', () => {
+			// Without this column the handler can't tell which fields are
+			// `private`/`authenticated` and strip them. The response strips
+			// the column itself before responding.
+			const selectClause = PROFILES_QUERY.split(/\bFROM\b/)[0];
+			expect(selectClause).toMatch(/\bc\.fieldVisibility\b/);
 		});
 
 		it('does NOT project c.profileVisibility in the returned columns (filter-only metadata)', () => {
@@ -112,17 +140,101 @@ describe('GET /api/profiles privacy guard', () => {
 			expect(callArg.parameters ?? []).toEqual([]);
 		});
 
-		it('returns the resources array verbatim under {profiles: ...}', async () => {
-			const mockProfiles = [
-				{ id: 'p1', displayName: 'Alice', bio: 'hi', skills: ['ts'], availability: 'active' },
-				{ id: 'p2', displayName: 'Bob', bio: 'hello', skills: ['rust'], availability: 'casual' },
-			];
-			mocks.fetchAllMock.mockResolvedValue({ resources: mockProfiles });
+		it('projects every row through DirectoryProfile (no userId or fieldVisibility in response)', async () => {
+			// Privacy is enforced at the response layer now: the query may
+			// select userId + fieldVisibility (the handler needs them for
+			// owner detection + per-field filtering), but toDirectoryProfile
+			// strips both before returning. If this fails, an internal user
+			// hash starts leaking on every directory load.
+			mocks.fetchAllMock.mockResolvedValue({
+				resources: [
+					makeProfile({ id: 'p1', userId: 'other-1', displayName: 'Alice' }),
+					makeProfile({ id: 'p2', userId: 'other-2', displayName: 'Bob' }),
+				],
+			});
 
 			const response = await profilesHandler(fakeRequest, fakeContext);
 
 			expect(response.status).toBe(200);
-			expect(response.jsonBody).toEqual({ profiles: mockProfiles });
+			const body = response.jsonBody as { profiles: Array<Record<string, unknown>> };
+			expect(body.profiles).toHaveLength(2);
+			for (const row of body.profiles) {
+				expect(row).not.toHaveProperty('userId');
+				expect(row).not.toHaveProperty('fieldVisibility');
+				expect(row).not.toHaveProperty('profileVisibility');
+			}
+			expect(body.profiles[0].displayName).toBe('Alice');
+			expect(body.profiles[1].displayName).toBe('Bob');
+		});
+
+		it('strips a private field from non-owner rows', async () => {
+			// A row marked bio=private must not return bio when the viewer
+			// is not its owner. We check for `undefined` rather than absent
+			// because toDirectoryProfile builds a fixed-shape object and a
+			// stripped field shows as `bio: undefined` in memory; JSON
+			// serialization on the wire drops undefined keys (so the
+			// browser sees no `bio` at all), which is what users observe.
+			mocks.fetchAllMock.mockResolvedValue({
+				resources: [
+					makeProfile({
+						id: 'p1',
+						userId: 'someone-else',
+						bio: 'secret bio',
+						fieldVisibility: { bio: 'private' },
+					}),
+				],
+			});
+
+			const response = await profilesHandler(fakeRequest, fakeContext);
+			expect(response.status).toBe(200);
+			const body = response.jsonBody as { profiles: Array<Record<string, unknown>> };
+			expect(body.profiles[0].bio).toBeUndefined();
+			// And: the stripped value is gone on the wire (JSON drops undefined)
+			expect(JSON.parse(JSON.stringify(body.profiles[0]))).not.toHaveProperty('bio');
+		});
+
+		it('keeps an authenticated field on non-owner rows for authenticated viewers', async () => {
+			// /api/profiles is gated authenticated; every viewer is by
+			// definition signed in, so `authenticated`-level fields pass
+			// through for everyone except (hypothetically) anonymous
+			// viewers — none reach this handler today.
+			mocks.fetchAllMock.mockResolvedValue({
+				resources: [
+					makeProfile({
+						id: 'p1',
+						userId: 'someone-else',
+						location: 'NYC',
+						fieldVisibility: { location: 'authenticated' },
+					}),
+				],
+			});
+
+			const response = await profilesHandler(fakeRequest, fakeContext);
+			expect(response.status).toBe(200);
+			const body = response.jsonBody as { profiles: Array<Record<string, unknown>> };
+			expect(body.profiles[0].location).toBe('NYC');
+		});
+
+		it('shows the owner all their own private fields (self-preview)', async () => {
+			// The caller's own row in the directory is a "how do I appear
+			// to others" preview — but viewing-yourself bypass exists so
+			// fields you've marked private are still visible to you
+			// without round-tripping through the edit page.
+			mocks.fetchAllMock.mockResolvedValue({
+				resources: [
+					makeProfile({
+						id: 'p1',
+						userId: authedPrincipal.userId,
+						bio: 'my private bio',
+						fieldVisibility: { bio: 'private' },
+					}),
+				],
+			});
+
+			const response = await profilesHandler(fakeRequest, fakeContext);
+			expect(response.status).toBe(200);
+			const body = response.jsonBody as { profiles: Array<Record<string, unknown>> };
+			expect(body.profiles[0].bio).toBe('my private bio');
 		});
 
 		it('returns 500 when Cosmos config is missing', async () => {

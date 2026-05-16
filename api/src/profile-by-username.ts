@@ -2,6 +2,7 @@ import { app, type HttpRequest, type InvocationContext, type HttpResponseInit } 
 import { getClientPrincipal } from './lib/principal';
 import { getContainer, getCosmosConfig } from './lib/cosmos';
 import { PROFILE_FIELDS } from './lib/profile-repo';
+import { applyFieldVisibility } from './lib/visibility';
 import type { Profile } from './lib/types';
 
 /**
@@ -142,7 +143,16 @@ export async function profileByUsernameHandler(
 			return { status: 403, jsonBody: { error: 'Profile is private' } };
 		}
 
-		return { status: 200, jsonBody: { profile: toPublicProfile(profile) } };
+		// Apply per-field visibility BEFORE projecting to the public shape.
+		// The owner viewing their own detail page (e.g. previewing how the
+		// world sees them, or hitting their own /find/<self> by accident)
+		// bypasses filtering — there's no audience to hide from on your
+		// own profile.
+		const filtered = applyFieldVisibility(profile, {
+			isOwner: profile.userId === principal.userId,
+			isAuthenticated: true,
+		});
+		return { status: 200, jsonBody: { profile: toPublicProfile(filtered) } };
 	} catch (error) {
 		context.error('profile-by-username failed:', error);
 		return { status: 500, jsonBody: { error: 'Failed to load profile' } };
