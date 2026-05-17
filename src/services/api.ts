@@ -220,18 +220,17 @@ export function isAdminPrincipal(principal: ClientPrincipal | null): boolean {
  * intentionally projects only the fields the cards render — no userId,
  * no profileVisibility — to minimise data exposure.
  */
+/**
+ * `bio` and `skills` are required on the source Profile type but per-field
+ * visibility can strip them from the wire response — consumers must guard
+ * with `profile.skills?.length` etc. find.astro / find/profile.astro do
+ * this defensively.
+ */
 export type DirectoryProfile = Pick<
 	Profile,
-	| 'id'
-	| 'githubUsername'
-	| 'displayName'
-	| 'bio'
-	| 'skills'
-	| 'availability'
-	| 'location'
-	| 'timezone'
-	| 'updatedAt'
->;
+	'id' | 'githubUsername' | 'displayName' | 'availability' | 'location' | 'timezone' | 'updatedAt'
+> &
+	Partial<Pick<Profile, 'bio' | 'skills'>>;
 
 /**
  * GET /api/profiles → returns the public profiles directory (excludes the
@@ -258,9 +257,6 @@ export type PublicProfile = Pick<
 	| 'id'
 	| 'githubUsername'
 	| 'displayName'
-	| 'bio'
-	| 'skills'
-	| 'interests'
 	| 'availability'
 	| 'location'
 	| 'timezone'
@@ -270,7 +266,8 @@ export type PublicProfile = Pick<
 	| 'preferredLanguages'
 	| 'yearsOfExperience'
 	| 'updatedAt'
->;
+> &
+	Partial<Pick<Profile, 'bio' | 'skills' | 'interests'>>;
 
 /**
  * GET /api/profile-by-username?username=<login> → the public profile.

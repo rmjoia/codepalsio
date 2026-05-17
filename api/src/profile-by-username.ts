@@ -27,14 +27,17 @@ export const PROFILE_BY_USERNAME_CI_QUERY = `SELECT ${PROFILE_FIELDS} FROM c WHE
  * (auto-heal in profile-get needs userId; we need profileVisibility for
  * the 403 vs 200 decision), but they never leave the handler.
  */
+/**
+ * `bio`, `skills`, `interests` are required on the source `Profile` type
+ * but per-field visibility can strip them, so this projection marks them
+ * optional. The detail page (find/profile.astro) handles the absent case
+ * defensively (`profile.skills?.length` etc.).
+ */
 export type PublicProfile = Pick<
 	Profile,
 	| 'id'
 	| 'githubUsername'
 	| 'displayName'
-	| 'bio'
-	| 'skills'
-	| 'interests'
 	| 'availability'
 	| 'location'
 	| 'timezone'
@@ -44,7 +47,8 @@ export type PublicProfile = Pick<
 	| 'preferredLanguages'
 	| 'yearsOfExperience'
 	| 'updatedAt'
->;
+> &
+	Partial<Pick<Profile, 'bio' | 'skills' | 'interests'>>;
 
 /**
  * Reduce a stored Profile to the public-facing projection. Single point

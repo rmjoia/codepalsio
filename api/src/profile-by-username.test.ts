@@ -203,6 +203,16 @@ describe('GET /api/profile-by-username', () => {
 			expect(PROFILE_BY_USERNAME_CI_QUERY).toMatch(/LOWER\s*\(\s*@githubUsername\s*\)/i);
 		});
 
+		it('selects c.fieldVisibility in the shared PROFILE_FIELDS projection', () => {
+			// Without this column, Cosmos rows arrive at applyFieldVisibility
+			// with `fieldVisibility === undefined`. The helper then defaults
+			// every field to public and silently leaks fields the user marked
+			// private. Handler-level tests can mask this because they mock
+			// the row with the column present; the structural assertion here
+			// fails BEFORE any mock can hide the bug.
+			expect(PROFILE_BY_USERNAME_CI_QUERY).toMatch(/\bc\.fieldVisibility\b/);
+		});
+
 		it('forwards mixed-case usernames to the query parameter unchanged (LOWER() handles it)', async () => {
 			// The query parameter binding doesn't need pre-normalization — the
 			// SQL LOWER() does the work. This test pins that contract so a

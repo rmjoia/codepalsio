@@ -282,7 +282,16 @@ import Footer from '../../components/Footer.astro';
 
 				if (nameEl) nameEl.textContent = profile.displayName;
 				if (handleEl && profile.githubUsername) handleEl.textContent = '@' + profile.githubUsername;
-				if (bioEl) bioEl.textContent = profile.bio;
+				// Bio is optional under per-field visibility; hide the
+				// element entirely when the field was stripped so the page
+				// doesn't show a blank-but-styled paragraph.
+				if (bioEl) {
+					if (profile.bio) {
+						bioEl.textContent = profile.bio;
+					} else {
+						bioEl.classList.add('hidden');
+					}
+				}
 
 				if (avatarSlot) {
 					const avatarUrl = getProfileAvatarUrl(profile);
@@ -307,20 +316,25 @@ import Footer from '../../components/Footer.astro';
 					availabilityEl.classList.add(...badge.cls.split(' '));
 				}
 
-				if (profile.skills.length > 0) {
+				// Skills and interests are optional under per-field visibility
+				// — guard against the absent case (their <section> stays
+				// `hidden` if the field was stripped or empty).
+				const skillsList = profile.skills ?? [];
+				if (skillsList.length > 0) {
 					const skills = document.getElementById('profile-skills');
 					const section = document.getElementById('profile-skills-section');
 					if (skills && section) {
-						renderChips(skills, profile.skills, 'bg-primary-50 text-primary-700');
+						renderChips(skills, skillsList, 'bg-primary-50 text-primary-700');
 						section.classList.remove('hidden');
 					}
 				}
 
-				if (profile.interests.length > 0) {
+				const interestsList = profile.interests ?? [];
+				if (interestsList.length > 0) {
 					const interests = document.getElementById('profile-interests');
 					const section = document.getElementById('profile-interests-section');
 					if (interests && section) {
-						renderChips(interests, profile.interests, 'bg-accent-50 text-accent-700');
+						renderChips(interests, interestsList, 'bg-accent-50 text-accent-700');
 						section.classList.remove('hidden');
 					}
 				}

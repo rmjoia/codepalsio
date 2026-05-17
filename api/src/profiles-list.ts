@@ -9,11 +9,18 @@ import type { Profile } from './lib/types';
  * (userId) and metadata used only for filtering (profileVisibility,
  * fieldVisibility) stay server-side — the cards don't need them and we
  * don't want to leak them.
+ *
+ * `bio`, `skills`, `interests` were required on the source `Profile`
+ * type but per-field visibility can strip them, so this projection
+ * marks them optional. Consumers must handle the absent case
+ * (`profile.skills?.length` etc.) — find.astro and find/profile.astro
+ * do this defensively.
  */
 export type DirectoryProfile = Pick<
 	Profile,
-	'id' | 'githubUsername' | 'displayName' | 'bio' | 'skills' | 'availability' | 'location' | 'timezone' | 'updatedAt'
->;
+	'id' | 'githubUsername' | 'displayName' | 'availability' | 'location' | 'timezone' | 'updatedAt'
+> &
+	Partial<Pick<Profile, 'bio' | 'skills'>>;
 
 /** Hard cap on how many public profiles the directory returns in one shot.
  * Prevents unbounded RU/response-size growth as the community grows. The UI

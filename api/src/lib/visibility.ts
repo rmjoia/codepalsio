@@ -5,9 +5,9 @@ import { HIDEABLE_FIELDS, type FieldVisibility, type Profile } from './types';
  * the server. The single point of truth for "what does viewer V see in
  * profile P", consumed by both:
  *   - /api/profile-by-username (detail page; viewer may be the owner)
- *   - /api/profiles            (directory; viewer is never the owner by
- *     construction — the query excludes the caller — so the owner branch
- *     here is unused in that path, but kept defensive)
+ *   - /api/profiles            (directory; viewer MAY be the owner — the
+ *     query no longer excludes the caller, so the directory functions as
+ *     a self-preview when the row is the caller's own)
  *
  * Semantics:
  *   - The owner ALWAYS sees every field (no point hiding fields from
