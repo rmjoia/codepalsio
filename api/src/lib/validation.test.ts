@@ -71,10 +71,30 @@ describe('normalizeFieldVisibility', () => {
 			userId: 'private',
 			availability: 'private',
 			password: 'private',
-			'..__proto__': 'private',
 			bio: 'private', // this one survives
 		});
 		expect(out).toEqual({ bio: 'private' });
+	});
+
+	it('drops `__proto__` and other prototype-pollution keys', () => {
+		// Defensive: even though the HIDEABLE_FIELDS whitelist already
+		// rejects __proto__, pin the attack-string explicitly so a future
+		// refactor that loosens the whitelist or moves to an allow-by-
+		// exclusion model can't accidentally let prototype-pollution
+		// bytes through. JSON.parse creates a regular own-property
+		// `__proto__` on the parsed object (it does NOT mutate
+		// Object.prototype), so the threat here is mostly about
+		// downstream consumers that copy keys naively — but the safest
+		// answer is to drop them at the boundary.
+		const out = normalizeFieldVisibility({
+			__proto__: 'private',
+			constructor: 'private',
+			prototype: 'private',
+			bio: 'private',
+		});
+		expect(out).toEqual({ bio: 'private' });
+		// And: the returned object's prototype is untouched
+		expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
 	});
 
 	it('drops entries with invalid visibility values', () => {

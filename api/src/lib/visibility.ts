@@ -68,5 +68,16 @@ function isVisibleToViewer(level: FieldVisibility, viewer: ViewerContext): boole
 			// `isOwner` is short-circuited by the caller; if we reach here
 			// the viewer is not the owner, so private = hidden.
 			return false;
+		default: {
+			// Exhaustiveness guard: if a new FieldVisibility value is added
+			// (e.g. a future `followers-only`) and this switch isn't
+			// updated, TS errors at compile time on the `never` assignment
+			// before any code ships. Without this, the new level would
+			// silently fall through to "hidden" — which fails-safe but
+			// would mask a missing branch in code review.
+			const _exhaustive: never = level;
+			void _exhaustive;
+			return false;
+		}
 	}
 }
