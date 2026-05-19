@@ -1,4 +1,13 @@
-import { AVAILABILITY_VALUES, type Availability, PROFILE_VISIBILITY_VALUES, type ProfileVisibility } from './types';
+import {
+	AVAILABILITY_VALUES,
+	type Availability,
+	PROFILE_VISIBILITY_VALUES,
+	type ProfileVisibility,
+	FIELD_VISIBILITY_VALUES,
+	type FieldVisibility,
+	HIDEABLE_FIELDS,
+	type FieldVisibilityMap,
+} from './types';
 
 /**
  * Input bounds for profile-save. The edit form already enforces these,
@@ -22,6 +31,33 @@ export function isAvailability(value: unknown): value is Availability {
 
 export function isProfileVisibility(value: unknown): value is ProfileVisibility {
 	return typeof value === 'string' && (PROFILE_VISIBILITY_VALUES as readonly string[]).includes(value);
+}
+
+export function isFieldVisibility(value: unknown): value is FieldVisibility {
+	return typeof value === 'string' && (FIELD_VISIBILITY_VALUES as readonly string[]).includes(value);
+}
+
+/**
+ * Coerce arbitrary input to a clean FieldVisibilityMap. Only keys from
+ * HIDEABLE_FIELDS are kept; unknown keys and non-string values are
+ * dropped. `public` entries are NOT stored — they're the default, and
+ * keeping them just inflates document size. The empty map and an
+ * all-public map are observationally identical.
+ *
+ * Returning `{}` for missing/invalid input means "use defaults" downstream,
+ * not "block the save" — the form may legitimately omit this field.
+ */
+export function normalizeFieldVisibility(input: unknown): FieldVisibilityMap {
+	if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+	const src = input as Record<string, unknown>;
+	const out: FieldVisibilityMap = {};
+	for (const field of HIDEABLE_FIELDS) {
+		const v = src[field];
+		if (isFieldVisibility(v) && v !== 'public') {
+			out[field] = v;
+		}
+	}
+	return out;
 }
 
 /**

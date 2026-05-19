@@ -18,7 +18,7 @@ import type { UserRepository } from './users';
  * module here.
  */
 export const PROFILE_FIELDS =
-	'c.id, c.userId, c.githubUsername, c.displayName, c.bio, c.skills, c.interests, c.availability, c.location, c.timezone, c.githubUrl, c.linkedinUrl, c.websiteUrl, c.preferredLanguages, c.yearsOfExperience, c.profileVisibility, c.updatedAt';
+	'c.id, c.userId, c.githubUsername, c.displayName, c.bio, c.skills, c.interests, c.availability, c.location, c.timezone, c.githubUrl, c.linkedinUrl, c.websiteUrl, c.preferredLanguages, c.yearsOfExperience, c.profileVisibility, c.fieldVisibility, c.updatedAt';
 
 export const PROFILE_BY_USERID_QUERY = `SELECT ${PROFILE_FIELDS} FROM c WHERE c.userId = @userId`;
 export const PROFILE_BY_GITHUB_USERNAME_QUERY = `SELECT ${PROFILE_FIELDS} FROM c WHERE c.githubUsername = @githubUsername`;

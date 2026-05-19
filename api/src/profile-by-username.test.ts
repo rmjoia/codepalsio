@@ -203,6 +203,16 @@ describe('GET /api/profile-by-username', () => {
 			expect(PROFILE_BY_USERNAME_CI_QUERY).toMatch(/LOWER\s*\(\s*@githubUsername\s*\)/i);
 		});
 
+		it('selects c.fieldVisibility in the shared PROFILE_FIELDS projection', () => {
+			// Without this column, Cosmos rows arrive at applyFieldVisibility
+			// with `fieldVisibility === undefined`. The helper then defaults
+			// every field to public and silently leaks fields the user marked
+			// private. Handler-level tests can mask this because they mock
+			// the row with the column present; the structural assertion here
+			// fails BEFORE any mock can hide the bug.
+			expect(PROFILE_BY_USERNAME_CI_QUERY).toMatch(/\bc\.fieldVisibility\b/);
+		});
+
 		it('forwards mixed-case usernames to the query parameter unchanged (LOWER() handles it)', async () => {
 			// The query parameter binding doesn't need pre-normalization — the
 			// SQL LOWER() does the work. This test pins that contract so a
@@ -256,6 +266,68 @@ describe('GET /api/profile-by-username', () => {
 			const body = res.jsonBody as { profile: Record<string, unknown> };
 			expect(body.profile).not.toHaveProperty('userId');
 			expect(body.profile).not.toHaveProperty('profileVisibility');
+		});
+
+		it('strips fields marked private when viewer is NOT the owner', async () => {
+			// Per-field visibility kicks in: baseProfile.userId is
+			// 'owner-user-id', principal.userId is 'current-user-id', so the
+			// viewer is not the owner. bio marked private must not return.
+			mocks.fetchAllMock.mockResolvedValue({
+				resources: [
+					{
+						...baseProfile,
+						bio: 'secret bio',
+						fieldVisibility: { bio: 'private' },
+					},
+				],
+			});
+			const res = await profileByUsernameHandler(makeRequest({ username: 'alice' }), fakeContext);
+			expect(res.status).toBe(200);
+			const body = res.jsonBody as { profile: Record<string, unknown> };
+			expect(body.profile.bio).toBeUndefined();
+			expect(JSON.parse(JSON.stringify(body.profile))).not.toHaveProperty('bio');
+		});
+
+		it('returns ALL fields to the owner viewing their own detail page (self-preview bypass)', async () => {
+			// If the principal's userId matches the profile's userId, no
+			// filtering applies — the owner sees the unfiltered view. Useful
+			// when previewing what someone has saved without needing to
+			// detour through the edit form.
+			mocks.fetchAllMock.mockResolvedValue({
+				resources: [
+					{
+						...baseProfile,
+						userId: authedPrincipal.userId, // viewer == owner
+						bio: 'my private bio',
+						fieldVisibility: { bio: 'private', location: 'private' },
+						location: 'NYC',
+					},
+				],
+			});
+			const res = await profileByUsernameHandler(makeRequest({ username: 'alice' }), fakeContext);
+			expect(res.status).toBe(200);
+			const body = res.jsonBody as { profile: Record<string, unknown> };
+			expect(body.profile.bio).toBe('my private bio');
+			expect(body.profile.location).toBe('NYC');
+		});
+
+		it('keeps authenticated-level fields for non-owner authenticated viewers', async () => {
+			// Detail page is auth-gated; every viewer is signed in. The
+			// 'authenticated' level passes through. Confirms the level
+			// hierarchy (authenticated >= public for signed-in viewers).
+			mocks.fetchAllMock.mockResolvedValue({
+				resources: [
+					{
+						...baseProfile,
+						location: 'NYC',
+						fieldVisibility: { location: 'authenticated' },
+					},
+				],
+			});
+			const res = await profileByUsernameHandler(makeRequest({ username: 'alice' }), fakeContext);
+			expect(res.status).toBe(200);
+			const body = res.jsonBody as { profile: Record<string, unknown> };
+			expect(body.profile.location).toBe('NYC');
 		});
 
 		it('returns 500 when Cosmos config is missing', async () => {
