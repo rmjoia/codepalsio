@@ -164,12 +164,18 @@ describe('profile/index.astro — per-field visibility UI', () => {
 
 		it.each(groupedSections)('$description uses <fieldset> + <legend>', ({ legend }) => {
 			// The legend's literal text proves the right section was
-			// converted (not just any fieldset). Tolerant to Prettier's
-			// quirky line-break placement: both the opening tag's `>`
-			// and the closing tag's `>` may have whitespace before them
-			// (e.g. `<legend class="…"\n\t>Title</legend\n>` is how
-			// Prettier emits long single-line legends).
-			const re = new RegExp(`<legend[^>]*?>\\s*${legend}\\s*</legend\\s*>`, 'i');
+			// converted (not just any fieldset). Asserts a <fieldset> open
+			// tag IMMEDIATELY precedes the matching <legend>…</legend>
+			// pair (only whitespace allowed between them) so a future
+			// "drop the fieldset wrapper but keep the legend" regression
+			// fails this test — the grouping semantics depend on BOTH
+			// elements, not the legend alone (PR #62 Copilot review).
+			//
+			// Tolerant to Prettier's quirky line-break placement: both
+			// the opening tag's `>` and the closing tag's `>` may have
+			// whitespace before them (e.g. `<legend class="…"\n\t>Title</legend\n>`
+			// is how Prettier emits long single-line legends).
+			const re = new RegExp(`<fieldset[^>]*>\\s*<legend[^>]*?>\\s*${legend}\\s*</legend\\s*>`, 'i');
 			expect(source).toMatch(re);
 		});
 
