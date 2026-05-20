@@ -312,6 +312,102 @@ import Footer from '../../components/Footer.astro';
 						</div>
 					</div>
 
+					<!--
+						Per-field audience. Defaults are public for every field; this
+						section only matters when the profile itself is public. Identity
+						fields (display name, GitHub handle, availability) are not
+						hideable — the directory card needs them to identify itself.
+						Backend whitelist (HIDEABLE_FIELDS) is the security boundary;
+						this UI is purely a control panel.
+					-->
+					<fieldset id="field-visibility-section" class="border-0 p-0 m-0">
+						<legend class="block text-sm font-semibold text-slate-900 mb-2">
+							Per-field audience
+						</legend>
+						<p class="text-sm text-slate-500 mb-3">
+							Fine-tune who sees each field once your profile is Public. <span
+								class="font-medium text-slate-700">Public</span
+							> is everyone, <span class="font-medium text-slate-700">CodePals only</span> is signed-in
+							viewers, <span class="font-medium text-slate-700">Only me</span> is owner-only.
+						</p>
+						<div class="space-y-3">
+							<div class="flex items-center justify-between gap-3">
+								<label for="field-vis-bio" class="text-sm text-slate-700 flex-shrink-0 w-28 sm:w-32"
+									>Bio</label
+								>
+								<select
+									id="field-vis-bio"
+									data-field="bio"
+									class="field-visibility-select flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+								>
+									<option value="public">Public — everyone</option>
+									<option value="authenticated">CodePals only — signed-in</option>
+									<option value="private">Only me</option>
+								</select>
+							</div>
+							<div class="flex items-center justify-between gap-3">
+								<label
+									for="field-vis-skills"
+									class="text-sm text-slate-700 flex-shrink-0 w-28 sm:w-32">Skills</label
+								>
+								<select
+									id="field-vis-skills"
+									data-field="skills"
+									class="field-visibility-select flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+								>
+									<option value="public">Public — everyone</option>
+									<option value="authenticated">CodePals only — signed-in</option>
+									<option value="private">Only me</option>
+								</select>
+							</div>
+							<div class="flex items-center justify-between gap-3">
+								<label
+									for="field-vis-interests"
+									class="text-sm text-slate-700 flex-shrink-0 w-28 sm:w-32">Interests</label
+								>
+								<select
+									id="field-vis-interests"
+									data-field="interests"
+									class="field-visibility-select flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+								>
+									<option value="public">Public — everyone</option>
+									<option value="authenticated">CodePals only — signed-in</option>
+									<option value="private">Only me</option>
+								</select>
+							</div>
+							<div class="flex items-center justify-between gap-3">
+								<label
+									for="field-vis-location"
+									class="text-sm text-slate-700 flex-shrink-0 w-28 sm:w-32">Location</label
+								>
+								<select
+									id="field-vis-location"
+									data-field="location"
+									class="field-visibility-select flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+								>
+									<option value="public">Public — everyone</option>
+									<option value="authenticated">CodePals only — signed-in</option>
+									<option value="private">Only me</option>
+								</select>
+							</div>
+							<div class="flex items-center justify-between gap-3">
+								<label
+									for="field-vis-timezone"
+									class="text-sm text-slate-700 flex-shrink-0 w-28 sm:w-32">Timezone</label
+								>
+								<select
+									id="field-vis-timezone"
+									data-field="timezone"
+									class="field-visibility-select flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+								>
+									<option value="public">Public — everyone</option>
+									<option value="authenticated">CodePals only — signed-in</option>
+									<option value="private">Only me</option>
+								</select>
+							</div>
+						</div>
+					</fieldset>
+
 					<div class="flex gap-4 pt-4">
 						<button
 							type="button"
@@ -340,8 +436,23 @@ import Footer from '../../components/Footer.astro';
 				getAvatarUrl,
 				getProfile,
 				saveProfile,
+				HIDEABLE_FIELDS,
 				type Profile,
+				type FieldVisibility,
+				type FieldVisibilityMap,
+				type HideableField,
 			} from '../../services/api';
+
+			/**
+			 * The non-public subset of FieldVisibility. The trimmed wire payload
+			 * (see the save handler below) only ever carries 'authenticated' or
+			 * 'private' entries — `public` is the default and gets dropped both
+			 * client-side and by the server's normalizeFieldVisibility. Typing
+			 * the local map this way means a future "store every value" change
+			 * fails at the type level instead of silently shipping the wrong
+			 * shape to the server.
+			 */
+			type StoredFieldVisibility = Exclude<FieldVisibility, 'public'>;
 
 			let currentProfile: Profile | null = null;
 			const skills = new Set<string>();
@@ -504,6 +615,27 @@ import Footer from '../../components/Footer.astro';
 				);
 				if (visRadio) visRadio.checked = true;
 
+				// Per-field visibility. Defaults to 'public' for every field
+				// when the map is absent or the entry is missing — matches
+				// backend's normalizeFieldVisibility (only non-public entries
+				// are stored). Empty / legacy profiles render as all-public.
+				//
+				// The `field` from `dataset.field` is validated against
+				// HIDEABLE_FIELDS before keying into the map. This keeps the
+				// lookup type-safe AND defends against a regression where a
+				// future `data-field` typo (e.g. `data-field="bio "`) silently
+				// reads `undefined` and defaults to public — instead we now
+				// skip the selector explicitly and a runtime smoke test would
+				// catch the orphan.
+				const fieldVis: FieldVisibilityMap = profile?.fieldVisibility ?? {};
+				const hideableFields = new Set<string>(HIDEABLE_FIELDS);
+				document.querySelectorAll<HTMLSelectElement>('.field-visibility-select').forEach((sel) => {
+					const field = sel.dataset.field;
+					if (!field || !hideableFields.has(field)) return;
+					const level: FieldVisibility = fieldVis[field as HideableField] ?? 'public';
+					sel.value = level;
+				});
+
 				skills.clear();
 				(profile?.skills || []).forEach((s) => skills.add(s));
 				renderTags('skills-container', skills, 'skill');
@@ -654,6 +786,29 @@ import Footer from '../../components/Footer.astro';
 					submitBtn.textContent = 'Saving…';
 				}
 
+				// Gather per-field visibility selectors into the wire shape.
+				// Drop 'public' entries client-side too — the server already
+				// does this in normalizeFieldVisibility, but trimming here
+				// keeps the request body small for users who never opened
+				// the visibility section. The server remains the security
+				// boundary; this is purely a wire-size optimisation.
+				//
+				// Typed as Partial<Record<HideableField, StoredFieldVisibility>>
+				// so the local shape honestly reflects what flows to the wire:
+				// keys are restricted to the HIDEABLE_FIELDS whitelist, values
+				// to the non-public subset. A future change that tries to
+				// stuff a `'public'` entry in fails at the type level.
+				const fieldVisibility: Partial<Record<HideableField, StoredFieldVisibility>> = {};
+				const hideableSet = new Set<string>(HIDEABLE_FIELDS);
+				document.querySelectorAll<HTMLSelectElement>('.field-visibility-select').forEach((sel) => {
+					const field = sel.dataset.field;
+					const value = sel.value;
+					if (!field || !hideableSet.has(field)) return;
+					if (value === 'authenticated' || value === 'private') {
+						fieldVisibility[field as HideableField] = value;
+					}
+				});
+
 				try {
 					const saved = await saveProfile({
 						displayName: displayNameEl?.value || '',
@@ -664,6 +819,7 @@ import Footer from '../../components/Footer.astro';
 						timezone: timezoneEl?.value,
 						availability: (availabilityEl?.value as Profile['availability']) || 'active',
 						profileVisibility: (visibilityEl?.value as Profile['profileVisibility']) || 'private',
+						fieldVisibility,
 					});
 					currentProfile = saved;
 					populateViewMode(currentProfile);
