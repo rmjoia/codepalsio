@@ -320,10 +320,10 @@ import Footer from '../../components/Footer.astro';
 						Backend whitelist (HIDEABLE_FIELDS) is the security boundary;
 						this UI is purely a control panel.
 					-->
-					<div id="field-visibility-section">
-						<label class="block text-sm font-semibold text-slate-900 mb-2">
+					<fieldset id="field-visibility-section" class="border-0 p-0 m-0">
+						<legend class="block text-sm font-semibold text-slate-900 mb-2">
 							Per-field audience
-						</label>
+						</legend>
 						<p class="text-sm text-slate-500 mb-3">
 							Fine-tune who sees each field once your profile is Public. <span
 								class="font-medium text-slate-700">Public</span
@@ -406,7 +406,7 @@ import Footer from '../../components/Footer.astro';
 								</select>
 							</div>
 						</div>
-					</div>
+					</fieldset>
 
 					<div class="flex gap-4 pt-4">
 						<button
@@ -436,8 +436,23 @@ import Footer from '../../components/Footer.astro';
 				getAvatarUrl,
 				getProfile,
 				saveProfile,
+				HIDEABLE_FIELDS,
 				type Profile,
+				type FieldVisibility,
+				type FieldVisibilityMap,
+				type HideableField,
 			} from '../../services/api';
+
+			/**
+			 * The non-public subset of FieldVisibility. The trimmed wire payload
+			 * (see the save handler below) only ever carries 'authenticated' or
+			 * 'private' entries — `public` is the default and gets dropped both
+			 * client-side and by the server's normalizeFieldVisibility. Typing
+			 * the local map this way means a future "store every value" change
+			 * fails at the type level instead of silently shipping the wrong
+			 * shape to the server.
+			 */
+			type StoredFieldVisibility = Exclude<FieldVisibility, 'public'>;
 
 			let currentProfile: Profile | null = null;
 			const skills = new Set<string>();
@@ -604,11 +619,20 @@ import Footer from '../../components/Footer.astro';
 				// when the map is absent or the entry is missing — matches
 				// backend's normalizeFieldVisibility (only non-public entries
 				// are stored). Empty / legacy profiles render as all-public.
-				const fieldVis = profile?.fieldVisibility ?? {};
+				//
+				// The `field` from `dataset.field` is validated against
+				// HIDEABLE_FIELDS before keying into the map. This keeps the
+				// lookup type-safe AND defends against a regression where a
+				// future `data-field` typo (e.g. `data-field="bio "`) silently
+				// reads `undefined` and defaults to public — instead we now
+				// skip the selector explicitly and a runtime smoke test would
+				// catch the orphan.
+				const fieldVis: FieldVisibilityMap = profile?.fieldVisibility ?? {};
+				const hideableFields = new Set<string>(HIDEABLE_FIELDS);
 				document.querySelectorAll<HTMLSelectElement>('.field-visibility-select').forEach((sel) => {
 					const field = sel.dataset.field;
-					if (!field) return;
-					const level = (fieldVis as Record<string, string | undefined>)[field] ?? 'public';
+					if (!field || !hideableFields.has(field)) return;
+					const level: FieldVisibility = fieldVis[field as HideableField] ?? 'public';
 					sel.value = level;
 				});
 
@@ -768,13 +792,20 @@ import Footer from '../../components/Footer.astro';
 				// keeps the request body small for users who never opened
 				// the visibility section. The server remains the security
 				// boundary; this is purely a wire-size optimisation.
-				const fieldVisibility: Record<string, 'public' | 'authenticated' | 'private'> = {};
+				//
+				// Typed as Partial<Record<HideableField, StoredFieldVisibility>>
+				// so the local shape honestly reflects what flows to the wire:
+				// keys are restricted to the HIDEABLE_FIELDS whitelist, values
+				// to the non-public subset. A future change that tries to
+				// stuff a `'public'` entry in fails at the type level.
+				const fieldVisibility: Partial<Record<HideableField, StoredFieldVisibility>> = {};
+				const hideableSet = new Set<string>(HIDEABLE_FIELDS);
 				document.querySelectorAll<HTMLSelectElement>('.field-visibility-select').forEach((sel) => {
 					const field = sel.dataset.field;
 					const value = sel.value;
-					if (!field) return;
+					if (!field || !hideableSet.has(field)) return;
 					if (value === 'authenticated' || value === 'private') {
-						fieldVisibility[field] = value;
+						fieldVisibility[field as HideableField] = value;
 					}
 				});
 

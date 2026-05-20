@@ -37,6 +37,16 @@ describe('profile/index.astro — per-field visibility UI', () => {
 			expect(source).toMatch(/id=["']field-visibility-section["']/);
 		});
 
+		it('uses a semantic <fieldset>/<legend> grouping (a11y: related controls)', () => {
+			// PR #60 Copilot review: an unbound <label> is wrong for a group
+			// of related controls — screen readers can't associate it with
+			// a single field. <fieldset> + <legend> is the semantically
+			// correct grouping. Pinning this so a future "simplify the
+			// markup" refactor doesn't drop back to the broken pattern.
+			expect(source).toMatch(/<fieldset[^>]*id=["']field-visibility-section["']/);
+			expect(source).toMatch(/<legend[^>]*>\s*Per-field audience/);
+		});
+
 		it('uses the .field-visibility-select class to mark each selector (CSS hook for JS)', () => {
 			// The script queries `.field-visibility-select` to gather values
 			// on submit and pre-populate on load. If the class drops or
@@ -98,6 +108,31 @@ describe('profile/index.astro — per-field visibility UI', () => {
 			expect(source).toMatch(
 				/value\s*===\s*['"]authenticated['"]\s*\|\|\s*value\s*===\s*['"]private['"]/
 			);
+		});
+
+		it('uses the FieldVisibilityMap / HideableField types from services/api (lockstep with backend)', () => {
+			// PR #60 Copilot review: the script was using `Record<string, ...>`
+			// and a cast through `Record<string, string | undefined>`. The
+			// shared types in src/services/api.ts mirror the backend's
+			// FIELD_VISIBILITY_VALUES + HIDEABLE_FIELDS — using them keeps
+			// the client in lockstep so a backend-only widening (e.g. a new
+			// audience level) surfaces as a TS error here, not a silent
+			// "client sends old levels" drift.
+			expect(source).toMatch(
+				/import\s+\{[\s\S]*?\bFieldVisibility\b[\s\S]*?from\s+['"]\.\.\/\.\.\/services\/api['"]/
+			);
+			expect(source).toMatch(/\bFieldVisibilityMap\b/);
+			expect(source).toMatch(/\bHideableField\b/);
+			expect(source).toMatch(/\bHIDEABLE_FIELDS\b/);
+		});
+
+		it('validates data-field against HIDEABLE_FIELDS at runtime (defends against orphan selectors)', () => {
+			// Defensive guard: if a future <select> ships with a typo in
+			// `data-field` (e.g. `data-field="bio "` with a trailing space),
+			// the script should skip it rather than send garbage to the
+			// server. Pins the runtime whitelist check.
+			expect(source).toMatch(/new Set<string>\(HIDEABLE_FIELDS\)/);
+			expect(source).toMatch(/!hideable(Fields|Set)\.has\(field\)/);
 		});
 	});
 
