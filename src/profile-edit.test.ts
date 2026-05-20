@@ -136,6 +136,65 @@ describe('profile/index.astro — per-field visibility UI', () => {
 		});
 	});
 
+	describe('a11y sweep — every grouped section uses <fieldset>/<legend>', () => {
+		// PR #60 fixed the field-visibility section; this sweep pins the
+		// rest of the form's grouped sections to the same semantic so a
+		// future "simplify the markup" refactor can't regress any of
+		// them back to unbound <label>. The pattern matters most for
+		// radio groups (Availability, Profile Visibility) where assistive
+		// tech needs to announce the group's purpose alongside each
+		// option; Skills/Interests also benefit because the chip area is
+		// part of the same conceptual control.
+		//
+		// Pre-bound labels (e.g. `<label for="bio">Bio</label>`) are
+		// fine as-is — they don't enter this sweep.
+		const groupedSections: Array<{ legend: string; description: string }> = [
+			{
+				legend: 'Skills \\* \\(at least 2\\)',
+				description: 'Skills — text input + chip group',
+			},
+			{
+				legend: 'Interests \\* \\(at least 2\\)',
+				description: 'Interests — text input + chip group',
+			},
+			{ legend: 'Availability', description: 'Availability — radio group' },
+			{ legend: 'Profile Visibility', description: 'Profile Visibility — radio group' },
+			{ legend: 'Per-field audience', description: 'Per-field audience — selector group' },
+		];
+
+		it.each(groupedSections)('$description uses <fieldset> + <legend>', ({ legend }) => {
+			// The legend's literal text proves the right section was
+			// converted (not just any fieldset). Allows trailing
+			// whitespace + closing tag patterns; tolerant to minor
+			// markup changes.
+			const re = new RegExp(`<legend[^>]*>\\s*${legend}\\s*</legend>`, 'i');
+			expect(source).toMatch(re);
+		});
+
+		it('does NOT use unbound <label> for any section header', () => {
+			// Catches the original anti-pattern: <label> without `for=`
+			// AND not wrapping a control. The form has plenty of *bound*
+			// labels (<label for="bio">…</label>) which are fine; this
+			// test must distinguish.
+			//
+			// Strategy: find every <label …> opening tag, capture its
+			// attributes, and assert each either has a `for=` attribute
+			// OR wraps an inline <input>/<select>/<textarea> (the
+			// "wrap a control" pattern is also valid). Section-header
+			// labels do neither.
+			const labelOpenRe = /<label([^>]*)>([\s\S]*?)<\/label>/g;
+			const offenders: string[] = [];
+			for (const match of source.matchAll(labelOpenRe)) {
+				const attrs = match[1];
+				const body = match[2];
+				if (/\bfor=["'][^"']+["']/.test(attrs)) continue; // bound by `for=`
+				if (/<(input|select|textarea)\b/.test(body)) continue; // wraps a control
+				offenders.push(match[0].replace(/\s+/g, ' ').slice(0, 100));
+			}
+			expect(offenders, 'unbound <label> elements act as broken section headers').toEqual([]);
+		});
+	});
+
 	describe('identity fields are NOT exposed as hideable in the UI', () => {
 		// Defense in depth: the backend whitelist already rejects these,
 		// but the UI shouldn't even suggest they're hideable. A regression

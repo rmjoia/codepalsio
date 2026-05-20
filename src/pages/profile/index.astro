@@ -182,10 +182,10 @@ import Footer from '../../components/Footer.astro';
 						</p>
 					</div>
 
-					<div>
-						<label class="block text-sm font-semibold text-slate-900 mb-2">
+					<fieldset class="border-0 p-0 m-0">
+						<legend class="block text-sm font-semibold text-slate-900 mb-2">
 							Skills * (at least 2)
-						</label>
+						</legend>
 						<input
 							type="text"
 							id="skills-input"
@@ -198,12 +198,12 @@ import Footer from '../../components/Footer.astro';
 							> or <kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">comma</kbd> to add it
 						</p>
 						<div id="skills-container" class="flex flex-wrap gap-2 mt-3 min-h-[40px]"></div>
-					</div>
+					</fieldset>
 
-					<div>
-						<label class="block text-sm font-semibold text-slate-900 mb-2">
+					<fieldset class="border-0 p-0 m-0">
+						<legend class="block text-sm font-semibold text-slate-900 mb-2">
 							Interests * (at least 2)
-						</label>
+						</legend>
 						<input
 							type="text"
 							id="interests-input"
@@ -216,7 +216,7 @@ import Footer from '../../components/Footer.astro';
 							> or <kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">comma</kbd> to add it
 						</p>
 						<div id="interests-container" class="flex flex-wrap gap-2 mt-3 min-h-[40px]"></div>
-					</div>
+					</fieldset>
 
 					<div class="grid md:grid-cols-2 gap-6">
 						<div>
@@ -252,8 +252,8 @@ import Footer from '../../components/Footer.astro';
 						</div>
 					</div>
 
-					<div>
-						<label class="block text-sm font-semibold text-slate-900 mb-2">Availability</label>
+					<fieldset class="border-0 p-0 m-0">
+						<legend class="block text-sm font-semibold text-slate-900 mb-2">Availability</legend>
 						<div class="space-y-2">
 							<label class="flex items-center gap-2">
 								<input
@@ -279,10 +279,11 @@ import Footer from '../../components/Footer.astro';
 								<span class="text-slate-700">Not available right now</span>
 							</label>
 						</div>
-					</div>
+					</fieldset>
 
-					<div>
-						<label class="block text-sm font-semibold text-slate-900 mb-2">Profile Visibility</label
+					<fieldset class="border-0 p-0 m-0">
+						<legend class="block text-sm font-semibold text-slate-900 mb-2"
+							>Profile Visibility</legend
 						>
 						<p class="text-sm text-slate-500 mb-3">
 							Control whether your profile shows up in the public CodePals directory at <code
@@ -310,7 +311,7 @@ import Footer from '../../components/Footer.astro';
 								<span class="text-slate-700">Public - Listed in the CodePals directory</span>
 							</label>
 						</div>
-					</div>
+					</fieldset>
 
 					<!--
 						Per-field audience. Defaults are public for every field; this
