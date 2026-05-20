@@ -36,12 +36,29 @@ import Footer from '../components/Footer.astro';
 		<main id="directory-main" class="hidden mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
 			<div class="mb-8">
 				<h1 class="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">Find CodePals</h1>
-				<p class="text-slate-600">
+				<!--
+					Two state-aware banners; both start `hidden` to avoid the
+					"wrong message flashes briefly" pattern (same lesson as
+					Header.astro's skeleton). The init() script picks one
+					once it has resolved (a) the directory data and (b) the
+					caller's principal. If the directory is empty the
+					empty-state card replaces both, so neither banner is
+					shown — the empty-state copy already covers the call to
+					action.
+				-->
+				<p id="banner-not-listed" class="hidden text-slate-600">
 					Browse public profiles in the CodePals community. Want to be listed?
 					<a href="/profile?edit=true" class="text-primary-500 hover:underline"
 						>Make your profile public</a
 					>
 					in your profile settings.
+				</p>
+				<p id="banner-listed" class="hidden text-slate-600">
+					Browse public profiles in the CodePals community. <span class="font-medium text-slate-700"
+						>You're listed</span
+					> — <a href="/profile?edit=true" class="text-primary-500 hover:underline"
+						>edit your profile</a
+					> to update what others see.
 				</p>
 			</div>
 
@@ -72,10 +89,28 @@ import Footer from '../components/Footer.astro';
 
 		<script>
 			import {
+				getPrincipal,
 				getPublicProfiles,
 				getProfileAvatarUrl,
 				type DirectoryProfile,
 			} from '../services/api';
+
+			/**
+			 * Did the caller find themselves in the directory rows?
+			 *
+			 * The directory query was changed in PR #51 to include the
+			 * caller's own row (self-preview), so we can decide listed-ness
+			 * by simple row match instead of a second API call to
+			 * /api/profile-get. Match is case-insensitive: github stores
+			 * the canonical case but defensive normalisation is cheap and
+			 * insulates against future drift if principal.userDetails ever
+			 * arrives with different casing.
+			 */
+			function isSelfListed(profiles: DirectoryProfile[], githubLogin: string | null): boolean {
+				if (!githubLogin) return false;
+				const needle = githubLogin.toLowerCase();
+				return profiles.some((p) => (p.githubUsername ?? '').toLowerCase() === needle);
+			}
 
 			function availabilityBadge(availability: DirectoryProfile['availability']): {
 				label: string;
@@ -197,17 +232,35 @@ import Footer from '../components/Footer.astro';
 				const main = document.getElementById('directory-main');
 				const grid = document.getElementById('directory-grid');
 				const empty = document.getElementById('empty-state');
+				const bannerListed = document.getElementById('banner-listed');
+				const bannerNotListed = document.getElementById('banner-not-listed');
 
 				try {
-					const profiles = await getPublicProfiles();
+					// Kick off both fetches in parallel — they're independent
+					// and we need the answers from both before deciding which
+					// banner to reveal. getPrincipal() is memoised at module
+					// scope, so this doesn't add a second /.auth/me round
+					// trip if any other component already asked.
+					const [profiles, principal] = await Promise.all([getPublicProfiles(), getPrincipal()]);
 
 					loading?.classList.add('hidden');
 					main?.classList.remove('hidden');
 
 					if (profiles.length === 0) {
+						// Empty state owns the "be the first" copy — both
+						// banners stay hidden so we don't repeat the call to
+						// action.
 						empty?.classList.remove('hidden');
 						return;
 					}
+
+					// Pick the banner that matches the caller's listed-ness.
+					// Defensive: if the principal couldn't be resolved (it's
+					// nullable; shouldn't happen on an authenticated-gated
+					// route but the type allows it), fall back to the
+					// "want to be listed?" copy.
+					const listed = isSelfListed(profiles, principal?.userDetails ?? null);
+					(listed ? bannerListed : bannerNotListed)?.classList.remove('hidden');
 
 					if (grid) {
 						profiles.forEach((p) => grid.appendChild(buildCard(p)));
