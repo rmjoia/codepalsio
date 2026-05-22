@@ -82,16 +82,25 @@ export function trimmedString(value: unknown, max: number): string | undefined {
 }
 
 /**
- * Coerce arbitrary input to an integer in [min, max], or undefined.
+ * Coerce arbitrary input to an integer in [min, max] (inclusive), or
+ * undefined.
  *
  * Used for `yearsOfExperience` and similar scalar fields where:
- *   - the wire value might be a string (form input) or a number (JSON API)
- *   - we want to reject NaN, Infinity, fractional, and out-of-bound values
+ *   - the wire value might be a number (JSON API) or a string
+ *     (HTML form input from `<input type="number">`)
+ *   - we want to reject NaN, Infinity, and out-of-bound values
+ *   - fractional values are floored to the nearest integer (5.7 → 5)
  *   - "empty / invalid" must become `undefined` (not 0) so the stored
  *     document doesn't lie about the user's data
  *
- * Strings are parsed with parseInt(value, 10); pre-existing numbers are
- * floored. The range gate is inclusive on both ends.
+ * Parsing strategy: `Number()` not `parseInt`. `parseInt('5x', 10)`
+ * returns 5 (lenient leading-digit parse), which would let a typo
+ * like "5x" become a stored 5 years of experience. `Number('5x')`
+ * returns NaN, caught by the isFinite gate. The trade-off:
+ * `Number('5e2')` returns 500 (scientific notation) — that's
+ * intentional (matches what HTML `<input type="number">` reports
+ * as `valueAsNumber`); the [min, max] bound below rejects it if
+ * it's out of range.
  */
 export function boundedInteger(value: unknown, min: number, max: number): number | undefined {
 	let n: number;

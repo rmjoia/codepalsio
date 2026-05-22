@@ -989,17 +989,26 @@ import Footer from '../../components/Footer.astro';
 					}
 				});
 
-				// Years of experience: input is type="number" so .value is a
-				// string; coerce to an integer. Empty / NaN / out-of-range
-				// becomes undefined so the backend stores no value rather than
-				// 0 (which would lie about the user's experience). The server
-				// validates the upper bound too; this client-side coerce is a
-				// UX nicety, not a security gate.
+				// Years of experience: <input type="number"> ships a string;
+				// coerce to a bounded integer matching the server-side
+				// boundedInteger semantics in api/src/lib/validation.ts.
+				// Symmetry matters: if the client sends a value the server
+				// will silently drop (e.g. "5e2" parses as 500 via Number;
+				// >60 fails the server bound; "5x" → NaN), the user sees
+				// "save succeeded" but the value isn't stored. Using the
+				// same parsing + bounds here means the wire payload only
+				// ever carries what the server will accept.
+				//
+				// Number() (not parseInt) rejects "5x"/"abc" as NaN —
+				// parseInt would have leniently returned 5. Math.floor
+				// matches the server's behaviour on fractional values
+				// (5.7 → 5). [0, 60] is the same bound.
 				const yearsRaw = yearsEl?.value?.trim() ?? '';
-				const yearsParsed = yearsRaw === '' ? undefined : Number.parseInt(yearsRaw, 10);
+				const yearsNum = yearsRaw === '' ? NaN : Number(yearsRaw);
+				const yearsFloored = Number.isFinite(yearsNum) ? Math.floor(yearsNum) : NaN;
 				const yearsOfExperience =
-					typeof yearsParsed === 'number' && Number.isFinite(yearsParsed) && yearsParsed >= 0
-						? yearsParsed
+					Number.isFinite(yearsFloored) && yearsFloored >= 0 && yearsFloored <= 60
+						? yearsFloored
 						: undefined;
 
 				// URLs: pass through the browser-trimmed value. The server's

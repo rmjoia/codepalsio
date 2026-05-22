@@ -290,6 +290,26 @@ describe('profile/index.astro — per-field visibility UI', () => {
 			expect(source).toMatch(/profile\?\.websiteUrl/);
 		});
 
+		it('parses the years input with Number() (matches server boundedInteger)', () => {
+			// PR #64 Copilot review: client and server must agree on what
+			// is a valid number. parseInt('5x', 10) → 5; Number('5x') → NaN.
+			// If they disagree, the client sends values the server silently
+			// drops (looks like "save succeeded but my data is gone"). Pin
+			// that the client uses Number() — never parseInt — on the years
+			// raw value.
+			expect(source).toMatch(/Number\(yearsRaw\)/);
+			expect(source).not.toMatch(/parseInt\(yearsRaw/);
+		});
+
+		it('applies the same [0, 60] bound client-side that the server enforces', () => {
+			// Symmetry invariant: if the client allows values the server
+			// rejects (or vice versa), the wire payload carries garbage
+			// from the user's POV. Pin both bounds + the floor.
+			expect(source).toMatch(/yearsFloored\s*>=\s*0/);
+			expect(source).toMatch(/yearsFloored\s*<=\s*60/);
+			expect(source).toMatch(/Math\.floor\(yearsNum\)/);
+		});
+
 		it('includes the new fields in the saveProfile payload', () => {
 			// If any of these drop out of the payload object literal, the
 			// stored doc starts losing data on every save — a silent
