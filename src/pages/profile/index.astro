@@ -218,6 +218,24 @@ import Footer from '../../components/Footer.astro';
 						<div id="interests-container" class="flex flex-wrap gap-2 mt-3 min-h-[40px]"></div>
 					</fieldset>
 
+					<fieldset class="border-0 p-0 m-0">
+						<legend class="block text-sm font-semibold text-slate-900 mb-2">
+							Languages I speak
+						</legend>
+						<input
+							type="text"
+							id="languages-input"
+							placeholder="Type a language and press Enter to add (e.g., English, Português)"
+							class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+						/>
+						<p class="mt-1 text-sm text-slate-500">
+							Optional — helps non-English-speaking CodePals find you. Type each language and press
+							<kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">Enter</kbd> or
+							<kbd class="px-2 py-0.5 bg-slate-200 rounded text-xs">comma</kbd> to add it.
+						</p>
+						<div id="languages-container" class="flex flex-wrap gap-2 mt-3 min-h-[40px]"></div>
+					</fieldset>
+
 					<div class="grid md:grid-cols-2 gap-6">
 						<div>
 							<label for="location" class="block text-sm font-semibold text-slate-900 mb-2"
@@ -251,6 +269,74 @@ import Footer from '../../components/Footer.astro';
 							</select>
 						</div>
 					</div>
+
+					<div class="grid md:grid-cols-2 gap-6">
+						<div>
+							<label
+								for="years-of-experience"
+								class="block text-sm font-semibold text-slate-900 mb-2">Years of experience</label
+							>
+							<input
+								type="number"
+								id="years-of-experience"
+								name="yearsOfExperience"
+								min="0"
+								max="60"
+								step="1"
+								placeholder="e.g., 5"
+								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+							/>
+						</div>
+					</div>
+
+					<fieldset class="border-0 p-0 m-0">
+						<legend class="block text-sm font-semibold text-slate-900 mb-2">Links</legend>
+						<p class="text-sm text-slate-500 mb-3">
+							All optional. URLs must start with <code class="text-xs">https://</code> — anything else
+							is rejected by the server and dropped silently.
+						</p>
+						<div class="space-y-3">
+							<div>
+								<label for="githubUrl" class="block text-xs font-medium text-slate-700 mb-1"
+									>GitHub profile URL</label
+								>
+								<input
+									type="url"
+									id="githubUrl"
+									name="githubUrl"
+									placeholder="https://github.com/yourhandle"
+									pattern="https://.*"
+									class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+								/>
+							</div>
+							<div>
+								<label for="linkedinUrl" class="block text-xs font-medium text-slate-700 mb-1"
+									>LinkedIn profile URL</label
+								>
+								<input
+									type="url"
+									id="linkedinUrl"
+									name="linkedinUrl"
+									placeholder="https://linkedin.com/in/yourhandle"
+									pattern="https://.*"
+									class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+								/>
+							</div>
+							<div>
+								<label for="websiteUrl" class="block text-xs font-medium text-slate-700 mb-1"
+									>Personal website</label
+								>
+								<input
+									type="url"
+									id="websiteUrl"
+									name="websiteUrl"
+									placeholder="https://yoursite.dev"
+									pattern="https://.*"
+									class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+								/>
+							</div>
+						</div>
+					</fieldset>
 
 					<fieldset class="border-0 p-0 m-0">
 						<legend class="block text-sm font-semibold text-slate-900 mb-2">Availability</legend>
@@ -406,6 +492,81 @@ import Footer from '../../components/Footer.astro';
 									<option value="private">Only me</option>
 								</select>
 							</div>
+							<div class="flex items-center justify-between gap-3">
+								<label
+									for="field-vis-preferredLanguages"
+									class="text-sm text-slate-700 flex-shrink-0 w-28 sm:w-32">Languages</label
+								>
+								<select
+									id="field-vis-preferredLanguages"
+									data-field="preferredLanguages"
+									class="field-visibility-select flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+								>
+									<option value="public">Public — everyone</option>
+									<option value="authenticated">CodePals only — signed-in</option>
+									<option value="private">Only me</option>
+								</select>
+							</div>
+							<div class="flex items-center justify-between gap-3">
+								<label
+									for="field-vis-yearsOfExperience"
+									class="text-sm text-slate-700 flex-shrink-0 w-28 sm:w-32">Experience</label
+								>
+								<select
+									id="field-vis-yearsOfExperience"
+									data-field="yearsOfExperience"
+									class="field-visibility-select flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+								>
+									<option value="public">Public — everyone</option>
+									<option value="authenticated">CodePals only — signed-in</option>
+									<option value="private">Only me</option>
+								</select>
+							</div>
+							<div class="flex items-center justify-between gap-3">
+								<label
+									for="field-vis-githubUrl"
+									class="text-sm text-slate-700 flex-shrink-0 w-28 sm:w-32">GitHub URL</label
+								>
+								<select
+									id="field-vis-githubUrl"
+									data-field="githubUrl"
+									class="field-visibility-select flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+								>
+									<option value="public">Public — everyone</option>
+									<option value="authenticated">CodePals only — signed-in</option>
+									<option value="private">Only me</option>
+								</select>
+							</div>
+							<div class="flex items-center justify-between gap-3">
+								<label
+									for="field-vis-linkedinUrl"
+									class="text-sm text-slate-700 flex-shrink-0 w-28 sm:w-32">LinkedIn URL</label
+								>
+								<select
+									id="field-vis-linkedinUrl"
+									data-field="linkedinUrl"
+									class="field-visibility-select flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+								>
+									<option value="public">Public — everyone</option>
+									<option value="authenticated">CodePals only — signed-in</option>
+									<option value="private">Only me</option>
+								</select>
+							</div>
+							<div class="flex items-center justify-between gap-3">
+								<label
+									for="field-vis-websiteUrl"
+									class="text-sm text-slate-700 flex-shrink-0 w-28 sm:w-32">Website URL</label
+								>
+								<select
+									id="field-vis-websiteUrl"
+									data-field="websiteUrl"
+									class="field-visibility-select flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+								>
+									<option value="public">Public — everyone</option>
+									<option value="authenticated">CodePals only — signed-in</option>
+									<option value="private">Only me</option>
+								</select>
+							</div>
 						</div>
 					</fieldset>
 
@@ -458,6 +619,7 @@ import Footer from '../../components/Footer.astro';
 			let currentProfile: Profile | null = null;
 			const skills = new Set<string>();
 			const interests = new Set<string>();
+			const languages = new Set<string>();
 
 			function showViewMode() {
 				document.getElementById('edit-mode')?.classList.add('hidden');
@@ -639,22 +801,40 @@ import Footer from '../../components/Footer.astro';
 
 				skills.clear();
 				(profile?.skills || []).forEach((s) => skills.add(s));
-				renderTags('skills-container', skills, 'skill');
+				renderTags('skills-container', skills);
 
 				interests.clear();
 				(profile?.interests || []).forEach((i) => interests.add(i));
-				renderTags('interests-container', interests, 'interest');
+				renderTags('interests-container', interests);
+
+				languages.clear();
+				(profile?.preferredLanguages || []).forEach((l) => languages.add(l));
+				renderTags('languages-container', languages);
+
+				// Optional scalar fields — empty / absent reads as empty input.
+				const yearsEl = document.getElementById('years-of-experience') as HTMLInputElement | null;
+				if (yearsEl) yearsEl.value = profile?.yearsOfExperience?.toString() ?? '';
+				const githubUrlEl = document.getElementById('githubUrl') as HTMLInputElement | null;
+				if (githubUrlEl) githubUrlEl.value = profile?.githubUrl ?? '';
+				const linkedinUrlEl = document.getElementById('linkedinUrl') as HTMLInputElement | null;
+				if (linkedinUrlEl) linkedinUrlEl.value = profile?.linkedinUrl ?? '';
+				const websiteUrlEl = document.getElementById('websiteUrl') as HTMLInputElement | null;
+				if (websiteUrlEl) websiteUrlEl.value = profile?.websiteUrl ?? '';
 			}
 
-			function renderTags(containerId: string, set: Set<string>, type: 'skill' | 'interest') {
+			function renderTags(containerId: string, set: Set<string>) {
 				const container = document.getElementById(containerId);
 				if (!container) return;
 				container.replaceChildren();
-				set.forEach((text) => addTag(text, type, container));
+				set.forEach((text) => addTag(text, set, container));
 			}
 
-			function addTag(text: string, type: 'skill' | 'interest', container: HTMLElement) {
+			function addTag(text: string, set: Set<string>, container: HTMLElement) {
 				// Build via DOM — 'text' is user input, so keep it out of innerHTML.
+				// The chip styling is uniform across every chip input on this page
+				// (skills, interests, languages, …) — passing the Set directly
+				// instead of a 'type' literal keeps the helper generic and lets new
+				// chip inputs slot in without touching this function.
 				const tag = document.createElement('span');
 				tag.className =
 					'inline-flex items-center gap-2 px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm';
@@ -666,8 +846,7 @@ import Footer from '../../components/Footer.astro';
 				btn.setAttribute('aria-label', 'Remove');
 				btn.textContent = '×';
 				btn.addEventListener('click', () => {
-					if (type === 'skill') skills.delete(text);
-					else interests.delete(text);
+					set.delete(text);
 					tag.remove();
 				});
 				tag.appendChild(document.createTextNode(' '));
@@ -729,12 +908,7 @@ import Footer from '../../components/Footer.astro';
 				if (counter) counter.textContent = String(target.value.length);
 			});
 
-			function bindTagInput(
-				inputId: string,
-				containerId: string,
-				set: Set<string>,
-				type: 'skill' | 'interest'
-			) {
+			function bindTagInput(inputId: string, containerId: string, set: Set<string>) {
 				const input = document.getElementById(inputId) as HTMLInputElement | null;
 				const container = document.getElementById(containerId);
 				if (!input || !container) return;
@@ -744,13 +918,14 @@ import Footer from '../../components/Footer.astro';
 					const value = input.value.replace(/,/g, '').trim();
 					if (value && !set.has(value)) {
 						set.add(value);
-						addTag(value, type, container);
+						addTag(value, set, container);
 					}
 					input.value = '';
 				});
 			}
-			bindTagInput('skills-input', 'skills-container', skills, 'skill');
-			bindTagInput('interests-input', 'interests-container', interests, 'interest');
+			bindTagInput('skills-input', 'skills-container', skills);
+			bindTagInput('interests-input', 'interests-container', interests);
+			bindTagInput('languages-input', 'languages-container', languages);
 
 			// Form submission
 			document.getElementById('profile-form')?.addEventListener('submit', async (e) => {
@@ -760,6 +935,10 @@ import Footer from '../../components/Footer.astro';
 				const bioEl = document.getElementById('bio') as HTMLTextAreaElement | null;
 				const locationEl = document.getElementById('location') as HTMLInputElement | null;
 				const timezoneEl = document.getElementById('timezone') as HTMLSelectElement | null;
+				const yearsEl = document.getElementById('years-of-experience') as HTMLInputElement | null;
+				const githubUrlEl = document.getElementById('githubUrl') as HTMLInputElement | null;
+				const linkedinUrlEl = document.getElementById('linkedinUrl') as HTMLInputElement | null;
+				const websiteUrlEl = document.getElementById('websiteUrl') as HTMLInputElement | null;
 				const availabilityEl = document.querySelector<HTMLInputElement>(
 					'input[name="availability"]:checked'
 				);
@@ -810,6 +989,33 @@ import Footer from '../../components/Footer.astro';
 					}
 				});
 
+				// Years of experience: input is type="number" so .value is a
+				// string; coerce to an integer. Empty / NaN / out-of-range
+				// becomes undefined so the backend stores no value rather than
+				// 0 (which would lie about the user's experience). The server
+				// validates the upper bound too; this client-side coerce is a
+				// UX nicety, not a security gate.
+				const yearsRaw = yearsEl?.value?.trim() ?? '';
+				const yearsParsed = yearsRaw === '' ? undefined : Number.parseInt(yearsRaw, 10);
+				const yearsOfExperience =
+					typeof yearsParsed === 'number' && Number.isFinite(yearsParsed) && yearsParsed >= 0
+						? yearsParsed
+						: undefined;
+
+				// URLs: pass through the browser-trimmed value. The server's
+				// sanitizedUrl() enforces https:// — invalid inputs are dropped
+				// silently there, not here. We pass empty strings as undefined
+				// so the request body doesn't carry noise.
+				const trimmedUrl = (v: string | undefined): string | undefined => {
+					const t = v?.trim();
+					return t ? t : undefined;
+				};
+
+				// Spoken languages — same chip-set pattern as skills/interests,
+				// converted to an Array for the wire. Empty list elides the
+				// field entirely (smaller request body for users who don't fill it).
+				const languagesArray = Array.from(languages);
+
 				try {
 					const saved = await saveProfile({
 						displayName: displayNameEl?.value || '',
@@ -821,6 +1027,11 @@ import Footer from '../../components/Footer.astro';
 						availability: (availabilityEl?.value as Profile['availability']) || 'active',
 						profileVisibility: (visibilityEl?.value as Profile['profileVisibility']) || 'private',
 						fieldVisibility,
+						yearsOfExperience,
+						githubUrl: trimmedUrl(githubUrlEl?.value),
+						linkedinUrl: trimmedUrl(linkedinUrlEl?.value),
+						websiteUrl: trimmedUrl(websiteUrlEl?.value),
+						preferredLanguages: languagesArray.length > 0 ? languagesArray : undefined,
 					});
 					currentProfile = saved;
 					populateViewMode(currentProfile);

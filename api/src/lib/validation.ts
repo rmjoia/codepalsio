@@ -82,6 +82,39 @@ export function trimmedString(value: unknown, max: number): string | undefined {
 }
 
 /**
+ * Coerce arbitrary input to an integer in [min, max], or undefined.
+ *
+ * Used for `yearsOfExperience` and similar scalar fields where:
+ *   - the wire value might be a string (form input) or a number (JSON API)
+ *   - we want to reject NaN, Infinity, fractional, and out-of-bound values
+ *   - "empty / invalid" must become `undefined` (not 0) so the stored
+ *     document doesn't lie about the user's data
+ *
+ * Strings are parsed with parseInt(value, 10); pre-existing numbers are
+ * floored. The range gate is inclusive on both ends.
+ */
+export function boundedInteger(value: unknown, min: number, max: number): number | undefined {
+	let n: number;
+	if (typeof value === 'number') {
+		n = value;
+	} else if (typeof value === 'string') {
+		const trimmed = value.trim();
+		if (trimmed === '') return undefined;
+		// Use Number() not parseInt — parseInt('5x', 10) returns 5 (it
+		// parses leading digits and silently drops the rest), which would
+		// let "5x" become a stored 5 years of experience. Number('5x')
+		// returns NaN, which the isFinite check below rejects.
+		n = Number(trimmed);
+	} else {
+		return undefined;
+	}
+	if (!Number.isFinite(n)) return undefined;
+	const int = Math.floor(n);
+	if (int < min || int > max) return undefined;
+	return int;
+}
+
+/**
  * Only allow https:// URLs on profile link fields. Blocks `javascript:`,
  * `data:`, `vbscript:` etc. that would turn into stored XSS the moment
  * a directory page renders `<a href={profile.githubUrl}>`.

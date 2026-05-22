@@ -28,7 +28,23 @@ import { resolve } from 'node:path';
 const sourcePath = resolve(__dirname, 'pages/profile/index.astro');
 const source = readFileSync(sourcePath, 'utf8');
 
-const HIDEABLE_FIELDS_WITH_UI = ['bio', 'skills', 'interests', 'location', 'timezone'] as const;
+// Every hideable field that has a corresponding input control on the
+// edit form. The companion HIDEABLE_FIELDS constant in src/services/api.ts
+// is the full set the backend supports; this is the subset wired up in
+// the UI today. PR added: preferredLanguages, yearsOfExperience,
+// githubUrl, linkedinUrl, websiteUrl.
+const HIDEABLE_FIELDS_WITH_UI = [
+	'bio',
+	'skills',
+	'interests',
+	'location',
+	'timezone',
+	'preferredLanguages',
+	'yearsOfExperience',
+	'githubUrl',
+	'linkedinUrl',
+	'websiteUrl',
+] as const;
 const EXPECTED_LEVELS = ['public', 'authenticated', 'private'] as const;
 
 describe('profile/index.astro — per-field visibility UI', () => {
@@ -200,6 +216,92 @@ describe('profile/index.astro — per-field visibility UI', () => {
 				offenders.push(match[0].replace(/\s+/g, ' ').slice(0, 100));
 			}
 			expect(offenders, 'unbound <label> elements act as broken section headers').toEqual([]);
+		});
+	});
+
+	describe('input controls for the previously-unsurfaced hideable fields', () => {
+		// The backend supported yearsOfExperience / preferredLanguages /
+		// githubUrl / linkedinUrl / websiteUrl since #59 but the edit form
+		// had no inputs for them. This PR adds the inputs; tests pin that
+		// they exist with the right shape and that the save payload sends
+		// them.
+
+		it('declares a numeric input for years of experience', () => {
+			// type="number" gives the browser numeric-keypad on mobile +
+			// step-up/down arrows on desktop. min/max bound the value
+			// (server validates too — defense in depth). Attribute-order
+			// agnostic: Prettier may emit type and id in either order.
+			const tag = source.match(/<input[^>]*?id=["']years-of-experience["'][^>]*?>/);
+			expect(tag, '<input id="years-of-experience"> must exist').not.toBeNull();
+			expect(tag![0]).toMatch(/type=["']number["']/);
+		});
+
+		it('bounds the years input between 0 and 60', () => {
+			// 60 is a sanity ceiling (60+ years professional experience is
+			// almost certainly an input error). Pin both bounds so a future
+			// "remove the max" regression fails this test.
+			const tag = source.match(/<input[^>]*?id=["']years-of-experience["'][^>]*?>/);
+			expect(tag).not.toBeNull();
+			expect(tag![0]).toMatch(/min=["']0["']/);
+			expect(tag![0]).toMatch(/max=["']60["']/);
+		});
+
+		it('declares a chip-input section for spoken languages', () => {
+			// Mirrors the skills/interests pattern: <input id="languages-input">
+			// for the keypress entry + <div id="languages-container"> for
+			// the rendered chips. The bindTagInput helper (now generic)
+			// drives both ends.
+			expect(source).toMatch(/id=["']languages-input["']/);
+			expect(source).toMatch(/id=["']languages-container["']/);
+		});
+
+		it('reuses the generic bindTagInput helper for languages', () => {
+			// Anti-duplication invariant: if a future change copies-pastes
+			// a bespoke event handler for languages instead of reusing
+			// bindTagInput, this test fails — keeping the chip behavior
+			// in one place.
+			expect(source).toMatch(/bindTagInput\(\s*['"]languages-input['"]\s*,/);
+		});
+
+		it.each([
+			['githubUrl', 'GitHub'],
+			['linkedinUrl', 'LinkedIn'],
+			['websiteUrl', 'Website'],
+		])('declares a type="url" input for #%s with https-only pattern', (id) => {
+			// type="url" gives the browser URL-keyboard on mobile + format
+			// hint. The pattern="https://.*" is a soft hint (server's
+			// sanitizedUrl is the hard gate; rejecting non-https there is
+			// the XSS protection — see lib/validation.ts).
+			const tag = source.match(new RegExp(`<input[^>]*?id=["']${id}["'][^>]*?>`));
+			expect(tag, `<input id="${id}"> must exist`).not.toBeNull();
+			expect(tag![0]).toMatch(/type=["']url["']/);
+			expect(tag![0]).toMatch(/pattern=["']https:\/\/\.\*["']/);
+		});
+
+		it('pre-populates each new field from the loaded profile', () => {
+			// Without these, a returning user opening the edit form sees
+			// blank inputs even when their stored profile has the data —
+			// then a "save" would wipe the stored values.
+			expect(source).toMatch(/yearsEl.*=.*document\.getElementById\(['"]years-of-experience['"]\)/);
+			expect(source).toMatch(/profile\?\.yearsOfExperience/);
+			expect(source).toMatch(/profile\?\.preferredLanguages/);
+			expect(source).toMatch(/profile\?\.githubUrl/);
+			expect(source).toMatch(/profile\?\.linkedinUrl/);
+			expect(source).toMatch(/profile\?\.websiteUrl/);
+		});
+
+		it('includes the new fields in the saveProfile payload', () => {
+			// If any of these drop out of the payload object literal, the
+			// stored doc starts losing data on every save — a silent
+			// regression that costs the user their input.
+			const saveBlock = source.match(/saveProfile\s*\(\s*\{([\s\S]*?)\}\s*\)/);
+			expect(saveBlock, 'saveProfile call must exist').not.toBeNull();
+			const body = saveBlock![1];
+			expect(body).toMatch(/yearsOfExperience/);
+			expect(body).toMatch(/preferredLanguages/);
+			expect(body).toMatch(/githubUrl/);
+			expect(body).toMatch(/linkedinUrl/);
+			expect(body).toMatch(/websiteUrl/);
 		});
 	});
 

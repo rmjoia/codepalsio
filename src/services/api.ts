@@ -115,6 +115,10 @@ export interface ProfileInput {
 	githubUrl?: string;
 	linkedinUrl?: string;
 	websiteUrl?: string;
+	/** Spoken languages, free-form (e.g. "English", "Português"). */
+	preferredLanguages?: string[];
+	/** Integer years of professional experience. Server enforces 0–60 bounds. */
+	yearsOfExperience?: number;
 }
 
 let principalPromise: Promise<ClientPrincipal | null> | null = null;
