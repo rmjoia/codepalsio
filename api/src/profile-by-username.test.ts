@@ -31,6 +31,7 @@ import {
 	toPublicProfile,
 	PROFILE_BY_USERNAME_CI_QUERY,
 } from './profile-by-username';
+import { __resetRateLimitForTests } from './lib/rate-limit';
 import type { Profile } from './lib/types';
 
 function makeRequest(query: Record<string, string>): HttpRequest {
@@ -122,6 +123,10 @@ describe('GET /api/profile-by-username', () => {
 		mocks.getCosmosConfigMock.mockReturnValue({ connectionString: 'cs', database: 'db' });
 		mocks.getClientPrincipalMock.mockReset();
 		mocks.getClientPrincipalMock.mockReturnValue(authedPrincipal);
+		// Rate limiter is module-scope state — reset between tests so the
+		// burst-exhaustion case in one test doesn't carry over and 429
+		// the first request in the next.
+		__resetRateLimitForTests();
 	});
 
 	describe('username validation', () => {
@@ -359,6 +364,98 @@ describe('GET /api/profile-by-username', () => {
 			mocks.fetchAllMock.mockResolvedValue({ resources: [legacyDoc] });
 			const res = await profileByUsernameHandler(makeRequest({ username: 'alice' }), fakeContext);
 			expect(res.status).toBe(403);
+		});
+	});
+
+	describe('rate limiting (per-principal enumeration cap)', () => {
+		// These tests exercise the integration between the handler and
+		// lib/rate-limit. The bucket math itself is unit-tested in
+		// lib/rate-limit.test.ts — these tests pin the handler's
+		// behaviour: rejects with 429 + Retry-After AFTER auth but
+		// BEFORE Cosmos, isolates per principal.
+		//
+		// The default config (60/burst, 1/sec refill) is used here; we
+		// drain by making `capacity` calls then assert the (capacity+1)th
+		// fails. The DEFAULT capacity is large enough that draining in a
+		// loop is fast but still meaningful.
+
+		const DEFAULT_CAPACITY = 60;
+
+		it('returns 429 with Retry-After when the principal exhausts their bucket', async () => {
+			mocks.fetchAllMock.mockResolvedValue({ resources: [] });
+			// Drain the bucket — every request consumes one token.
+			for (let i = 0; i < DEFAULT_CAPACITY; i++) {
+				await profileByUsernameHandler(makeRequest({ username: 'alice' }), fakeContext);
+			}
+			const denied = await profileByUsernameHandler(
+				makeRequest({ username: 'alice' }),
+				fakeContext
+			);
+			expect(denied.status).toBe(429);
+			expect(denied.headers).toMatchObject({ 'Retry-After': expect.any(String) });
+			expect(denied.jsonBody).toMatchObject({
+				error: 'Too many requests',
+				retryAfterSeconds: expect.any(Number),
+			});
+		});
+
+		it('rate-limits BEFORE touching Cosmos (cheap 429 production)', async () => {
+			// Cost-control invariant: a denied caller must NOT cause a
+			// Cosmos roundtrip. Without this, a scraper could amplify
+			// their own attack into RU spend on our account.
+			mocks.fetchAllMock.mockResolvedValue({ resources: [] });
+			for (let i = 0; i < DEFAULT_CAPACITY; i++) {
+				await profileByUsernameHandler(makeRequest({ username: 'alice' }), fakeContext);
+			}
+			const callsBeforeDenied = mocks.queryMock.mock.calls.length;
+			await profileByUsernameHandler(makeRequest({ username: 'alice' }), fakeContext);
+			expect(mocks.queryMock.mock.calls.length).toBe(callsBeforeDenied);
+		});
+
+		it('rate-limits AFTER the auth check (401 takes priority over 429)', async () => {
+			// Defensive: anonymous callers shouldn't consume bucket
+			// budget. The 401 short-circuit is what makes per-principal
+			// keying meaningful — if we keyed on IP and counted unauthed
+			// hits, our auth-rejected requests would burn the budget for
+			// every signed-in user behind that NAT.
+			mocks.getClientPrincipalMock.mockReturnValueOnce(null);
+			const res = await profileByUsernameHandler(
+				makeRequest({ username: 'alice' }),
+				fakeContext
+			);
+			expect(res.status).toBe(401);
+		});
+
+		it('isolates buckets per principal (alice exhausting does not throttle bob)', async () => {
+			mocks.fetchAllMock.mockResolvedValue({ resources: [] });
+			// alice drains and gets denied
+			for (let i = 0; i < DEFAULT_CAPACITY; i++) {
+				mocks.getClientPrincipalMock.mockReturnValueOnce({
+					...authedPrincipal,
+					userId: 'alice-id',
+				});
+				await profileByUsernameHandler(makeRequest({ username: 'x' }), fakeContext);
+			}
+			mocks.getClientPrincipalMock.mockReturnValueOnce({
+				...authedPrincipal,
+				userId: 'alice-id',
+			});
+			const aliceDenied = await profileByUsernameHandler(
+				makeRequest({ username: 'x' }),
+				fakeContext
+			);
+			expect(aliceDenied.status).toBe(429);
+
+			// bob's first request still succeeds
+			mocks.getClientPrincipalMock.mockReturnValueOnce({
+				...authedPrincipal,
+				userId: 'bob-id',
+			});
+			const bobAllowed = await profileByUsernameHandler(
+				makeRequest({ username: 'x' }),
+				fakeContext
+			);
+			expect(bobAllowed.status).not.toBe(429);
 		});
 	});
 });

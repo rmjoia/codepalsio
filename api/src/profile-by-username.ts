@@ -3,6 +3,7 @@ import { getClientPrincipal } from './lib/principal';
 import { getContainer, getCosmosConfig } from './lib/cosmos';
 import { PROFILE_FIELDS } from './lib/profile-repo';
 import { applyFieldVisibility } from './lib/visibility';
+import { checkRateLimit } from './lib/rate-limit';
 import type { Profile } from './lib/types';
 
 /**
@@ -116,6 +117,24 @@ export async function profileByUsernameHandler(
 	const principal = getClientPrincipal(request);
 	if (!principal) {
 		return { status: 401, jsonBody: { error: 'Not authenticated' } };
+	}
+
+	// Per-principal rate limit, applied AFTER auth so the bucket key is
+	// a real `principal.userId`, and BEFORE input parsing / Cosmos so a
+	// 429 response stays cheap to produce. This endpoint is the primary
+	// enumeration vector on the platform — capping the rate at which a
+	// signed-in attacker can sample it is the OWASP A04/A01 mitigation.
+	// See api/src/lib/rate-limit.ts for the threat model + scope notes.
+	const rl = checkRateLimit(principal.userId);
+	if (!rl.allowed) {
+		return {
+			status: 429,
+			headers: { 'Retry-After': String(rl.retryAfterSeconds) },
+			jsonBody: {
+				error: 'Too many requests',
+				retryAfterSeconds: rl.retryAfterSeconds,
+			},
+		};
 	}
 
 	const username = request.query.get('username')?.trim();
