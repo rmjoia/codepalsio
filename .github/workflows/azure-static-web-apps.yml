@@ -101,7 +101,12 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Browser E2E (Playwright, hermetic)
-        run: npm run test:e2e:browser
+        # Call playwright directly — the build already ran in the
+        # "Build frontend" step above, so we skip the build that
+        # `npm run test:e2e:browser` does for local-DX convenience
+        # (that script builds first so a fresh local checkout doesn't
+        # ENOENT on dist/).
+        run: npx playwright test
 
       - name: Install API deps
         working-directory: api

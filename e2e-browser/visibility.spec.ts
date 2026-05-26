@@ -29,10 +29,22 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  *     username, exactly as it would behind the real rewrite.
  */
 
-const profileDetailHtml = readFileSync(
-	resolve(__dirname, '../dist/find/profile/index.html'),
-	'utf8'
-);
+const profileDetailHtmlPath = resolve(__dirname, '../dist/find/profile/index.html');
+let profileDetailHtml: string;
+try {
+	profileDetailHtml = readFileSync(profileDetailHtmlPath, 'utf8');
+} catch (err) {
+	// Actionable failure instead of a raw ENOENT during test discovery:
+	// this suite runs against the production build, so dist/ must exist.
+	// `npm run test:e2e:browser` builds first; running `playwright test`
+	// directly on a fresh/cleaned checkout is the path that lands here.
+	throw new Error(
+		`Could not read ${profileDetailHtmlPath}.\n` +
+			`The browser E2E suite runs against the production build — run \`npm run build\` first ` +
+			`(or use \`npm run test:e2e:browser\`, which builds for you).\n` +
+			`Underlying error: ${err instanceof Error ? err.message : String(err)}`
+	);
+}
 
 const VIEWER = {
 	clientPrincipal: {
@@ -58,11 +70,13 @@ async function mockAuth(page: Page, principal: unknown = VIEWER): Promise<void> 
  */
 async function serveDetailPageAtAnyUsername(page: Page): Promise<void> {
 	await page.route('**/find/*', (route) => {
+		// Return the promise so Playwright awaits the route resolution —
+		// a fire-and-forget handler can resolve the request after the
+		// handler returns, which is a known flakiness source.
 		if (route.request().resourceType() === 'document') {
-			route.fulfill({ contentType: 'text/html', body: profileDetailHtml });
-		} else {
-			route.continue();
+			return route.fulfill({ contentType: 'text/html', body: profileDetailHtml });
 		}
+		return route.continue();
 	});
 }
 
