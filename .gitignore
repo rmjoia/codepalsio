@@ -22,3 +22,9 @@ yarn-error.log*
 
 # Build
 .cache/
+
+# Playwright (browser E2E)
+test-results/
+playwright-report/
+blob-report/
+.playwright/
