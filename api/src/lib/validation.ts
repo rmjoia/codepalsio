@@ -82,6 +82,48 @@ export function trimmedString(value: unknown, max: number): string | undefined {
 }
 
 /**
+ * Coerce arbitrary input to an integer in [min, max] (inclusive), or
+ * undefined.
+ *
+ * Used for `yearsOfExperience` and similar scalar fields where:
+ *   - the wire value might be a number (JSON API) or a string
+ *     (HTML form input from `<input type="number">`)
+ *   - we want to reject NaN, Infinity, and out-of-bound values
+ *   - fractional values are floored to the nearest integer (5.7 → 5)
+ *   - "empty / invalid" must become `undefined` (not 0) so the stored
+ *     document doesn't lie about the user's data
+ *
+ * Parsing strategy: `Number()` not `parseInt`. `parseInt('5x', 10)`
+ * returns 5 (lenient leading-digit parse), which would let a typo
+ * like "5x" become a stored 5 years of experience. `Number('5x')`
+ * returns NaN, caught by the isFinite gate. The trade-off:
+ * `Number('5e2')` returns 500 (scientific notation) — that's
+ * intentional (matches what HTML `<input type="number">` reports
+ * as `valueAsNumber`); the [min, max] bound below rejects it if
+ * it's out of range.
+ */
+export function boundedInteger(value: unknown, min: number, max: number): number | undefined {
+	let n: number;
+	if (typeof value === 'number') {
+		n = value;
+	} else if (typeof value === 'string') {
+		const trimmed = value.trim();
+		if (trimmed === '') return undefined;
+		// Use Number() not parseInt — parseInt('5x', 10) returns 5 (it
+		// parses leading digits and silently drops the rest), which would
+		// let "5x" become a stored 5 years of experience. Number('5x')
+		// returns NaN, which the isFinite check below rejects.
+		n = Number(trimmed);
+	} else {
+		return undefined;
+	}
+	if (!Number.isFinite(n)) return undefined;
+	const int = Math.floor(n);
+	if (int < min || int > max) return undefined;
+	return int;
+}
+
+/**
  * Only allow https:// URLs on profile link fields. Blocks `javascript:`,
  * `data:`, `vbscript:` etc. that would turn into stored XSS the moment
  * a directory page renders `<a href={profile.githubUrl}>`.

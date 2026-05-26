@@ -11,6 +11,7 @@ import { findProfileWithAutoHeal } from './lib/profile-repo';
 import { createUserRepository } from './lib/users';
 import {
 	LIMITS,
+	boundedInteger,
 	isAvailability,
 	isProfileVisibility,
 	normalizeFieldVisibility,
@@ -120,6 +121,23 @@ export async function profileSaveHandler(
 			githubUrl: sanitizedUrl(body.githubUrl, LIMITS.url),
 			linkedinUrl: sanitizedUrl(body.linkedinUrl, LIMITS.url),
 			websiteUrl: sanitizedUrl(body.websiteUrl, LIMITS.url),
+			// Spoken languages — reuses the chip-list normaliser (same caps
+			// as skills/interests). Empty list elides the field so the
+			// stored doc doesn't carry noise.
+			preferredLanguages: (() => {
+				const langs = normalizeStringList(
+					body.preferredLanguages,
+					LIMITS.tagItem,
+					LIMITS.tagCount
+				);
+				return langs.length > 0 ? langs : undefined;
+			})(),
+			// Years of experience — accepts a number OR a numeric string
+			// (the edit form's <input type="number"> ships a string value).
+			// Garbage / out-of-range becomes undefined; 60 is the upper
+			// bound (a sanity ceiling, not a competence judgement — beyond
+			// 60 the value is almost certainly an input error).
+			yearsOfExperience: boundedInteger(body.yearsOfExperience, 0, 60),
 			updatedAt: new Date().toISOString(),
 		};
 

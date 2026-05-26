@@ -4,6 +4,7 @@ import {
 	normalizeFieldVisibility,
 	isAvailability,
 	isProfileVisibility,
+	boundedInteger,
 } from './validation';
 
 describe('isFieldVisibility', () => {
@@ -126,6 +127,76 @@ describe('normalizeFieldVisibility', () => {
 		const snapshot = JSON.parse(JSON.stringify(input));
 		normalizeFieldVisibility(input);
 		expect(input).toEqual(snapshot);
+	});
+});
+
+describe('boundedInteger', () => {
+	// Used for yearsOfExperience and similar scalar fields. Returns
+	// undefined for anything outside the expected shape — the stored
+	// doc must not lie about the user's data (e.g. coercing "abc" to
+	// 0 would tell the world the user has zero years of experience).
+
+	it.each([
+		[0, 0],
+		[1, 1],
+		[5, 5],
+		[60, 60],
+	])('accepts in-range integer %j', (input, expected) => {
+		expect(boundedInteger(input, 0, 60)).toBe(expected);
+	});
+
+	it('floors fractional numbers (5.7 → 5)', () => {
+		expect(boundedInteger(5.7, 0, 60)).toBe(5);
+	});
+
+	it.each([
+		[-1, 'below min'],
+		[61, 'above max'],
+		[100, 'way above max'],
+		[Number.MAX_SAFE_INTEGER, 'overflow attempt'],
+	])('rejects %j (%s) with undefined', (input) => {
+		expect(boundedInteger(input, 0, 60)).toBeUndefined();
+	});
+
+	it.each([
+		[NaN, 'NaN'],
+		[Infinity, 'Infinity'],
+		[-Infinity, '-Infinity'],
+	])('rejects %s with undefined', (input) => {
+		expect(boundedInteger(input, 0, 60)).toBeUndefined();
+	});
+
+	it('parses numeric strings (form input ships strings, not numbers)', () => {
+		expect(boundedInteger('5', 0, 60)).toBe(5);
+		expect(boundedInteger('  42  ', 0, 60)).toBe(42); // trims
+	});
+
+	it('returns undefined for empty / whitespace-only strings', () => {
+		expect(boundedInteger('', 0, 60)).toBeUndefined();
+		expect(boundedInteger('   ', 0, 60)).toBeUndefined();
+	});
+
+	it.each(['five', 'abc', '5x', 'NaN', 'Infinity'])(
+		'returns undefined for non-numeric string %j',
+		(input) => {
+			expect(boundedInteger(input, 0, 60)).toBeUndefined();
+		}
+	);
+
+	it.each([
+		[null, 'null'],
+		[undefined, 'undefined'],
+		[true, 'boolean'],
+		[{}, 'object'],
+		[[], 'array'],
+	])('rejects non-number/non-string input (%s) with undefined', (input) => {
+		expect(boundedInteger(input, 0, 60)).toBeUndefined();
+	});
+
+	it('respects custom min/max bounds', () => {
+		expect(boundedInteger(5, 10, 20)).toBeUndefined(); // below
+		expect(boundedInteger(15, 10, 20)).toBe(15); // in
+		expect(boundedInteger(25, 10, 20)).toBeUndefined(); // above
 	});
 });
 

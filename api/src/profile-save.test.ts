@@ -230,3 +230,124 @@ describe('POST /api/profile-save — fieldVisibility plumbing', () => {
 		expect(mocks.findProfileWithAutoHealMock).not.toHaveBeenCalled();
 	});
 });
+
+describe('POST /api/profile-save — yearsOfExperience plumbing', () => {
+	beforeEach(() => {
+		mocks.upsertMock.mockReset();
+		mocks.upsertMock.mockResolvedValue({});
+		mocks.getContainerMock.mockReset();
+		mocks.getContainerMock.mockReturnValue({ items: { upsert: mocks.upsertMock } });
+		mocks.getCosmosConfigMock.mockReset();
+		mocks.getCosmosConfigMock.mockReturnValue({ connectionString: 'cs', database: 'db' });
+		mocks.getClientPrincipalMock.mockReset();
+		mocks.getClientPrincipalMock.mockReturnValue(authedPrincipal);
+		mocks.findProfileWithAutoHealMock.mockReset();
+		mocks.findProfileWithAutoHealMock.mockResolvedValue({ profile: null, healed: false });
+		mocks.createUserRepositoryMock.mockReset();
+		mocks.createUserRepositoryMock.mockReturnValue({});
+	});
+
+	function getUpsertedProfile(): Profile {
+		expect(mocks.upsertMock).toHaveBeenCalledTimes(1);
+		return mocks.upsertMock.mock.calls[0][0] as Profile;
+	}
+
+	it('persists a valid integer years value', async () => {
+		await profileSaveHandler(makeRequest(validBody({ yearsOfExperience: 5 })), fakeContext);
+		expect(getUpsertedProfile().yearsOfExperience).toBe(5);
+	});
+
+	it('parses numeric strings (the edit form ships a string from <input type="number">)', async () => {
+		await profileSaveHandler(makeRequest(validBody({ yearsOfExperience: '12' })), fakeContext);
+		expect(getUpsertedProfile().yearsOfExperience).toBe(12);
+	});
+
+	it('stores undefined for an empty string (legitimate "I prefer not to say")', async () => {
+		await profileSaveHandler(makeRequest(validBody({ yearsOfExperience: '' })), fakeContext);
+		expect(getUpsertedProfile().yearsOfExperience).toBeUndefined();
+	});
+
+	it.each([-1, 61, 1000, 'abc', null, true, NaN])(
+		'drops out-of-range / non-numeric input %j to undefined (no false zero)',
+		async (input) => {
+			mocks.upsertMock.mockClear();
+			await profileSaveHandler(
+				makeRequest(validBody({ yearsOfExperience: input })),
+				fakeContext
+			);
+			const saved = mocks.upsertMock.mock.calls[0][0] as Profile;
+			expect(saved.yearsOfExperience, `input ${JSON.stringify(input)}`).toBeUndefined();
+		}
+	);
+});
+
+describe('POST /api/profile-save — preferredLanguages plumbing', () => {
+	beforeEach(() => {
+		mocks.upsertMock.mockReset();
+		mocks.upsertMock.mockResolvedValue({});
+		mocks.getContainerMock.mockReset();
+		mocks.getContainerMock.mockReturnValue({ items: { upsert: mocks.upsertMock } });
+		mocks.getCosmosConfigMock.mockReset();
+		mocks.getCosmosConfigMock.mockReturnValue({ connectionString: 'cs', database: 'db' });
+		mocks.getClientPrincipalMock.mockReset();
+		mocks.getClientPrincipalMock.mockReturnValue(authedPrincipal);
+		mocks.findProfileWithAutoHealMock.mockReset();
+		mocks.findProfileWithAutoHealMock.mockResolvedValue({ profile: null, healed: false });
+		mocks.createUserRepositoryMock.mockReset();
+		mocks.createUserRepositoryMock.mockReturnValue({});
+	});
+
+	function getUpsertedProfile(): Profile {
+		expect(mocks.upsertMock).toHaveBeenCalledTimes(1);
+		return mocks.upsertMock.mock.calls[0][0] as Profile;
+	}
+
+	it('persists a valid string array', async () => {
+		await profileSaveHandler(
+			makeRequest(validBody({ preferredLanguages: ['English', 'Português'] })),
+			fakeContext
+		);
+		expect(getUpsertedProfile().preferredLanguages).toEqual(['English', 'Português']);
+	});
+
+	it('trims per-item whitespace and drops empties', async () => {
+		await profileSaveHandler(
+			makeRequest(validBody({ preferredLanguages: ['  English  ', '', '  ', 'Spanish'] })),
+			fakeContext
+		);
+		expect(getUpsertedProfile().preferredLanguages).toEqual(['English', 'Spanish']);
+	});
+
+	it('stores undefined (not []) when input is missing or yields zero entries', async () => {
+		// Missing field
+		mocks.upsertMock.mockClear();
+		await profileSaveHandler(makeRequest(validBody()), fakeContext);
+		expect(getUpsertedProfile().preferredLanguages).toBeUndefined();
+
+		// Empty array
+		mocks.upsertMock.mockClear();
+		await profileSaveHandler(
+			makeRequest(validBody({ preferredLanguages: [] })),
+			fakeContext
+		);
+		expect(getUpsertedProfile().preferredLanguages).toBeUndefined();
+
+		// All-whitespace entries that normalise away
+		mocks.upsertMock.mockClear();
+		await profileSaveHandler(
+			makeRequest(validBody({ preferredLanguages: ['', '   '] })),
+			fakeContext
+		);
+		expect(getUpsertedProfile().preferredLanguages).toBeUndefined();
+	});
+
+	it('treats non-array input as zero entries (defensive)', async () => {
+		// Hand-crafted POST sending a string instead of an array — normaliser
+		// returns [], which we then elide to undefined.
+		await profileSaveHandler(
+			makeRequest(validBody({ preferredLanguages: 'English' })),
+			fakeContext
+		);
+		expect(getUpsertedProfile().preferredLanguages).toBeUndefined();
+	});
+});
