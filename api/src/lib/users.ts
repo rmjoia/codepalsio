@@ -20,6 +20,20 @@ export interface UserRecord {
 	/** id of the granter (their UserRecord.id), or 'bootstrap' for env-var seed */
 	grantedBy?: string;
 	grantedAt?: string;
+	/**
+	 * ISO 8601 timestamp of the user's most recent authenticated API
+	 * interaction (spec 006, online presence). Updated by touchLastSeen
+	 * with ≤1-write-per-minute coalescing. Missing = never seen = offline.
+	 * NEVER leaves the server as a raw value — only the derived `isOnline`
+	 * boolean (via derivePresence) is exposed. See lib/presence.ts.
+	 */
+	lastSeenAt?: string;
+	/**
+	 * Presence opt-out (spec 006 US3). When `false`, the user reports
+	 * offline regardless of `lastSeenAt`. Default (undefined) is treated
+	 * as visible — presence is on unless explicitly disabled.
+	 */
+	presenceVisible?: boolean;
 	updatedAt: string;
 }
 
