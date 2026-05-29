@@ -29,14 +29,17 @@ name: CI/CD Pipeline
 # GitHub Environment with required reviewers, using a separate
 # `AZURE_STATIC_WEB_APPS_PROD_API_TOKEN` secret).
 #
-# Quality gates run in `validate`:
+# Quality gates run in `validate` (CI). dev_deploy needs: validate, so
+# a failure in ANY gate below blocks the deploy (CD). Mark 'Validate'
+# a required status check on main so the same gate also blocks merge.
 #   - prettier --check (frontend src/**)
 #   - eslint .
-#   - npm audit --omit=dev --audit-level=high (frontend prod deps)
-#   - npm audit --audit-level=moderate (api, all deps)
-#   - frontend unit + SWA-config-invariant tests (vitest)
-#   - api unit tests (vitest)
+#   - npm audit --omit=dev --audit-level=high (frontend prod deps)   ← dependency/security
+#   - npm audit --audit-level=moderate (api, all deps)               ← dependency/security
+#   - frontend unit + SWA-config-invariant tests (vitest)            ← unit
+#   - api unit tests (vitest)                                        ← unit
 #   - frontend build (astro)
+#   - browser E2E (Playwright, hermetic — mocked API)                ← e2e
 #   - api build (tsc)
 
 on:
@@ -87,6 +90,23 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+
+      # Hermetic browser E2E (Playwright). Runs against the static build
+      # via `astro preview`, mocking /api/* + /.auth/me — no deploy, no
+      # Cosmos, no real OAuth. Gates the deploy (dev_deploy needs:
+      # validate), so a broken visibility/auth render blocks CD. Browser
+      # binary is installed with --with-deps for the CI runner's missing
+      # system libs.
+      - name: Install Playwright browser (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser E2E (Playwright, hermetic)
+        # Call playwright directly — the build already ran in the
+        # "Build frontend" step above, so we skip the build that
+        # `npm run test:e2e:browser` does for local-DX convenience
+        # (that script builds first so a fresh local checkout doesn't
+        # ENOENT on dist/).
+        run: npx playwright test
 
       - name: Install API deps
         working-directory: api
