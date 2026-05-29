@@ -2,9 +2,11 @@
 
 Spec: `.specify/spec/007-platform-analytics-and-community-metrics.md`
 
-Two surfaces sharing one privacy posture. **Sliced into three PRs** so the
-privacy-critical PostHog integration is reviewed in isolation from the
-Cosmos-derived community page.
+Two surfaces sharing one privacy posture. **Sliced into four PRs**
+(007-A community stats, 007-B PostHog wrapper + privacy docs, 007-C
+opt-out toggle, 007-D operator dashboards — see the composition table
+at the bottom) so the privacy-critical PostHog integration is reviewed
+in isolation from the Cosmos-derived community page.
 
 `[P]` = parallelisable inside the same PR.
 
@@ -31,9 +33,7 @@ read path. Ships independently of PostHog.
     `snapshotAt`.
   - `topSkills` is capped at 10 entries.
 - **T-701**: `api/src/community-stats.ts` — new handler.
-  - 4–5 Cosmos queries (count UserRecords, count public profiles,
-    aggregate distinct skills, aggregate distinct preferredLanguages,
-    count active-in-7d via existing `lastSeenAt` field from spec 006).
+  - 4–5 Cosmos queries (count UserRecords **filtered to `STARTSWITH(c.id, "gh-")`** so the admin-roster singleton (`id: 'roster'`) and any future non-user docs in the `users` container don't inflate `codepalsTotal`; count public profiles, aggregate distinct skills, aggregate distinct preferredLanguages, count active-in-7d via existing `lastSeenAt` field from spec 006 — the active-7d query must apply the same `STARTSWITH(c.id, "gh-")` filter).
   - In-memory `{value, expiresAt}` cache, 5-min TTL.
   - `app.http('community-stats', { methods: ['GET'], authLevel: 'anonymous', handler })`.
 - **T-702**: `staticwebapp.config.json` — add
@@ -153,8 +153,14 @@ the same diff.
 ### Wiring (initial event surface — FR-726)
 
 - **T-750 [P]**: `src/components/Header.astro` — call `analytics.init()`
-  on script load. Fire `track('page_view', { route: window.location.pathname })`
-  on each mount (Header is on every page).
+  on script load. Fire `track('page_view', { route: routeNameFor(window.location.pathname) })`
+  on each mount (Header is on every page). `routeNameFor` lives in
+  `src/lib/analytics.ts` and maps the pathname to the FR-726 `RouteName`
+  literal union (`/` → `'home'`, `/find` → `'find'`, `/find/*` →
+  `'find-detail'`, `/profile` → `'profile-edit'`, `/community` →
+  `'community'`, `/welcome` → `'welcome'`, `/admin*` → `'admin'`,
+  unknown → `'other'`). The raw `window.location.pathname` is NEVER
+  sent — dynamic segments (usernames, ids) could carry identifiers.
 - **T-751 [P]**: `src/pages/welcome.astro` — fire `track('signup_completed', {})`
   on first arrival after OAuth.
 - **T-752 [P]**: `src/pages/profile/index.astro` — fire
@@ -167,14 +173,27 @@ the same diff.
 ### CSP
 
 - **T-760**: `staticwebapp.config.json` — extend the CSP global header:
-  - `connect-src` += ` https://eu.i.posthog.com`
-  - `script-src` += ` https://eu.posthog.com` (only if the SDK loads
-    from CDN; if bundled via `posthog-js`, only `connect-src` needs the
-    addition — verify which path we're on).
-  - Inline-comment-justify the additions with a `# spec 007` reference.
+  - `connect-src` += ` https://eu.i.posthog.com` (ingest host)
+  - `script-src` — **no change**. PR1 bundles `posthog-js` via npm
+    (T-730), so the SDK ships in the build artifact; no remote script
+    fetch happens. If a future PR switches to CDN delivery, that PR
+    adds `https://eu.posthog.com` to `script-src` AND updates T-761 in
+    the same diff.
+  - **Do NOT** inline-comment-justify inside the JSON file — JSON has
+    no comment syntax, and an attempt at `#` or `//` would make the
+    config invalid. The spec-007 justification belongs in T-761's test
+    comment instead.
 - **T-761 [P]**: `src/staticwebapp.config.test.ts` — pin the new CSP
-  values. Test fails if either domain is removed OR a third domain is
-  added without updating the test (catches silent CSP-widening).
+  values via a test that asserts BOTH:
+  - `connect-src` contains `https://eu.i.posthog.com` (positive: removing
+    it breaks analytics, the test fails)
+  - `script-src` does NOT contain any `posthog.com` domain (negative:
+    catches a silent CDN switch — bundled is the deliberate choice for
+    PR1; a future CDN-switch PR updates this assertion).
+  - Add an inline `// spec 007 (FR-730)` comment on the assertion block
+    so a future reader can locate the rationale. (JSON has no comment
+    syntax — this is why the justification lives here, not in the
+    config file.)
 
 ---
 
@@ -191,7 +210,12 @@ US2 since it's small.
   the wire-up writes localStorage.
 - **T-772 [P]**: `e2e-browser/analytics-optout.spec.ts` — Playwright
   hermetic smoke: enable the toggle → assert zero outbound requests
-  matching `**/posthog.com/**` on a subsequent page navigation.
+  matching the actual ingest host. Use `**/i.posthog.com/**` (matches
+  `eu.i.posthog.com` per FR-730) — NOT the bare `posthog.com` host
+  (which wouldn't match the `eu.i.` subdomain under Playwright's URL
+  glob matching). Belt-and-braces: also assert zero requests with URL
+  matching `/\/(e|s|i)\/v0\/?/` (PostHog's ingest paths) so a future
+  endpoint change is also caught.
 
 ---
 

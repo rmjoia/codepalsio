@@ -14,7 +14,7 @@ Adds two complementary surfaces, sharing one collection pipeline:
 1. **`/community` page on the webapp** — a public, shareable stats page that any visitor can hit (no login). Shows aggregate adoption signals — "X CodePals", "Y skills represented", "Z active this week" — to build community trust + network-effect appeal.
 2. **PostHog Cloud (EU) dashboards** — internal product-analytics surface for the operator (and shareable as screenshots / read-only links with investors). Funnels, retention curves, feature-adoption % — the kind of growth deck a fundraiser needs.
 
-**Both feed from the same event + aggregate pipeline.** The community page renders Cosmos-derived counters (deterministic, RU-cheap, no third-party in the read path); PostHog handles the time-series + funnel side that Cosmos isn't built for.
+**Two separate data paths, one shared privacy posture.** `/community` is Cosmos-derived only — counters aggregated server-side from the existing user/profile containers, no third-party in the read path. PostHog only powers the behavioural / time-series dashboards Cosmos isn't built for (funnels, retention). The two surfaces never share a pipeline; the unifying constraint is the privacy contract (no PII either way), not a common data store.
 
 **GDPR posture (non-negotiable):** no PII leaves the server. PostHog runs cookieless with no `identify()` call, IP anonymized, autocapture off, session replay disabled. Lawful basis = legitimate interest with a documented balancing test. Opt-out available. Privacy notice updated in the same PR. See `Risks & Mitigations`.
 
@@ -114,7 +114,7 @@ As the operator preparing for an investor / partner conversation, I can pull a o
 - **FR-700**: New endpoint `GET /api/community-stats` MUST return an aggregate snapshot:
   ```ts
   {
-    codepalsTotal: number,        // count of UserRecords (signed-in users, ever)
+    codepalsTotal: number,        // count of UserRecords whose id STARTS WITH 'gh-' (excludes the admin-roster singleton 'roster' and any future non-user docs in the same container)
     profilesPublic: number,       // count of profiles with profileVisibility = 'public'
     skillsDistinct: number,       // count of distinct skills across all public profiles
     languagesDistinct: number,    // count of distinct preferredLanguages across public profiles
@@ -154,9 +154,9 @@ As the operator preparing for an investor / partner conversation, I can pull a o
 - **FR-722a**: Any **server-side** PostHog secret introduced later (e.g. a Personal API Key for export jobs, dashboard provisioning, or feature-flag fetches from the API host) MUST go to **Azure Key Vault** and be read via the existing `ConfigService` pattern (`src/services/ConfigService.ts` → `getSecret('POSTHOG_PERSONAL_API_KEY')`). It MUST NOT live in an SWA env var (env vars are bundled into the build artifact for `PUBLIC_*` and survive container restarts as plaintext for non-public ones — Key Vault is the only acceptable home for true secrets per the existing repo posture). No such server secret is needed for the PR1 scope (frontend-only event capture); this FR exists to pin the rule before scope creeps.
 - **FR-723**: Exported `track<E extends EventName>(event: E, props: EventPayloads[E])` is the **only** way to send an event. `EventPayloads` is a typed map (one entry per allowed event) so a free-form user string can't be stuffed into a payload without a type error.
 - **FR-724**: `posthog.identify(...)` MUST NEVER be called. Lint rule + test asserts no source line matches `posthog.identify(`.
-- **FR-725**: On every page mount, fire `track('page_view', { route })` with `route = window.location.pathname` (no query string, no hash — both could carry PII like `?email=...`).
-- **FR-726**: Initial event surface (PR1 scope — extend cautiously later):
-  - `page_view` `{ route: string }`
+- **FR-725**: On every page mount, fire `track('page_view', { route })` where `route` is a **normalized literal route name** (see FR-726's `RouteName` union) derived from `window.location.pathname` via a small mapping function (e.g. `/find/<username>` → `'find-detail'`, `/find` → `'find'`). The raw pathname MUST NOT be sent — dynamic segments could carry identifiers (usernames, ids). Unknown paths map to `'other'`. No query string or hash is ever read.
+- **FR-726**: Initial event surface (PR1 scope — extend cautiously later). All payload value types are literal unions, `boolean`, or `number` — **never unrestricted `string`** (privacy guardrail; enforced by T-741):
+  - `page_view` `{ route: RouteName }` where `RouteName = 'home' | 'find' | 'find-detail' | 'profile-edit' | 'community' | 'welcome' | 'admin' | 'other'`
   - `signup_completed` `{}`
   - `profile_saved` `{ visibility: 'public' | 'private' }`
   - `field_visibility_changed` `{ field: HideableField, level: FieldVisibility }`
@@ -165,12 +165,12 @@ As the operator preparing for an investor / partner conversation, I can pull a o
 
 ### CSP
 
-- **FR-730**: `staticwebapp.config.json` MUST add `https://eu.i.posthog.com` to `connect-src` and (if SDK is loaded from CDN) `https://eu.posthog.com` to `script-src`. The CSP test (`src/staticwebapp.config.test.ts`) gets a new invariant pinning both, with an inline comment referencing this spec.
+- **FR-730**: PR1 bundles `posthog-js` via `npm` (per T-730) — the SDK ships in the Astro build artifact, not loaded from a CDN. Therefore `staticwebapp.config.json` MUST add **only** `https://eu.i.posthog.com` to `connect-src`; `script-src` is unchanged. The CSP test (`src/staticwebapp.config.test.ts`) gets a new invariant pinning exactly `connect-src` += `https://eu.i.posthog.com`, asserting that `https://eu.posthog.com` is **NOT** in `script-src` (so a future CDN switch is a deliberate, test-failing change). The spec-007 justification lives in the test file's inline comment (JSON has no comments — never inline-justify in `staticwebapp.config.json` itself).
 
 ### Opt-out UI (US3, P2)
 
 - **FR-740**: Profile-edit page (or a new `/settings`) MUST surface a single toggle "Include me in anonymous platform analytics" (default ON). Toggling OFF writes `localStorage.codepals_no_analytics = '1'`; toggling ON removes the key.
-- **FR-741**: The toggle MUST take effect immediately (no reload) — `analytics.refresh()` re-reads the opt-out flag.
+- **FR-741**: The toggle MUST take effect immediately (no reload). Because FR-727 mandates `localStorage.getItem('codepals_no_analytics')` is read on **every** `track()` call (no cached opt-out state in module memory), the next event after the toggle naturally respects the new value. No `analytics.refresh()` API is needed or exposed; the `localStorage`-on-every-call read IS the mechanism.
 
 ### Privacy disclosure
 
