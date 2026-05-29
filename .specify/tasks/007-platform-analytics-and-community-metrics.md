@@ -98,8 +98,20 @@ the same diff.
   instructions. Cross-link to the LIA.
 - **T-722**: `AZURE_SETUP_GUIDE.md` — operator runbook:
   - Sign the PostHog DPA.
-  - Create the EU project + record the public key as
-    `PUBLIC_POSTHOG_KEY` SWA app setting.
+  - Create the EU project + record the public key as a
+    **`PUBLIC_POSTHOG_KEY` Azure Static Web App application setting**
+    (Portal → SWA → Configuration → Application settings → New). The
+    value is built into the client bundle at `astro build` time via
+    `import.meta.env.PUBLIC_POSTHOG_KEY`; the SWA build pipeline
+    exposes app settings as env vars during the build step.
+  - **Do NOT** put `PUBLIC_POSTHOG_KEY` in Azure Key Vault — it's a
+    public client token (per FR-722); Key Vault is reserved for true
+    secrets per the existing `ConfigService` pattern.
+  - **If** a server-side PostHog secret (e.g. `POSTHOG_PERSONAL_API_KEY`
+    for export / provisioning) is later needed (out of PR1 scope), it
+    MUST be added to Key Vault and surfaced via `ConfigService.getSecret(...)`
+    (see FR-722a). Document the Key Vault secret name + the SWA
+    `@Microsoft.KeyVault(SecretUri=...)` reference if/when it lands.
   - Recommended dashboards (signup funnel, feature adoption,
     weekly-active retention) with the FR-726 event names.
 
