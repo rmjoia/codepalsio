@@ -1,5 +1,14 @@
 ---
 // Auth state is resolved client-side via /.auth/me (static mode — no server request context)
+//
+// Global CSS is imported here so every page that renders the Header
+// (all of them except the tiny meta-refresh redirect stubs) picks up
+// the Tailwind stylesheet transitively. Under Astro 5 with the
+// `@astrojs/tailwind` integration this was auto-injected globally;
+// Astro 6+ moved to the PostCSS route (postcss.config.mjs), which
+// means the CSS is only bundled into pages that reference it via an
+// import. Header is the natural single point of that reference.
+import '../styles/global.css';
 ---
 
 <header

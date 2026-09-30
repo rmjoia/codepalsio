@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "CodePals.io - Code Penpals Platform",
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "astro dev",
     "build": "astro build && node ./scripts/verify-no-inline-scripts.mjs",
@@ -28,12 +31,10 @@
     "@azure/cosmos": "^4.8.0",
     "@azure/identity": "^4.13.0",
     "@azure/keyvault-secrets": "^4.10.0",
-    "astro": "^5.15.8",
+    "astro": "^7.3.5",
     "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
-    "@astrojs/node": "^9.5.1",
-    "@astrojs/tailwind": "^6.0.2",
     "@azure/static-web-apps-cli": "^2.0.7",
     "@eslint/js": "^9.39.1",
     "@playwright/test": "^1.60.0",
@@ -44,6 +45,7 @@
     "@typescript-eslint/parser": "^8.47.0",
     "@vitest/ui": "^4.0.13",
     "astro-eslint-parser": "^1.2.2",
+    "autoprefixer": "^10.6.1",
     "eslint": "^9.39.1",
     "eslint-plugin-astro": "^1.5.0",
     "happy-dom": "^20.0.10",
