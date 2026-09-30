@@ -18,11 +18,19 @@ import {
 export const LIMITS = {
 	displayName: 100,
 	bio: 500,
+	// Directory-quality minimum bio length; enforced ONLY when
+	// profileVisibility === 'public'. Private profiles can save with a
+	// shorter bio (or none at all) so users can draft incrementally
+	// without being blocked. See #68.
+	bioMinPublic: 50,
 	location: 100,
 	timezone: 64,
 	url: 500,
 	tagItem: 50, // single skill / interest
 	tagCount: 30, // skills or interests array length
+	// Directory-quality minimum for skills AND interests; enforced ONLY
+	// when profileVisibility === 'public'. See #68.
+	tagsMinPublic: 2,
 } as const;
 
 export function isAvailability(value: unknown): value is Availability {

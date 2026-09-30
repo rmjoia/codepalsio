@@ -85,7 +85,12 @@ export interface Profile {
 	/** GitHub login, set server-side from the SWA principal at save time. */
 	githubUsername?: string;
 	displayName: string;
-	bio: string;
+	/**
+	 * Bio text. Optional at the type level because a private profile can
+	 * be saved with an empty bio (users draft incrementally). Public
+	 * profiles are gated server-side to require a bio ≥ 50 characters.
+	 */
+	bio?: string;
 	skills: string[];
 	interests: string[];
 	availability: Availability;
@@ -104,7 +109,12 @@ export interface Profile {
 
 export interface ProfileInput {
 	displayName: string;
-	bio: string;
+	/**
+	 * Bio text. Optional because private profiles can be saved without
+	 * one. Client-side + server-side both enforce ≥ 50 characters ONLY
+	 * when profileVisibility === 'public'.
+	 */
+	bio?: string;
 	skills: string[];
 	interests: string[];
 	availability?: Availability;

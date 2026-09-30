@@ -338,4 +338,105 @@ describe('profile/index.astro — per-field visibility UI', () => {
 			}
 		);
 	});
+
+	// Issue #68 + #69 — one PR, one shared "what counts as complete for
+	// public?" definition. Two things must line up:
+	//   (a) the save-gate that fires an alert() only when publishing publicly
+	//   (b) the incomplete-banner that only nags PUBLIC profiles about the
+	//       actually-missing fields
+	// If (a) and (b) drift apart, users get bounced by one and nagged by the
+	// other with different rules — the exact failure mode #68/#69 hit.
+	describe('save-gate is scoped to public visibility (issue #68)', () => {
+		it('reads the selected visibility BEFORE running the strict alerts', () => {
+			// The bio/skills/interests alerts must be inside a public-only
+			// branch. Pin that:
+			//   1. `selectedVisibility` (or equivalent) is derived from the
+			//      radio group before the alerts fire.
+			//   2. The strict `alert('Bio must be…')` / 'at least 2 skills'
+			//      messages are gated on `selectedVisibility === 'public'`.
+			expect(source).toMatch(/const\s+selectedVisibility\s*=[\s\S]*?visibilityEl\?\.value/);
+			expect(source).toMatch(/selectedVisibility\s*===\s*['"]public['"]/);
+		});
+
+		it('gates the "≥50-char bio" alert on public visibility', () => {
+			// A private save with a short bio must NOT alert (issue #68).
+			// The whole strict block sits under a public-only condition;
+			// pin that the bio-length alert is inside that block by
+			// asserting the ordering: `selectedVisibility === 'public'`
+			// appears BEFORE the bio.length alert in source order, and no
+			// unconditional `alert('Bio must be at least`… survives.
+			const publicGateIdx = source.search(/selectedVisibility\s*===\s*['"]public['"]/);
+			const bioAlertIdx = source.search(/alert\(\s*['"]Public profiles need a bio/);
+			expect(publicGateIdx).toBeGreaterThan(0);
+			expect(bioAlertIdx).toBeGreaterThan(publicGateIdx);
+			// And the old always-fire message is gone.
+			expect(source).not.toMatch(/alert\(\s*['"]Bio must be at least 50 characters['"]\)/);
+		});
+
+		it('gates the "≥2 skills" and "≥2 interests" alerts on public visibility', () => {
+			// Same shape as above — no unconditional 'Please add at least
+			// 2 skills' / '…interests' messages; the new public-only copy
+			// takes their place.
+			expect(source).not.toMatch(/alert\(\s*['"]Please add at least 2 skills['"]\)/);
+			expect(source).not.toMatch(/alert\(\s*['"]Please add at least 2 interests['"]\)/);
+			expect(source).toMatch(/alert\(\s*['"]Public profiles need at least 2 skills/);
+			expect(source).toMatch(/alert\(\s*['"]Public profiles need at least 2 interests/);
+		});
+	});
+
+	// Issue #69 — the "Complete your profile" banner must only appear when
+	// the profile is public AND still below the directory quality bar; when
+	// it does appear, its copy must reflect the fields actually missing.
+	describe('incomplete-banner is public-only and dynamically populated (issue #69)', () => {
+		it('exposes a dynamic-copy element and a missing-fields list target', () => {
+			// Old bug: a static <p> paragraph claimed "Add your bio, skills,
+			// and interests" regardless of which fields were actually
+			// empty. Fix: the banner has (a) a paragraph element with a
+			// dedicated id whose text is set at render time and (b) a
+			// <ul> the script populates with one <li> per missing field.
+			expect(source).toMatch(/id=["']incomplete-banner-copy["']/);
+			expect(source).toMatch(/id=["']incomplete-banner-missing["']/);
+			// The old always-yells copy is gone.
+			expect(source).not.toMatch(/Add your bio, skills, and interests/);
+		});
+
+		it('exports the "what counts as complete for public?" helper', () => {
+			// Pin the single definition that both view-mode banner and
+			// (implicitly) the save-gate rely on. If a future refactor
+			// removes the helper, both invariants above start drifting.
+			expect(source).toMatch(/function\s+computeMissingPublicFields\s*\(/);
+			// The helper checks all five directory-quality fields.
+			const helperBlock = source.match(/function\s+computeMissingPublicFields[\s\S]*?\n\s*\}\s*\n/);
+			expect(helperBlock, 'helper body must exist').not.toBeNull();
+			const body = helperBlock![0];
+			expect(body).toMatch(/profile\.bio/);
+			expect(body).toMatch(/profile\.skills/);
+			expect(body).toMatch(/profile\.interests/);
+			expect(body).toMatch(/profile\.location/);
+			expect(body).toMatch(/profile\.timezone/);
+		});
+
+		it('hides the banner when profileVisibility is not public', () => {
+			// A private profile is opted out of the directory — nagging it
+			// to "complete" contradicts that choice. Pin that the render
+			// branch keys off `profileVisibility === 'public'`.
+			expect(source).toMatch(
+				/const\s+visibility\s*=\s*profile\?\.profileVisibility\s*\?\?\s*['"]private['"];?[\s\S]{0,400}visibility\s*===\s*['"]public['"]/
+			);
+		});
+
+		it('populates the missing-fields list from computeMissingPublicFields', () => {
+			// Pin the actual render wiring: the helper's return value
+			// drives the <li>s in the missing-fields <ul>. If a future
+			// refactor calls the helper but forgets to render the result,
+			// the banner becomes a mystery ("something's missing but we
+			// won't tell you what").
+			expect(source).toMatch(/computeMissingPublicFields\(/);
+			expect(source).toMatch(/incomplete-banner-missing/);
+			// The DOM manipulation uses textContent (safe against XSS if
+			// a future refactor accidentally passes user data through
+			// this path — currently the labels are hardcoded strings).
+			expect(source).toMatch(/li\.textContent\s*=\s*label/);
+		});
+	});
 });

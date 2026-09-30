@@ -62,22 +62,45 @@ export async function profileSaveHandler(
 	const displayName = trimmedString(body.displayName, LIMITS.displayName);
 	const bio = trimmedString(body.bio, LIMITS.bio + 1); // keep one over so we can 400 on >500 explicitly
 
+	// displayName is the profile's identifier in the directory + view mode;
+	// require it regardless of visibility. Everything else below is the
+	// "directory quality" bar — only enforced for PUBLIC profiles (#68).
+	// Private profiles can save with any content (still capped by the abuse
+	// limits below), so users can draft incrementally rather than being
+	// blocked until every field is filled.
 	if (!displayName) return { status: 400, jsonBody: { error: 'Display name is required' } };
-	if (!bio) return { status: 400, jsonBody: { error: 'Bio is required' } };
-	if (bio.length > LIMITS.bio)
+	if (bio && bio.length > LIMITS.bio)
 		return { status: 400, jsonBody: { error: `Bio must not exceed ${LIMITS.bio} characters` } };
-	if (skills.length === 0)
-		return { status: 400, jsonBody: { error: 'At least one skill is required' } };
-	if (interests.length === 0)
-		return { status: 400, jsonBody: { error: 'At least one interest is required' } };
 
-	const availability = isAvailability(body.availability) ? body.availability : 'active';
 	// Visibility defaults to 'private' — users opt in to /find discovery,
 	// not out. Anything other than literal 'public' or 'private' coerces
 	// to 'private'.
 	const profileVisibility = isProfileVisibility(body.profileVisibility)
 		? body.profileVisibility
 		: 'private';
+
+	if (profileVisibility === 'public') {
+		if (!bio) return { status: 400, jsonBody: { error: 'Bio is required for public profiles' } };
+		if (bio.length < LIMITS.bioMinPublic)
+			return {
+				status: 400,
+				jsonBody: {
+					error: `Public profiles need a bio of at least ${LIMITS.bioMinPublic} characters`,
+				},
+			};
+		if (skills.length < LIMITS.tagsMinPublic)
+			return {
+				status: 400,
+				jsonBody: { error: `Public profiles need at least ${LIMITS.tagsMinPublic} skills` },
+			};
+		if (interests.length < LIMITS.tagsMinPublic)
+			return {
+				status: 400,
+				jsonBody: { error: `Public profiles need at least ${LIMITS.tagsMinPublic} interests` },
+			};
+	}
+
+	const availability = isAvailability(body.availability) ? body.availability : 'active';
 	// Per-field visibility map: garbage in → empty map (= all public,
 	// the safe default that preserves pre-feature behaviour). Only
 	// stores non-`public` entries to keep doc size lean.

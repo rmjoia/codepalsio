@@ -66,13 +66,17 @@ const authedPrincipal = {
 
 /** Minimal valid save body — meets every required-field check so we can
  * vary only the slice under test (fieldVisibility) without re-stating
- * the whole input each time. */
+ * the whole input each time. Values below the public-directory quality
+ * bar (bio < 50 chars, < 2 skills, < 2 interests) would fail the save
+ * because the default here is `profileVisibility: 'public'` (issue #68);
+ * override with `profileVisibility: 'private'` to exercise the looser
+ * private-save path. */
 function validBody(over: Record<string, unknown> = {}): Record<string, unknown> {
 	return {
 		displayName: 'Alice',
-		bio: 'hi',
-		skills: ['ts'],
-		interests: ['rust'],
+		bio: 'Building open-source tools and looking for peers to pair with on weekends.',
+		skills: ['ts', 'rust'],
+		interests: ['compilers', 'developer-tooling'],
 		availability: 'active',
 		profileVisibility: 'public',
 		...over,
@@ -349,5 +353,163 @@ describe('POST /api/profile-save — preferredLanguages plumbing', () => {
 			fakeContext
 		);
 		expect(getUpsertedProfile().preferredLanguages).toBeUndefined();
+	});
+});
+
+/**
+ * Save-gate strictness gated on profileVisibility (issue #68).
+ *
+ * The "≥50-char bio, ≥2 skills, ≥2 interests" bar exists for /find
+ * directory quality — a listed profile with a one-line bio is useless.
+ * But conflating "save my progress" with "publish to the directory" made
+ * the edit form hostile: new users hit a 400 on their first save and
+ * had to fill every field before they could save anything at all.
+ *
+ * The fix ties the strict bar to `profileVisibility === 'public'`:
+ * private profiles save with any content (still capped by abuse limits
+ * like bio ≤ 500, tagCount ≤ 30), public profiles keep the quality bar.
+ */
+describe('POST /api/profile-save — save-gate strictness (issue #68)', () => {
+	beforeEach(() => {
+		mocks.upsertMock.mockReset();
+		mocks.upsertMock.mockResolvedValue({});
+		mocks.getContainerMock.mockReset();
+		mocks.getContainerMock.mockReturnValue({ items: { upsert: mocks.upsertMock } });
+		mocks.getCosmosConfigMock.mockReset();
+		mocks.getCosmosConfigMock.mockReturnValue({ connectionString: 'cs', database: 'db' });
+		mocks.getClientPrincipalMock.mockReset();
+		mocks.getClientPrincipalMock.mockReturnValue(authedPrincipal);
+		mocks.findProfileWithAutoHealMock.mockReset();
+		mocks.findProfileWithAutoHealMock.mockResolvedValue({ profile: null, healed: false });
+		mocks.createUserRepositoryMock.mockReset();
+		mocks.createUserRepositoryMock.mockReturnValue({});
+	});
+
+	function minimalPrivateBody(over: Record<string, unknown> = {}): Record<string, unknown> {
+		return {
+			displayName: 'Alice',
+			profileVisibility: 'private',
+			...over,
+		};
+	}
+
+	it('accepts a private save with an empty bio, no skills, and no interests', async () => {
+		const res = await profileSaveHandler(makeRequest(minimalPrivateBody()), fakeContext);
+		expect(res.status).toBe(200);
+		expect(mocks.upsertMock).toHaveBeenCalledTimes(1);
+		const saved = mocks.upsertMock.mock.calls[0][0] as Profile;
+		// Bio elides to undefined (no trimmedString match) — server
+		// tolerates the missing field on a private save.
+		expect(saved.bio).toBeUndefined();
+		expect(saved.skills).toEqual([]);
+		expect(saved.interests).toEqual([]);
+		expect(saved.profileVisibility).toBe('private');
+	});
+
+	it('accepts a private save with a short bio (< 50 chars)', async () => {
+		const res = await profileSaveHandler(
+			makeRequest(minimalPrivateBody({ bio: 'hi', skills: ['ts'], interests: ['rust'] })),
+			fakeContext
+		);
+		expect(res.status).toBe(200);
+		const saved = mocks.upsertMock.mock.calls[0][0] as Profile;
+		expect(saved.bio).toBe('hi');
+	});
+
+	it('still rejects a private save without a displayName (identity is mandatory)', async () => {
+		const res = await profileSaveHandler(
+			makeRequest({ profileVisibility: 'private' }),
+			fakeContext
+		);
+		expect(res.status).toBe(400);
+		expect(mocks.upsertMock).not.toHaveBeenCalled();
+	});
+
+	it('still enforces the bio MAX limit on private saves (abuse cap)', async () => {
+		const oversized = 'x'.repeat(501);
+		const res = await profileSaveHandler(
+			makeRequest(minimalPrivateBody({ bio: oversized })),
+			fakeContext
+		);
+		expect(res.status).toBe(400);
+		expect(mocks.upsertMock).not.toHaveBeenCalled();
+	});
+
+	it('rejects a public save with a short bio (< 50 chars)', async () => {
+		const res = await profileSaveHandler(
+			makeRequest(
+				validBody({
+					bio: 'too short',
+					profileVisibility: 'public',
+				})
+			),
+			fakeContext
+		);
+		expect(res.status).toBe(400);
+		const body = res.jsonBody as { error: string };
+		expect(body.error).toMatch(/50/);
+		expect(mocks.upsertMock).not.toHaveBeenCalled();
+	});
+
+	it('rejects a public save with fewer than 2 skills', async () => {
+		const res = await profileSaveHandler(
+			makeRequest(validBody({ skills: ['ts'] })),
+			fakeContext
+		);
+		expect(res.status).toBe(400);
+		const body = res.jsonBody as { error: string };
+		expect(body.error).toMatch(/skills/);
+		expect(mocks.upsertMock).not.toHaveBeenCalled();
+	});
+
+	it('rejects a public save with fewer than 2 interests', async () => {
+		const res = await profileSaveHandler(
+			makeRequest(validBody({ interests: ['rust'] })),
+			fakeContext
+		);
+		expect(res.status).toBe(400);
+		const body = res.jsonBody as { error: string };
+		expect(body.error).toMatch(/interests/);
+		expect(mocks.upsertMock).not.toHaveBeenCalled();
+	});
+
+	it('rejects a public save with a missing bio', async () => {
+		// `bio` absent — the private path lets this through, the public
+		// path must not (otherwise a curl POST bypasses the client gate).
+		const res = await profileSaveHandler(
+			makeRequest({
+				displayName: 'Alice',
+				skills: ['ts', 'rust'],
+				interests: ['a', 'b'],
+				profileVisibility: 'public',
+			}),
+			fakeContext
+		);
+		expect(res.status).toBe(400);
+		expect(mocks.upsertMock).not.toHaveBeenCalled();
+	});
+
+	it('accepts a public save that meets every quality bar', async () => {
+		const res = await profileSaveHandler(makeRequest(validBody()), fakeContext);
+		expect(res.status).toBe(200);
+		expect(mocks.upsertMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('defaults absent profileVisibility to private (looser gate applies)', async () => {
+		// Omit `profileVisibility` entirely — the handler coerces to
+		// 'private', so the strict public bar doesn't fire even with a
+		// short bio and one skill.
+		const res = await profileSaveHandler(
+			makeRequest({
+				displayName: 'Alice',
+				bio: 'hi',
+				skills: ['ts'],
+				interests: ['rust'],
+			}),
+			fakeContext
+		);
+		expect(res.status).toBe(200);
+		const saved = mocks.upsertMock.mock.calls[0][0] as Profile;
+		expect(saved.profileVisibility).toBe('private');
 	});
 });

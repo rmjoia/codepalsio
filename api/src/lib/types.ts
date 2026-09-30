@@ -89,7 +89,13 @@ export interface Profile {
 	 */
 	githubUsername?: string;
 	displayName: string;
-	bio: string;
+	/**
+	 * Bio text. Optional at the type level because a private profile can
+	 * be saved with an empty bio (users draft incrementally). Public
+	 * profiles are gated at save time to require a bio ≥ LIMITS.bioMinPublic
+	 * characters (see profile-save.ts).
+	 */
+	bio?: string;
 	skills: string[];
 	interests: string[];
 	availability: Availability;
