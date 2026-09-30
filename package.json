@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "CodePals.io - Code Penpals Platform",
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "astro dev",
     "build": "astro build && node ./scripts/verify-no-inline-scripts.mjs",
