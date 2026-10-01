@@ -257,20 +257,20 @@ import Footer from '../../components/Footer.astro';
 							<label for="timezone" class="block text-sm font-semibold text-slate-900 mb-2"
 								>Timezone</label
 							>
-							<select
+							<input
+								type="text"
 								id="timezone"
 								name="timezone"
+								list="timezone-options"
+								autocomplete="off"
+								placeholder="Start typing — e.g. Europe/Dublin, America/New_York"
 								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-							>
-								<option value="">Select timezone</option>
-								<option value="UTC">UTC</option>
-								<option value="Europe/Dublin">Europe/Dublin (GMT)</option>
-								<option value="Europe/London">Europe/London (GMT)</option>
-								<option value="America/New_York">America/New York (EST)</option>
-								<option value="America/Los_Angeles">America/Los Angeles (PST)</option>
-								<option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
-								<option value="Australia/Sydney">Australia/Sydney (AEDT)</option>
-							</select>
+							/>
+							<datalist id="timezone-options"></datalist>
+							<p class="mt-1 text-xs text-slate-500">
+								IANA timezone (e.g. <code>Europe/Lisbon</code>, <code>Pacific/Honolulu</code>,
+								<code>Africa/Lagos</code>). Click the field for suggestions.
+							</p>
 						</div>
 					</div>
 
@@ -786,7 +786,7 @@ import Footer from '../../components/Footer.astro';
 				const displayNameEl = document.getElementById('displayName') as HTMLInputElement | null;
 				const bioEl = document.getElementById('bio') as HTMLTextAreaElement | null;
 				const locationEl = document.getElementById('location') as HTMLInputElement | null;
-				const timezoneEl = document.getElementById('timezone') as HTMLSelectElement | null;
+				const timezoneEl = document.getElementById('timezone') as HTMLInputElement | null;
 				const bioCountEl = document.getElementById('bio-count');
 
 				if (displayNameEl) displayNameEl.value = profile?.displayName || '';
@@ -795,7 +795,22 @@ import Footer from '../../components/Footer.astro';
 					if (bioCountEl) bioCountEl.textContent = String(bioEl.value.length);
 				}
 				if (locationEl) locationEl.value = profile?.location || '';
-				if (timezoneEl && profile?.timezone) timezoneEl.value = profile.timezone;
+				if (timezoneEl) {
+					// Prefill from stored profile OR detected browser zone on a fresh/empty
+					// profile — any user with a modern browser has a sensible default rather
+					// than an empty field. The user can still change it; this is a hint, not
+					// a lock-in.
+					if (profile?.timezone) {
+						timezoneEl.value = profile.timezone;
+					} else if (!timezoneEl.value) {
+						try {
+							const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+							if (detected) timezoneEl.value = detected;
+						} catch {
+							// Older browsers / sandboxes may lack this — not fatal.
+						}
+					}
+				}
 
 				if (profile?.availability) {
 					const radio = document.querySelector<HTMLInputElement>(
@@ -888,6 +903,33 @@ import Footer from '../../components/Footer.astro';
 			}
 
 			async function init() {
+				// Populate the timezone combobox from the browser's IANA list
+				// (~400 zones) — replaces the old 7-zone hardcoded <select>. See
+				// issue #67. Falls back gracefully if Intl.supportedValuesOf
+				// isn't available (very old browsers): the <input> still accepts
+				// free text, just without suggestions.
+				try {
+					if (typeof Intl.supportedValuesOf === 'function') {
+						const zones = Intl.supportedValuesOf('timeZone');
+						const datalist = document.getElementById('timezone-options');
+						if (datalist && zones.length > 0) {
+							// Use a DocumentFragment so we don't reflow 400 times.
+							// textContent-based option construction (never innerHTML) —
+							// Intl's output is already a safe set of IANA strings, but
+							// treating it as untrusted data is a cheap habit worth keeping.
+							const fragment = document.createDocumentFragment();
+							for (const zone of zones) {
+								const opt = document.createElement('option');
+								opt.value = zone;
+								fragment.appendChild(opt);
+							}
+							datalist.appendChild(fragment);
+						}
+					}
+				} catch {
+					// Non-fatal: input remains a plain text field.
+				}
+
 				try {
 					const [principal, profile] = await Promise.all([getPrincipal(), getProfile()]);
 
@@ -967,7 +1009,7 @@ import Footer from '../../components/Footer.astro';
 				const displayNameEl = document.getElementById('displayName') as HTMLInputElement | null;
 				const bioEl = document.getElementById('bio') as HTMLTextAreaElement | null;
 				const locationEl = document.getElementById('location') as HTMLInputElement | null;
-				const timezoneEl = document.getElementById('timezone') as HTMLSelectElement | null;
+				const timezoneEl = document.getElementById('timezone') as HTMLInputElement | null;
 				const yearsEl = document.getElementById('years-of-experience') as HTMLInputElement | null;
 				const githubUrlEl = document.getElementById('githubUrl') as HTMLInputElement | null;
 				const linkedinUrlEl = document.getElementById('linkedinUrl') as HTMLInputElement | null;
