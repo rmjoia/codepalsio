@@ -439,4 +439,45 @@ describe('profile/index.astro — per-field visibility UI', () => {
 			expect(source).toMatch(/li\.textContent\s*=\s*label/);
 		});
 	});
+
+	// Issue #67 — the timezone field was a <select> with 7 hardcoded options
+	// which couldn't represent a global community (first real tester reported
+	// their zone was missing). Replaced with an <input> + <datalist> combobox
+	// populated from Intl.supportedValuesOf('timeZone') (~400 IANA zones).
+	describe('timezone input offers the full IANA list via Intl (issue #67)', () => {
+		it('uses an <input list="timezone-options"> combobox, not a hardcoded <select>', () => {
+			// Pin the shape: <input type="text"> bound to a <datalist>, not a
+			// <select> with per-zone <option> children. If a future refactor
+			// drops back to a select, this test fails before any user hits it.
+			expect(source).toMatch(/<input[^>]*id=["']timezone["'][^>]*list=["']timezone-options["']/);
+			expect(source).toMatch(/<datalist[^>]*id=["']timezone-options["']/);
+			// The old hardcoded 7-option list is gone.
+			expect(source).not.toMatch(/<option\s+value=["']Europe\/Dublin["']/);
+			expect(source).not.toMatch(/<option\s+value=["']Australia\/Sydney["']/);
+		});
+
+		it('populates the datalist from Intl.supportedValuesOf at runtime', () => {
+			// The point of this fix: the full IANA list, not a hand-maintained
+			// subset. Pin that the script actually calls Intl.supportedValuesOf
+			// with the 'timeZone' key and feeds it into the datalist.
+			expect(source).toMatch(/Intl\.supportedValuesOf\(\s*['"]timeZone['"]\s*\)/);
+			expect(source).toMatch(/timezone-options/);
+		});
+
+		it("prefills from Intl.DateTimeFormat's detected zone on a fresh profile", () => {
+			// A new user with no stored timezone should see their own zone
+			// pre-filled — not an empty field or a hardcoded 'UTC'. Pin that
+			// the resolvedOptions().timeZone path exists.
+			expect(source).toMatch(/Intl\.DateTimeFormat\(\)\.resolvedOptions\(\)\.timeZone/);
+		});
+
+		it('treats the timezone element as HTMLInputElement, not HTMLSelectElement', () => {
+			// A leftover `as HTMLSelectElement` cast after the input swap
+			// would silently narrow the DOM API (e.g. .selectedOptions)
+			// and either break at runtime or quietly degrade. Pin the new
+			// type.
+			expect(source).toMatch(/getElementById\(['"]timezone['"]\)\s*as\s*HTMLInputElement/);
+			expect(source).not.toMatch(/getElementById\(['"]timezone['"]\)\s*as\s*HTMLSelectElement/);
+		});
+	});
 });
