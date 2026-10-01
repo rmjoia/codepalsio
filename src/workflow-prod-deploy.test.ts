@@ -32,6 +32,10 @@ describe('prod_deploy workflow gate (issue #74)', () => {
 		expect(prodDeployBlock).toContain("github.event_name == 'push'");
 	});
 
+	it('gates prod_deploy on the PROD_DEPLOY_ENABLED repo variable', () => {
+		expect(prodDeployBlock).toContain("vars.PROD_DEPLOY_ENABLED == 'true'");
+	});
+
 	it('binds prod_deploy to the `production` GitHub Environment for manual approval', () => {
 		expect(prodDeployBlock).toMatch(/environment:\s*\n\s*name:\s*production/);
 		expect(prodDeployBlock).toContain('url: https://codepals.io');
