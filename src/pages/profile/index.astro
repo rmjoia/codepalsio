@@ -96,11 +96,15 @@ import Footer from '../../components/Footer.astro';
 								d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
 						</svg>
 						<div>
-							<h3 class="font-semibold text-amber-900 mb-1">Complete your profile</h3>
-							<p class="text-amber-800 text-sm mb-3">
-								Add your bio, skills, and interests to help other CodePals find and connect with
-								you.
+							<h3 class="font-semibold text-amber-900 mb-1">Complete your public profile</h3>
+							<p id="incomplete-banner-copy" class="text-amber-800 text-sm mb-3">
+								A few things still need filling before other CodePals can find and connect with you.
 							</p>
+							<ul
+								id="incomplete-banner-missing"
+								class="text-amber-800 text-sm mb-3 list-disc list-inside space-y-1"
+							>
+							</ul>
 							<button
 								id="complete-profile-btn"
 								class="text-sm font-medium text-amber-700 hover:text-amber-800 underline"
@@ -638,6 +642,23 @@ import Footer from '../../components/Footer.astro';
 				history.replaceState(null, '', '/profile?edit=true');
 			}
 
+			// The public-directory quality bar. A profile meets this when all five
+			// fields are filled: this is the single definition of "complete enough
+			// to be listed publicly" — reused by (a) the incomplete-banner in view
+			// mode and (b) the client-side save-gate for public visibility (issue
+			// #68 + #69, kept together so the two never disagree on what counts).
+			// Returns human-readable labels for the fields that are still missing.
+			function computeMissingPublicFields(profile: Profile): string[] {
+				const missing: string[] = [];
+				if (!profile.bio || profile.bio.length < 50) missing.push('A bio (at least 50 characters)');
+				if (!profile.skills || profile.skills.length < 2) missing.push('At least 2 skills');
+				if (!profile.interests || profile.interests.length < 2)
+					missing.push('At least 2 interests');
+				if (!profile.location) missing.push('Your location');
+				if (!profile.timezone) missing.push('Your timezone');
+				return missing;
+			}
+
 			function populateViewMode(profile: Profile | null) {
 				// Bio
 				const bioEl = document.getElementById('profile-bio');
@@ -737,15 +758,27 @@ import Footer from '../../components/Footer.astro';
 							: 'bg-slate-100 text-slate-600');
 				}
 
-				// Incomplete banner — a complete profile needs bio ≥50 chars, ≥2 skills, ≥2 interests, location, timezone
-				const isComplete =
-					profile &&
-					profile.bio?.length >= 50 &&
-					profile.skills?.length >= 2 &&
-					profile.interests?.length >= 2 &&
-					profile.location &&
-					profile.timezone;
-				document.getElementById('incomplete-banner').classList.toggle('hidden', !!isComplete);
+				// Incomplete banner. Only shown for PUBLIC profiles that don't yet meet the
+				// directory quality bar — private profiles are opted out of discovery, so
+				// nagging them contradicts their choice. The copy lists ONLY the fields
+				// actually missing (per issue #69 — the old static "add your bio, skills,
+				// and interests" was wrong when the user had already added those).
+				const banner = document.getElementById('incomplete-banner');
+				const missingList = document.getElementById('incomplete-banner-missing');
+				if (banner && missingList) {
+					const visibility = profile?.profileVisibility ?? 'private';
+					const missing = profile ? computeMissingPublicFields(profile) : [];
+					const shouldShow = visibility === 'public' && missing.length > 0;
+					banner.classList.toggle('hidden', !shouldShow);
+					if (shouldShow) {
+						missingList.innerHTML = '';
+						for (const label of missing) {
+							const li = document.createElement('li');
+							li.textContent = label;
+							missingList.appendChild(li);
+						}
+					}
+				}
 			}
 
 			function populateEditForm() {
@@ -948,17 +981,27 @@ import Footer from '../../components/Footer.astro';
 				const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement | null;
 
 				const bio = bioEl?.value || '';
-				if (bio.length < 50) {
-					alert('Bio must be at least 50 characters');
-					return;
-				}
-				if (skills.size < 2) {
-					alert('Please add at least 2 skills');
-					return;
-				}
-				if (interests.size < 2) {
-					alert('Please add at least 2 interests');
-					return;
+				const selectedVisibility =
+					(visibilityEl?.value as Profile['profileVisibility']) || 'private';
+
+				// Strict directory-quality gate — ONLY when publishing publicly (#68).
+				// A private profile is a work-in-progress by design; forcing every
+				// field before "save" makes the form hostile and prevents drafting.
+				// The abuse limits (bio ≤ 500, skills ≤ 30 tags, etc.) still apply
+				// server-side regardless of visibility.
+				if (selectedVisibility === 'public') {
+					if (bio.length < 50) {
+						alert('Public profiles need a bio of at least 50 characters.');
+						return;
+					}
+					if (skills.size < 2) {
+						alert('Public profiles need at least 2 skills.');
+						return;
+					}
+					if (interests.size < 2) {
+						alert('Public profiles need at least 2 interests.');
+						return;
+					}
 				}
 
 				if (submitBtn) {
@@ -1034,7 +1077,7 @@ import Footer from '../../components/Footer.astro';
 						location: locationEl?.value,
 						timezone: timezoneEl?.value,
 						availability: (availabilityEl?.value as Profile['availability']) || 'active',
-						profileVisibility: (visibilityEl?.value as Profile['profileVisibility']) || 'private',
+						profileVisibility: selectedVisibility,
 						fieldVisibility,
 						yearsOfExperience,
 						githubUrl: trimmedUrl(githubUrlEl?.value),
