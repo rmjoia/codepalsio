@@ -233,10 +233,18 @@ jobs:
   # pushes never reach prod. Depends on validate (same quality gates
   # as dev); the dev_deploy / e2e_dev chain runs in parallel with the
   # approval wait, so prod is never blocked by a dev flake.
+  #
+  # Feature flag: the `PROD_DEPLOY_ENABLED` repo variable must be set
+  # to the string "true" for prod_deploy (and e2e_prod) to run. This
+  # keeps main releasable while the one-time operator setup (prod SWA
+  # resource, AZURE_STATIC_WEB_APPS_API_TOKEN_PROD secret, `production`
+  # GitHub Environment with required reviewer) is still pending; without
+  # the variable both prod jobs skip cleanly instead of failing on an
+  # empty deploy token.
   # ─────────────────────────────────────────────────────────────────────
   prod_deploy:
     needs: validate
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.PROD_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     name: Deploy prod (codepals.io)
     environment:
