@@ -144,10 +144,23 @@ import Footer from '../../components/Footer.astro';
 					<div id="profile-languages" class="flex flex-wrap gap-2"></div>
 				</section>
 
-				<!-- Social links -->
-				<section id="profile-links-section" class="hidden mb-6">
-					<h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">Links</h2>
-					<ul id="profile-links" class="flex flex-col gap-2 text-sm"></ul>
+				<!-- Contact — the primary CTA on this page while in-app messaging
+					is still unimplemented (spec 005 queued). Surfaces whichever of
+					githubUrl / linkedinUrl / websiteUrl the profile has set, as
+					prominent buttons. Falls back to github.com/<githubUsername>
+					when no explicit github URL is set — every CodePal has a
+					GitHub login by definition. Set-expectations copy makes clear
+					that in-app messaging is coming; this is the bridge.
+					See issue #73. -->
+				<section id="profile-contact-section" class="hidden mb-6">
+					<h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">
+						Get in touch
+					</h2>
+					<p id="profile-contact-note" class="text-sm text-slate-600 mb-3">
+						In-app messaging is coming soon. For now, say hi via one of the links below — the owner
+						picks where to be reached.
+					</p>
+					<div id="profile-contact-buttons" class="flex flex-wrap gap-2"></div>
 				</section>
 
 				<!-- Footer: last updated -->
@@ -245,30 +258,51 @@ import Footer from '../../components/Footer.astro';
 				dl.classList.remove('hidden');
 			}
 
-			function renderLinks(profile: PublicProfile): void {
-				const list = document.getElementById('profile-links');
-				const section = document.getElementById('profile-links-section');
-				if (!list || !section) return;
+			function renderContact(profile: PublicProfile): void {
+				const container = document.getElementById('profile-contact-buttons');
+				const section = document.getElementById('profile-contact-section');
+				if (!container || !section) return;
 
-				const links: Array<[string, string]> = [];
-				if (profile.githubUrl) links.push(['GitHub', profile.githubUrl]);
-				else if (profile.githubUsername)
-					links.push(['GitHub', `https://github.com/${profile.githubUsername}`]);
-				if (profile.linkedinUrl) links.push(['LinkedIn', profile.linkedinUrl]);
-				if (profile.websiteUrl) links.push(['Website', profile.websiteUrl]);
+				// Collect the available contact routes in priority order:
+				// explicit githubUrl, otherwise the fallback to the canonical
+				// github.com/<username>; LinkedIn and Website only when
+				// explicitly set. The fallback matters — a profile with no
+				// explicit URLs still has a reachable owner via GitHub.
+				const routes: Array<{ label: string; href: string; variant: 'primary' | 'secondary' }> = [];
+				if (profile.githubUrl) {
+					routes.push({ label: 'GitHub', href: profile.githubUrl, variant: 'primary' });
+				} else if (profile.githubUsername) {
+					routes.push({
+						label: 'GitHub',
+						href: `https://github.com/${profile.githubUsername}`,
+						variant: 'primary',
+					});
+				}
+				if (profile.linkedinUrl) {
+					routes.push({ label: 'LinkedIn', href: profile.linkedinUrl, variant: 'secondary' });
+				}
+				if (profile.websiteUrl) {
+					routes.push({ label: 'Website', href: profile.websiteUrl, variant: 'secondary' });
+				}
 
-				if (links.length === 0) return;
+				if (routes.length === 0) return;
 
-				links.forEach(([label, href]) => {
-					const li = document.createElement('li');
+				// Button-style anchors (not inline text) so the Contact affordance
+				// reads as the primary CTA on this page. target=_blank +
+				// rel=noopener,noreferrer are mandatory for cross-origin links
+				// (prevents the opened page from controlling our window.opener
+				// and avoids leaking the referrer header).
+				routes.forEach(({ label, href, variant }) => {
 					const a = document.createElement('a');
 					a.href = href;
 					a.target = '_blank';
 					a.rel = 'noopener noreferrer';
-					a.className = 'text-primary-600 hover:text-primary-700 hover:underline';
-					a.textContent = `${label}: ${href}`;
-					li.appendChild(a);
-					list.appendChild(li);
+					a.className =
+						variant === 'primary'
+							? 'inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg font-semibold hover:bg-primary-600 transition-colors text-sm'
+							: 'inline-flex items-center gap-2 px-4 py-2 bg-white text-primary-600 border border-primary-500 rounded-lg font-semibold hover:bg-primary-50 transition-colors text-sm';
+					a.textContent = label;
+					container.appendChild(a);
 				});
 				section.classList.remove('hidden');
 			}
@@ -349,7 +383,7 @@ import Footer from '../../components/Footer.astro';
 				}
 
 				renderMeta(profile);
-				renderLinks(profile);
+				renderContact(profile);
 
 				if (profile.updatedAt) {
 					const el = document.getElementById('profile-updated');

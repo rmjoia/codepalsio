@@ -111,11 +111,11 @@ test.describe('/find/<username> detail page — visibility/status states', () =>
 		await expect(page.locator('#profile-state')).toBeVisible();
 		await expect(page.locator('#profile-display-name')).toHaveText('Alice Example');
 		await expect(page.locator('#profile-bio')).toHaveText('Building open-source tools.');
-		// Skills / interests / languages / links sections reveal when present.
+		// Skills / interests / languages / contact sections reveal when present.
 		await expect(page.locator('#profile-skills-section')).toBeVisible();
 		await expect(page.locator('#profile-interests-section')).toBeVisible();
 		await expect(page.locator('#profile-languages-section')).toBeVisible();
-		await expect(page.locator('#profile-links-section')).toBeVisible();
+		await expect(page.locator('#profile-contact-section')).toBeVisible();
 		// The error / not-found / private states stay hidden.
 		await expect(page.locator('#not-found-state')).toBeHidden();
 		await expect(page.locator('#private-state')).toBeHidden();
@@ -199,6 +199,92 @@ test.describe('/find/<username> detail page — visibility/status states', () =>
 
 		await expect(page.locator('#error-state')).toBeVisible();
 		await expect(page.locator('#profile-state')).toBeHidden();
+	});
+});
+
+// Issue #73 — MVP-launch bridge: in-app messaging (spec 005) is not
+// implemented yet, so /find/<username> surfaces the owner's GitHub /
+// LinkedIn / website URLs as the primary CTA. This describe exercises
+// the two paths the render function has to get right: explicit URLs
+// AND the fallback to github.com/<username> when no explicit githubUrl
+// is set — every CodePal has a GitHub login by definition, so the
+// fallback matters.
+test.describe('/find/<username> — Contact affordance (issue #73)', () => {
+	test('renders the Contact section as prominent buttons when URLs are present', async ({
+		page,
+	}) => {
+		await mockAuth(page);
+		await serveDetailPageAtAnyUsername(page);
+		await page.route('**/api/profile-by-username**', (route) =>
+			route.fulfill({ json: { profile: FULL_PROFILE } })
+		);
+
+		await page.goto('/find/alice');
+
+		// The section + the honest set-expectations note render.
+		await expect(page.locator('#profile-contact-section')).toBeVisible();
+		await expect(page.locator('#profile-contact-note')).toContainText(/messaging/i);
+
+		// Each explicit URL renders as a button-styled <a> with the correct
+		// href, target=_blank, and rel=noopener,noreferrer (security:
+		// cross-origin links MUST NOT control window.opener or leak
+		// Referer). Locator by href since the labels are "GitHub"/
+		// "LinkedIn"/"Website" and labels alone could match copy elsewhere.
+		const githubLink = page.locator('#profile-contact-buttons a[href="https://github.com/alice"]');
+		await expect(githubLink).toBeVisible();
+		await expect(githubLink).toHaveAttribute('target', '_blank');
+		await expect(githubLink).toHaveAttribute('rel', /noopener/);
+		await expect(githubLink).toHaveAttribute('rel', /noreferrer/);
+		await expect(
+			page.locator('#profile-contact-buttons a[href="https://linkedin.com/in/alice"]')
+		).toBeVisible();
+		await expect(
+			page.locator('#profile-contact-buttons a[href="https://alice.dev"]')
+		).toBeVisible();
+	});
+
+	test('falls back to github.com/<username> when no explicit githubUrl is set', async ({
+		page,
+	}) => {
+		// The fallback is the whole point of the issue — a user who hasn't
+		// filled any URLs is still reachable via their canonical GitHub
+		// profile. Strip every URL from the fixture, keep githubUsername.
+		await mockAuth(page);
+		await serveDetailPageAtAnyUsername(page);
+		const noUrls = { ...FULL_PROFILE };
+		delete (noUrls as { githubUrl?: string }).githubUrl;
+		delete (noUrls as { linkedinUrl?: string }).linkedinUrl;
+		delete (noUrls as { websiteUrl?: string }).websiteUrl;
+		await page.route('**/api/profile-by-username**', (route) =>
+			route.fulfill({ json: { profile: noUrls } })
+		);
+
+		await page.goto('/find/alice');
+
+		await expect(page.locator('#profile-contact-section')).toBeVisible();
+		// Fallback link to github.com/<githubUsername>.
+		await expect(
+			page.locator('#profile-contact-buttons a[href="https://github.com/alice"]')
+		).toBeVisible();
+		// No LinkedIn / Website buttons.
+		await expect(page.locator('#profile-contact-buttons a')).toHaveCount(1);
+	});
+
+	test('hides the Contact section when the profile is 403 or 404', async ({ page }) => {
+		// The whole #profile-state is hidden in these states, so the
+		// Contact section — which lives inside #profile-state — is too.
+		// Pin this invariant so a future refactor that pulls Contact out
+		// of #profile-state would surface here.
+		await mockAuth(page);
+		await serveDetailPageAtAnyUsername(page);
+		await page.route('**/api/profile-by-username**', (route) =>
+			route.fulfill({ status: 403, json: { error: 'Profile is private' } })
+		);
+
+		await page.goto('/find/alice');
+
+		await expect(page.locator('#private-state')).toBeVisible();
+		await expect(page.locator('#profile-contact-section')).toBeHidden();
 	});
 });
 
