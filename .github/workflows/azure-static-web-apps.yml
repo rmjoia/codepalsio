@@ -225,3 +225,99 @@ jobs:
           done
           echo "::error::E2E failed against dev.codepals.io after 3 attempts"
           exit 1
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Stage 4 — Deploy to the PROD SWA (codepals.io). Gated on the
+  # `production` GitHub Environment, which requires a manual reviewer
+  # approval before the job starts. Only runs on push to main — PR
+  # pushes never reach prod. Depends on validate (same quality gates
+  # as dev); the dev_deploy / e2e_dev chain runs in parallel with the
+  # approval wait, so prod is never blocked by a dev flake.
+  # ─────────────────────────────────────────────────────────────────────
+  prod_deploy:
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    name: Deploy prod (codepals.io)
+    environment:
+      name: production
+      url: https://codepals.io
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          lfs: false
+      - name: Build And Deploy (prod SWA)
+        id: builddeploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          # Separate deploy token for the prod SWA resource. Must be
+          # configured in repo secrets BEFORE the first push to main
+          # after this workflow merges, or prod_deploy will fail hard
+          # (surfacing the missing-token as an operator action item).
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_PROD }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: 'upload'
+          app_location: '/'
+          api_location: 'api'
+          output_location: 'dist'
+          api_build_command: 'npm ci --include=dev && npm test && npm run build'
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Stage 5 — Post-deploy smoke against codepals.io. Mirrors e2e_dev
+  # but strict-mode auth is NOT required (prod GitHub OAuth app may be
+  # the pre-configured provider, which Playwright can't drive without
+  # a real session); the suite still validates reachability + public
+  # render paths.
+  # ─────────────────────────────────────────────────────────────────────
+  e2e_prod:
+    needs: prod_deploy
+    runs-on: ubuntu-latest
+    name: E2E (codepals.io)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+      - name: Install root deps
+        run: npm ci
+      - name: Wait for SWA readiness (poll homepage until 200, max 5min)
+        run: |
+          deadline=$(($(date +%s) + 300))
+          attempts=0
+          while true; do
+            attempts=$((attempts + 1))
+            code=$(curl -sLo /dev/null -w "%{http_code}" --max-time 10 https://codepals.io/ || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "https://codepals.io/ ready (200) after $attempts attempt(s)"
+              break
+            fi
+            now=$(date +%s)
+            if [ "$now" -gt "$deadline" ]; then
+              echo "::error::Timed out waiting for https://codepals.io/ (last code: $code)"
+              exit 1
+            fi
+            echo "  attempt $attempts: $code, retrying in 5s..."
+            sleep 5
+          done
+      - name: Run E2E smoke against prod (with retry)
+        env:
+          E2E_BASE_URL: https://codepals.io
+          E2E_AUTH_REQUIRED: '0'
+        run: |
+          for attempt in 1 2 3; do
+            echo "::group::E2E attempt $attempt/3"
+            if npm run test:e2e; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -lt 3 ]; then
+              echo "E2E attempt $attempt failed; retrying in 30s..."
+              sleep 30
+            fi
+          done
+          echo "::error::E2E failed against codepals.io after 3 attempts"
+          exit 1
