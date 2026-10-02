@@ -15,3 +15,4 @@ import './admin-users';
 import './admins-list';
 import './admins-grant';
 import './admins-revoke';
+import './report-submit';

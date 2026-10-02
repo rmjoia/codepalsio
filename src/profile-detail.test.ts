@@ -99,3 +99,107 @@ describe('find/<username> — Contact affordance (issue #73)', () => {
 		});
 	});
 });
+
+// Issue #84 / spec 003 US2 — Report affordance. The companion piece to
+// the Contact affordance above: Contact says "reach out", Report says
+// "something's off". These invariants pin the markup + script wiring so
+// a future refactor can't silently break the moderation submission path.
+describe('find/<username> — Report affordance (spec 003 US2, issue #84)', () => {
+	describe('markup', () => {
+		it('declares the Report button wrap + button, both initially hidden', () => {
+			// Wrap starts hidden; the client script reveals it only after
+			// confirming a non-self-view signed-in viewer. If the hidden
+			// class drops, anonymous / self viewers would see a button that
+			// 400s on submit.
+			expect(source).toMatch(/id=["']profile-report-wrap["'][^>]*class=["'][^"']*\bhidden\b/);
+			expect(source).toMatch(/id=["']profile-report-btn["']/);
+			expect(source).toMatch(/>\s*Report this profile/);
+		});
+
+		it('declares a <dialog id="report-dialog"> native modal (not a custom overlay)', () => {
+			// Browser-native <dialog> gets escape-key handling, focus trap,
+			// and ::backdrop styling for free. Picking a bespoke overlay
+			// would skip those a11y wins — pin the <dialog>.
+			expect(source).toMatch(/<dialog[^>]*id=["']report-dialog["']/);
+		});
+
+		it('offers all five reason categories as radio inputs', () => {
+			// REPORT_REASONS in api/src/lib/reports.ts must match 1:1.
+			// Positive — each value present as a radio option.
+			const reasons = ['off_topic', 'harassment', 'impersonation', 'spam', 'other'];
+			for (const reason of reasons) {
+				expect(source).toMatch(new RegExp(`type=["']radio["'][^>]*value=["']${reason}["']`, 's'));
+			}
+		});
+
+		it('caps the note at 500 characters via maxlength', () => {
+			// Spec FR-111 schema: note ≤ 500 chars. Pin the client-side
+			// hint so the UX doesn't let users type something the server
+			// will truncate.
+			expect(source).toMatch(/id=["']report-note["'][^>]*maxlength=["']500["']/);
+		});
+
+		it('links to the Terms page in the modal copy', () => {
+			// Reporters should see what policy the report maps to. Pin
+			// the /terms link in the dialog so a copy-edit can't drop it.
+			expect(source).toMatch(/href=["']\/terms["']/);
+		});
+
+		it('declares a toast element for the submission confirmation', () => {
+			// The response is deliberately opaque (FR-113) — the only
+			// signal to the reporter is this toast. If the element drops,
+			// a successful submit would feel like nothing happened.
+			expect(source).toMatch(/id=["']report-toast["'][^>]*role=["']status["']/);
+			expect(source).toMatch(/Thanks,\s*we['']ll review/i);
+		});
+	});
+
+	describe('script wiring', () => {
+		it('imports submitReport, getPrincipal and ReportReason from the api service', () => {
+			// Any one of these dropping breaks a core piece — getPrincipal
+			// drives the self-view hide, submitReport drives the POST, and
+			// ReportReason types the radio value. Pin the import.
+			expect(source).toMatch(/\bgetPrincipal\b/);
+			expect(source).toMatch(/\bsubmitReport\b/);
+			expect(source).toMatch(/\bReportReason\b/);
+		});
+
+		it('has a wireReportAffordance function and calls it from the resolved-profile branch', () => {
+			expect(source).toMatch(/function\s+wireReportAffordance\s*\(/);
+			// Called with `void` to make the fire-and-forget intent
+			// explicit (ESLint no-floating-promises rule compliance).
+			expect(source).toMatch(/void\s+wireReportAffordance\s*\(\s*profile\s*\)/);
+		});
+
+		it('hides the button on self-view (viewerLogin === ownerLogin, case-insensitive)', () => {
+			// Pin the two toLowerCase() calls so a future refactor that
+			// drops case-insensitivity doesn't let a 'Rmjoia' viewer see
+			// a Report button on 'rmjoia' profile. The server also
+			// rejects self-reports — this is UX hygiene.
+			expect(source).toMatch(
+				/viewerLogin\s*=\s*\(principal\.userDetails[\s\S]{0,80}\.toLowerCase\(\)/
+			);
+			expect(source).toMatch(
+				/ownerLogin\s*=\s*\(profile\.githubUsername[\s\S]{0,80}\.toLowerCase\(\)/
+			);
+			expect(source).toMatch(/viewerLogin\s*===\s*ownerLogin/);
+		});
+
+		it('prevents the <form method="dialog"> default and drives the POST itself', () => {
+			// If a future refactor forgets `e.preventDefault()`, the
+			// form's method="dialog" closes the modal WITHOUT firing a
+			// POST — report never reaches the server, no feedback. Pin
+			// the preventDefault() AND the submitReport() call that
+			// replaces it.
+			expect(source).toMatch(/e\.preventDefault\(\)/);
+			expect(source).toMatch(/await\s+submitReport\s*\(/);
+		});
+
+		it('surfaces an error message in-dialog on submission failure (no silent fail)', () => {
+			// A 500 from the server must stay visible so the reporter
+			// knows to retry. Pin the error-element reveal path.
+			expect(source).toMatch(/id=["']report-error["']/);
+			expect(source).toMatch(/errorEl.*classList\.remove\(['"]hidden['"]\)/);
+		});
+	});
+});

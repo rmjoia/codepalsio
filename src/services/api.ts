@@ -355,6 +355,43 @@ export async function saveProfile(input: ProfileInput): Promise<Profile> {
 }
 
 /**
+ * Report-submission types (spec 003 US2).
+ *
+ * The literal union MUST stay in sync with REPORT_REASONS in
+ * api/src/lib/reports.ts — the handler rejects any string outside the
+ * server-side allow-list, so a drift here means users would file reports
+ * that silently 400. Changes must land in both files + the modal UI in
+ * src/pages/find/profile.astro + the admin queue in /admin/reports (S4).
+ */
+export type ReportReason = 'off_topic' | 'harassment' | 'impersonation' | 'spam' | 'other';
+
+export interface ReportSubmission {
+	reportedProfileId: string;
+	reason: ReportReason;
+	note?: string;
+}
+
+/**
+ * POST /api/report → files a moderation report against another profile.
+ * See spec 003 FR-110..FR-113. The response is deliberately opaque
+ * (`{ success: true }`) — the server never leaks outcome specifics to
+ * the reporter (privacy of the reported user).
+ */
+export async function submitReport(input: ReportSubmission): Promise<void> {
+	const res = await fetch('/api/report-submit', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input),
+	});
+	if (!res.ok) {
+		const body = await safeJson(res);
+		const err: { error?: string } | undefined =
+			body && typeof body === 'object' ? (body as { error?: string }) : undefined;
+		throw new ApiError(res.status, err?.error ?? 'report-submit', body);
+	}
+}
+
+/**
  * POST /api/account-delete → removes the user's profile + user record.
  */
 export async function deleteAccount(): Promise<void> {
