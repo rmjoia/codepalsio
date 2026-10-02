@@ -77,6 +77,56 @@ import Footer from '../../components/Footer.astro';
 
 			<!-- View mode -->
 			<div id="view-mode">
+				<!--
+					Moderator-action banner (spec 003 US3). Shown when the loaded
+					profile has `unlistedBy` set — the profile was removed from
+					public discovery by a moderator, not by the owner. Takes
+					precedence over the incomplete banner because the user needs
+					to know the state before being nudged to add fields.
+					Issue #85.
+				-->
+				<div
+					id="unlisted-banner"
+					class="hidden bg-red-50 border border-red-200 rounded-xl p-6 mb-8"
+				>
+					<div class="flex items-start gap-4">
+						<svg
+							class="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							aria-hidden="true"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+							></path>
+						</svg>
+						<div>
+							<h3 class="font-semibold text-red-900 mb-1">Profile unlisted by a moderator</h3>
+							<p class="text-red-800 text-sm mb-3">
+								Your profile has been removed from public discovery (<code>/find</code>) by a
+								moderator. This usually means a report flagged a Terms of Service violation. See
+								<a
+									href="/terms"
+									target="_blank"
+									rel="noopener noreferrer"
+									class="underline hover:text-red-900">Terms § 9</a
+								>. If you think this is a mistake, email
+								<a href="mailto:abuse@codepals.io" class="underline hover:text-red-900"
+									>abuse@codepals.io</a
+								>
+								— a moderator will review.
+							</p>
+							<p class="text-red-700 text-xs italic">
+								The profile-visibility toggle is disabled until a moderator relists your profile.
+							</p>
+						</div>
+					</div>
+				</div>
+
 				<!-- Incomplete profile banner -->
 				<div
 					id="incomplete-banner"
@@ -757,6 +807,24 @@ import Footer from '../../components/Footer.astro';
 							? 'bg-green-100 text-green-700'
 							: 'bg-slate-100 text-slate-600');
 				}
+
+				// Moderator-action banner (spec 003 US3 / issue #85). When
+				// `unlistedBy` is set, the profile was unlisted by a
+				// moderator — show a dedicated red banner distinct from the
+				// owner-initiated private state. Also disables the public
+				// visibility radio in edit mode so the owner can't just
+				// toggle themselves back to public (bypassing the moderator
+				// action); the server-side check that would also reject
+				// this lives in S5 / the suspension chain.
+				const unlistedBanner = document.getElementById('unlisted-banner');
+				const unlistedByModerator = Boolean(profile?.unlistedBy);
+				if (unlistedBanner) {
+					unlistedBanner.classList.toggle('hidden', !unlistedByModerator);
+				}
+				const publicVisRadio = document.querySelector<HTMLInputElement>(
+					'input[name="profileVisibility"][value="public"]'
+				);
+				if (publicVisRadio) publicVisRadio.disabled = unlistedByModerator;
 
 				// Incomplete banner. Only shown for PUBLIC profiles that don't yet meet the
 				// directory quality bar — private profiles are opted out of discovery, so

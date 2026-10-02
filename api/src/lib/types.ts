@@ -109,5 +109,14 @@ export interface Profile {
 	websiteUrl?: string;
 	preferredLanguages?: string[];
 	yearsOfExperience?: number;
+	/**
+	 * Moderator action marker (spec 003 US3): when set, this profile was
+	 * removed from public discovery by the named admin, not by the owner.
+	 * profileVisibility is also forced to 'private' when this is set.
+	 * The owner's /profile edit page detects this field and shows a
+	 * "unlisted by a moderator" banner distinct from their own private
+	 * toggle. Cleared by a relist action (future).
+	 */
+	unlistedBy?: string;
 	updatedAt?: string;
 }

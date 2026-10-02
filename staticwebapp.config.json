@@ -41,6 +41,14 @@
 			"allowedRoles": ["authenticated"]
 		},
 		{
+			"route": "/api/reports-list",
+			"allowedRoles": ["authenticated"]
+		},
+		{
+			"route": "/api/report-resolve",
+			"allowedRoles": ["authenticated"]
+		},
+		{
 			"route": "/api/profile-get",
 			"allowedRoles": ["authenticated"]
 		},
