@@ -278,6 +278,68 @@ resource connectionsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabase
   }
 }
 
+// reports: moderation reports filed by users against other users' profiles.
+// Partition key /reportedProfileId makes "show me all reports for profile X"
+// a single-partition query — the natural read pattern for /admin/reports.
+// Schema is defined in .specify/spec/003-community-safety-and-anti-abuse.md
+// under "Key Entities → Report"; the handlers in api/src/report-submit.ts
+// (issue #84) and api/src/report-resolve.ts (issue #85) are authoritative.
+resource reportsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  parent: cosmosDb
+  name: 'reports'
+  properties: {
+    resource: {
+      id: 'reports'
+      partitionKey: {
+        paths: [
+          '/reportedProfileId'
+        ]
+        kind: 'Hash'
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        automatic: true
+        includedPaths: [
+          {
+            path: '/*'
+          }
+        ]
+      }
+    }
+  }
+}
+
+// audit: append-only moderator-action log. Partition key /adminId makes
+// "show me all actions by moderator X" a single-partition query — the natural
+// read pattern for admin-accountability review. Append-only semantics are
+// enforced in handler code (no delete endpoint); Cosmos itself doesn't
+// enforce immutability. Schema is defined in .specify/spec/003-community-
+// safety-and-anti-abuse.md under "Key Entities → AuditEntry".
+resource auditContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  parent: cosmosDb
+  name: 'audit'
+  properties: {
+    resource: {
+      id: 'audit'
+      partitionKey: {
+        paths: [
+          '/adminId'
+        ]
+        kind: 'Hash'
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        automatic: true
+        includedPaths: [
+          {
+            path: '/*'
+          }
+        ]
+      }
+    }
+  }
+}
+
 // Cosmos DB data plane RBAC for the managed identity.
 var cosmosDbDataContributorRoleId = '00000000-0000-0000-0000-000000000002'
 
