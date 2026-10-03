@@ -6,6 +6,8 @@ import {
 } from '@azure/functions';
 import { getClientPrincipal } from './lib/principal';
 import { getCosmosConfig, getContainer } from './lib/cosmos';
+import { createUserRepository } from './lib/users';
+import { assertNotSuspended } from './lib/suspension';
 import {
 	createReportRepository,
 	isReportReason,
@@ -48,6 +50,15 @@ export async function reportSubmitHandler(
 		context.error('report-submit: missing COSMOS_DB_CONNECTION_STRING or COSMOS_DB_DATABASE_NAME');
 		return { status: 500, jsonBody: { error: 'Server configuration error' } };
 	}
+
+	// Suspension gate (spec 003 FR-124b). A suspended user cannot file
+	// reports — the enforcement layer stays symmetric: suspension blocks
+	// writes, including meta-writes about other users.
+	const suspended = await assertNotSuspended(
+		principal,
+		createUserRepository(cfg.connectionString, cfg.database)
+	);
+	if (suspended) return suspended;
 
 	let body: Record<string, unknown>;
 	try {
@@ -135,6 +146,7 @@ export async function reportSubmitHandler(
 		reporterId: principal.userId,
 		reportedProfileId,
 		reportedUserId: reportedProfile.userId,
+		reportedUsername: reportedProfile.githubUsername,
 		reason,
 		note,
 		createdAt: existing?.createdAt ?? nowIso,

@@ -8,6 +8,7 @@ import { getClientPrincipal } from './lib/principal';
 import { getContainer, getCosmosConfig } from './lib/cosmos';
 import { findProfileWithAutoHeal } from './lib/profile-repo';
 import { createUserRepository } from './lib/users';
+import { assertNotSuspended } from './lib/suspension';
 import { isProfileVisibility } from './lib/validation';
 import type { Profile } from './lib/types';
 
@@ -29,6 +30,11 @@ app.http('profile-get', {
 		try {
 			const container = getContainer(cfg.connectionString, cfg.database, 'profiles');
 			const userRepo = createUserRepository(cfg.connectionString, cfg.database);
+
+			// Suspension gate (spec 003 FR-124b).
+			const suspended = await assertNotSuspended(principal, userRepo);
+			if (suspended) return suspended;
+
 			const { profile } = await findProfileWithAutoHeal(
 				container,
 				{ userId: principal.userId, userDetails: principal.userDetails },

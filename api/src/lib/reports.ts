@@ -60,6 +60,12 @@ export interface ReportRecord {
 	/** The reported user's SWA principal id — denormalised for the admin
 	 *  queue's join with the `users` container (suspend action in S5). */
 	reportedUserId: string;
+	/** The reported user's GitHub login at submission time. Denormalised
+	 *  so the S5 suspend path can look up the user record by `gh-<login>`
+	 *  without re-fetching the profile. Optional for compatibility with
+	 *  pre-S5 reports; the suspend handler falls back to the profile read
+	 *  when absent. */
+	reportedUsername?: string;
 	reason: ReportReason;
 	/** Optional free-text context from the reporter, capped at 500 chars. */
 	note?: string;

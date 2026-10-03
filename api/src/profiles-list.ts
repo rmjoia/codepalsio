@@ -2,6 +2,8 @@ import { app, type HttpRequest, type InvocationContext, type HttpResponseInit } 
 import { getClientPrincipal } from './lib/principal';
 import { getContainer, getCosmosConfig } from './lib/cosmos';
 import { applyFieldVisibility } from './lib/visibility';
+import { createUserRepository } from './lib/users';
+import { assertNotSuspended } from './lib/suspension';
 import type { Profile } from './lib/types';
 
 /**
@@ -96,6 +98,13 @@ export async function profilesHandler(
 		context.error('profiles: missing COSMOS_DB_CONNECTION_STRING or COSMOS_DB_DATABASE_NAME');
 		return { status: 500, jsonBody: { error: 'Server configuration error' } };
 	}
+
+	// Suspension gate (spec 003 FR-124b).
+	const suspended = await assertNotSuspended(
+		principal,
+		createUserRepository(cfg.connectionString, cfg.database)
+	);
+	if (suspended) return suspended;
 
 	try {
 		const container = getContainer(cfg.connectionString, cfg.database, 'profiles');

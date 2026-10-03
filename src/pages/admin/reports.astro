@@ -44,7 +44,8 @@ import Footer from '../../components/Footer.astro';
 				<h1 class="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">Moderation queue</h1>
 				<p class="text-slate-600">
 					Open reports from CodePals users. Dismiss when there's no violation; Unlist to remove the
-					reported profile from public discovery. Both actions write to an immutable audit log.
+					reported profile from public discovery; Suspend to block the user from the platform
+					entirely. Every action writes to an immutable audit log.
 				</p>
 			</div>
 
@@ -175,7 +176,15 @@ import Footer from '../../components/Footer.astro';
 					li.appendChild(noteBox);
 				}
 
-				// Actions.
+				// Actions. Three buttons, escalating severity:
+				//   Dismiss  — no action, close the report.
+				//   Unlist   — profile → private, owner can republish once
+				//              moderator clears the flag.
+				//   Suspend  — ban the account. Harshest option; requires an
+				//              extra confirm step. Hidden on reports targeting
+				//              the admin's own profile — the server guard
+				//              rejects this anyway, but the UI shouldn't
+				//              suggest it's possible.
 				const actions = document.createElement('div');
 				actions.className = 'flex items-center justify-end gap-2 mt-1';
 				const dismissBtn = document.createElement('button');
@@ -187,11 +196,18 @@ import Footer from '../../components/Footer.astro';
 				const unlistBtn = document.createElement('button');
 				unlistBtn.type = 'button';
 				unlistBtn.className =
-					'px-3 py-1.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors';
+					'px-3 py-1.5 text-sm font-semibold text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors';
 				unlistBtn.textContent = 'Unlist';
 				unlistBtn.dataset.action = 'unlist';
+				const suspendBtn = document.createElement('button');
+				suspendBtn.type = 'button';
+				suspendBtn.className =
+					'px-3 py-1.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors';
+				suspendBtn.textContent = 'Suspend';
+				suspendBtn.dataset.action = 'suspend';
 				actions.appendChild(dismissBtn);
 				actions.appendChild(unlistBtn);
+				actions.appendChild(suspendBtn);
 				li.appendChild(actions);
 
 				// Inline error line (per-row, revealed if resolve fails).
@@ -201,15 +217,25 @@ import Footer from '../../components/Footer.astro';
 				li.appendChild(rowError);
 
 				const onAction = async (actionBtn: HTMLButtonElement) => {
-					const action = actionBtn.dataset.action as 'dismiss' | 'unlist';
+					const action = actionBtn.dataset.action as 'dismiss' | 'unlist' | 'suspend';
 					if (action === 'unlist') {
 						const ok = window.confirm(
 							'Unlist this profile? The owner will see a moderator-action banner on their edit page and the toggle to re-publish will be disabled.'
 						);
 						if (!ok) return;
 					}
+					if (action === 'suspend') {
+						// Suspension is the harshest action — require typed
+						// confirmation, not a one-click OK. The server also
+						// blocks suspending yourself.
+						const typed = window.prompt(
+							'Suspend this user? They will be blocked from using CodePals until an admin lifts the suspension. Type SUSPEND to confirm.'
+						);
+						if (typed !== 'SUSPEND') return;
+					}
 					dismissBtn.disabled = true;
 					unlistBtn.disabled = true;
+					suspendBtn.disabled = true;
 					rowError.classList.add('hidden');
 					try {
 						await resolveReport({
@@ -233,11 +259,13 @@ import Footer from '../../components/Footer.astro';
 						rowError.classList.remove('hidden');
 						dismissBtn.disabled = false;
 						unlistBtn.disabled = false;
+						suspendBtn.disabled = false;
 					}
 				};
 
 				dismissBtn.addEventListener('click', () => void onAction(dismissBtn));
 				unlistBtn.addEventListener('click', () => void onAction(unlistBtn));
+				suspendBtn.addEventListener('click', () => void onAction(suspendBtn));
 				return li;
 			}
 
