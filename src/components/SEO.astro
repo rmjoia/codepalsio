@@ -1,0 +1,86 @@
+---
+/**
+ * Reusable SEO head component. Slot this inside every page's <head> and
+ * pass the per-page copy via props — the component emits a consistent
+ * set of meta tags (title, description, canonical, Open Graph, Twitter
+ * Cards, robots) so no page accidentally ships without one of the
+ * critical signals.
+ *
+ * Design: a pure meta-emitter — no <head> wrapper. The page keeps
+ * ownership of <head> and renders this component alongside its own
+ * icons / fonts / scripts.
+ *
+ * Why a component vs. per-page copy-paste: when one tag changes (OG
+ * image, site-wide theme, new search-engine verification meta), one
+ * edit propagates everywhere. The source-level invariant test (src/
+ * seo.test.ts) pins the component's shape so a drift breaks the test
+ * before it breaks indexing.
+ *
+ * Noindex: pass `noindex: true` for pages we DO NOT want in search
+ * results (admin, profile edit, dynamic error states). This emits
+ * `<meta name="robots" content="noindex,follow">` — the "follow"
+ * keeps outbound links discoverable while hiding the page itself.
+ */
+export interface Props {
+	/** Full page title — rendered verbatim in <title> and og:title. ≤ 60 chars
+	 *  for best SERP presentation; longer gets truncated by Google. */
+	title: string;
+	/** 150–160 chars; description SERP snippet. Also feeds og:description +
+	 *  twitter:description. Longer gets truncated. */
+	description: string;
+	/** Canonical path (e.g. "/terms"). Appended to the site origin to
+	 *  produce the absolute canonical URL. REQUIRED to avoid www /
+	 *  non-www duplication and to strip tracker query params. */
+	canonical: string;
+	/** OG + Twitter image, absolute URL. Defaults to the brand image.
+	 *  For MVP the brand image is a 343×343 square; v2 ships a dedicated
+	 *  1200×630 OG image per the issue's "Out of scope" note. */
+	image?: string;
+	/** og:type. 'website' is the default; use 'profile' for /find/<username>
+	 *  pages, 'article' for blog posts if/when we ship a blog. */
+	type?: 'website' | 'profile' | 'article';
+	/** Set true to emit a `noindex,follow` robots meta. Use for pages that
+	 *  shouldn't appear in search results (admin UI, profile edit). */
+	noindex?: boolean;
+}
+
+const SITE_ORIGIN = 'https://codepals.io';
+const SITE_NAME = 'CodePals';
+const DEFAULT_IMAGE = `${SITE_ORIGIN}/codepals00.jpg`;
+
+const {
+	title,
+	description,
+	canonical,
+	image = DEFAULT_IMAGE,
+	type = 'website',
+	noindex = false,
+} = Astro.props;
+
+// Normalise the canonical to an absolute URL. Accepts either a path
+// ("/terms") or an already-absolute URL. Trailing slashes are
+// preserved — moving between with/without is a canonicalisation
+// choice; the per-page call owns it.
+const canonicalUrl = canonical.startsWith('http') ? canonical : `${SITE_ORIGIN}${canonical}`;
+---
+
+<title>{title}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonicalUrl} />
+<meta name="robots" content={noindex ? 'noindex,follow' : 'index,follow'} />
+
+<!-- Open Graph -->
+<meta property="og:site_name" content={SITE_NAME} />
+<meta property="og:type" content={type} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonicalUrl} />
+<meta property="og:image" content={image} />
+<meta property="og:locale" content="en" />
+
+<!-- Twitter / X -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={image} />
+<meta name="twitter:url" content={canonicalUrl} />

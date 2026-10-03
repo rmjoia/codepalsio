@@ -10,22 +10,23 @@ import PrivacyModal from '../components/PrivacyModal.astro';
 import TermsModal from '../components/TermsModal.astro';
 import CodeOfConductModal from '../components/CodeOfConductModal.astro';
 import SponsorshipModal from '../components/SponsorshipModal.astro';
+import SEO from '../components/SEO.astro';
 ---
 
 <!doctype html>
 <html lang="en">
 	<head>
 		<meta charset="UTF-8" />
-		<meta
-			name="description"
-			content="CodePals.io - Code 'Penpals' Platform. Connect with developers, grow through mentorship, and build meaningful relationships."
-		/>
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="theme-color" content="#00bcd4" />
 
-		<!-- Preconnect to external resources -->
+		<!-- Preconnect to external resources. GitHub is listed because
+			the Header + /find avatars resolve to github.com/<login>.png and
+			preconnecting shaves ~100ms off the first-contentful-paint of
+			any page that renders a signed-in avatar. -->
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link rel="preconnect" href="https://github.com" crossorigin />
 
 		<!-- Google Fonts -->
 		<link
@@ -33,28 +34,47 @@ import SponsorshipModal from '../components/SponsorshipModal.astro';
 			rel="stylesheet"
 		/>
 
-		<title>CodePals.io - Connect with Code 'Penpals'</title>
 		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
 		<link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
 		<link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png" />
 
-		<!-- Open Graph / Social Media -->
-		<meta property="og:type" content="website" />
-		<meta property="og:url" content="https://codepals.io/" />
-		<meta property="og:title" content="CodePals.io - Code 'Penpals' Platform" />
-		<meta
-			property="og:description"
-			content="Connect with developers, grow through mentorship, and build meaningful relationships."
+		<SEO
+			title="CodePals — Code penpals, developer mentorship, pair programming"
+			description="CodePals is a developer community for code-related mentorship, pair programming, and learning. Find a code penpal who matches your stack and goals."
+			canonical="/"
 		/>
-		<meta property="og:image" content="https://codepals.io/og-image.png" />
-		<meta property="twitter:card" content="summary_large_image" />
-		<meta property="twitter:url" content="https://codepals.io/" />
-		<meta property="twitter:title" content="CodePals.io - Code 'Penpals' Platform" />
-		<meta
-			property="twitter:description"
-			content="Connect with developers, grow through mentorship, and build meaningful relationships."
+
+		<!-- JSON-LD structured data: Organization + WebSite. Helps search
+			engines render the brand knowledge panel and (eventually)
+			a site search box in the SERP. -->
+		<script
+			type="application/ld+json"
+			set:html={JSON.stringify({
+				'@context': 'https://schema.org',
+				'@graph': [
+					{
+						'@type': 'Organization',
+						'@id': 'https://codepals.io/#organization',
+						name: 'CodePals',
+						url: 'https://codepals.io/',
+						logo: 'https://codepals.io/codepals00.jpg',
+						description:
+							'A developer community for code-related mentorship, pair programming, and learning.',
+						sameAs: ['https://github.com/rmjoia/codepalsio'],
+					},
+					{
+						'@type': 'WebSite',
+						'@id': 'https://codepals.io/#website',
+						url: 'https://codepals.io/',
+						name: 'CodePals',
+						description:
+							'Code penpals for developers — mentorship, pair programming, and learning.',
+						publisher: { '@id': 'https://codepals.io/#organization' },
+						inLanguage: 'en',
+					},
+				],
+			})}
 		/>
-		<meta property="twitter:image" content="https://codepals.io/twitter-image.png" />
 	</head>
 	<body class="bg-white">
 		<Header />
