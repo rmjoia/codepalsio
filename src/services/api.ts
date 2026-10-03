@@ -104,6 +104,14 @@ export interface Profile {
 	websiteUrl?: string;
 	preferredLanguages?: string[];
 	yearsOfExperience?: number;
+	/**
+	 * Moderator action marker (spec 003 US3): when set, this profile was
+	 * removed from public discovery by a named admin, not by the owner.
+	 * Mirrors the server-side field in api/src/lib/types.ts. The owner's
+	 * profile edit page detects this and shows a "unlisted by a moderator"
+	 * banner distinct from their own private toggle.
+	 */
+	unlistedBy?: string;
 	updatedAt?: string;
 }
 
@@ -389,6 +397,64 @@ export async function submitReport(input: ReportSubmission): Promise<void> {
 			body && typeof body === 'object' ? (body as { error?: string }) : undefined;
 		throw new ApiError(res.status, err?.error ?? 'report-submit', body);
 	}
+}
+
+/**
+ * Moderation-queue types (spec 003 US3). ReportQueueEntry mirrors the
+ * server-side shape in api/src/reports-list.ts — reportCount aggregates
+ * open reports targeting the same profile; a value > 1 indicates a
+ * brigading / spike pattern the UI should visually flag.
+ */
+export type ReportStatus = 'open' | 'resolved' | 'dismissed';
+
+export interface ReportQueueEntry {
+	id: string;
+	reporterId: string;
+	reportedProfileId: string;
+	reportedUserId: string;
+	reason: ReportReason;
+	note?: string;
+	createdAt: string;
+	updatedAt?: string;
+	status: ReportStatus;
+	reportCount: number;
+}
+
+export type ResolveAction = 'dismiss' | 'unlist';
+
+/** GET /api/reports-list — admin-only. 401/403 throw ApiError. */
+export async function listReports(): Promise<ReportQueueEntry[]> {
+	const res = await fetch('/api/reports-list');
+	if (!res.ok) {
+		const body = await safeJson(res);
+		const err: { error?: string } | undefined =
+			body && typeof body === 'object' ? (body as { error?: string }) : undefined;
+		throw new ApiError(res.status, err?.error ?? 'reports-list', body);
+	}
+	const data = (await res.json()) as { reports?: ReportQueueEntry[] };
+	return data.reports ?? [];
+}
+
+/** POST /api/report-resolve — admin-only. 401/403/404/409 throw ApiError. */
+export async function resolveReport(input: {
+	reportId: string;
+	reportedProfileId: string;
+	action: ResolveAction;
+	reason?: string;
+}): Promise<{ newStatus: ReportStatus }> {
+	const res = await fetch('/api/report-resolve', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input),
+	});
+	if (!res.ok) {
+		const body = await safeJson(res);
+		const err: { error?: string } | undefined =
+			body && typeof body === 'object' ? (body as { error?: string }) : undefined;
+		throw new ApiError(res.status, err?.error ?? 'report-resolve', body);
+	}
+	const data = (await res.json()) as { newStatus?: ReportStatus };
+	return { newStatus: data.newStatus ?? 'resolved' };
 }
 
 /**

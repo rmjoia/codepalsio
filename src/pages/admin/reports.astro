@@ -1,0 +1,292 @@
+---
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Moderation queue · CodePals Admin</title>
+	</head>
+	<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
+		<Header />
+
+		<!-- Loading -->
+		<div id="loading-state" class="flex justify-center items-center min-h-[60vh]">
+			<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+		</div>
+
+		<!-- Forbidden (route gate fired) / error -->
+		<div id="error-state" class="hidden mx-auto max-w-2xl px-4 py-16 text-center">
+			<h1 id="error-title" class="text-2xl font-bold text-red-700 mb-2">
+				Couldn't load the moderation queue
+			</h1>
+			<p id="error-message" class="text-slate-600 mb-6">
+				Something went wrong. Please refresh and try again.
+			</p>
+			<button
+				id="admin-refresh-btn"
+				class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+			>
+				Refresh
+			</button>
+		</div>
+
+		<main id="admin-main" class="hidden mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-12">
+			<nav class="mb-6 text-sm">
+				<a href="/admin" class="text-primary-600 hover:text-primary-700 hover:underline"
+					>← Back to Admin</a
+				>
+			</nav>
+			<div class="mb-8">
+				<h1 class="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">Moderation queue</h1>
+				<p class="text-slate-600">
+					Open reports from CodePals users. Dismiss when there's no violation; Unlist to remove the
+					reported profile from public discovery. Both actions write to an immutable audit log.
+				</p>
+			</div>
+
+			<!-- Empty state -->
+			<div
+				id="empty-state"
+				class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center"
+			>
+				<div class="text-5xl mb-4">🎉</div>
+				<h2 class="text-xl font-bold text-slate-900 mb-2">No open reports</h2>
+				<p class="text-slate-600">The community is behaving itself. For now.</p>
+			</div>
+
+			<!-- Queue list -->
+			<ul id="reports-list" class="hidden space-y-4"></ul>
+		</main>
+
+		<Footer />
+
+		<script>
+			import {
+				getPrincipalWithRoles,
+				isAdminPrincipal,
+				listReports,
+				resolveReport,
+				type ReportQueueEntry,
+				type ReportReason,
+			} from '../../services/api';
+
+			function show(id: string): void {
+				document.getElementById(id)?.classList.remove('hidden');
+			}
+			function hide(id: string): void {
+				document.getElementById(id)?.classList.add('hidden');
+			}
+
+			function failed(title: string, message: string): void {
+				hide('loading-state');
+				hide('admin-main');
+				const t = document.getElementById('error-title');
+				const m = document.getElementById('error-message');
+				if (t) t.textContent = title;
+				if (m) m.textContent = message;
+				show('error-state');
+			}
+
+			/** Human-friendly label for each reason value. Keep in sync with
+			 *  the modal in src/pages/find/profile.astro and REPORT_REASONS
+			 *  in api/src/lib/reports.ts. */
+			const REASON_LABELS: Record<ReportReason, string> = {
+				off_topic: 'Off-topic outreach (dating / social)',
+				harassment: 'Harassment',
+				impersonation: 'Impersonation',
+				spam: 'Spam / unsolicited commercial',
+				other: 'Other',
+			};
+
+			function relativeTime(iso: string): string {
+				const then = new Date(iso).getTime();
+				if (Number.isNaN(then)) return iso;
+				const diffMs = Date.now() - then;
+				const sec = Math.round(diffMs / 1000);
+				if (sec < 60) return `${sec}s ago`;
+				const min = Math.round(sec / 60);
+				if (min < 60) return `${min}m ago`;
+				const hr = Math.round(min / 60);
+				if (hr < 48) return `${hr}h ago`;
+				const day = Math.round(hr / 24);
+				return `${day}d ago`;
+			}
+
+			function renderRow(entry: ReportQueueEntry): HTMLLIElement {
+				const li = document.createElement('li');
+				li.className =
+					'bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col gap-3';
+				li.dataset.reportId = entry.id;
+				li.dataset.reportedProfileId = entry.reportedProfileId;
+
+				// Header row: reason + spike badge + relative time.
+				const header = document.createElement('div');
+				header.className = 'flex items-center gap-3 flex-wrap';
+				const reasonBadge = document.createElement('span');
+				reasonBadge.className =
+					'inline-block text-xs font-semibold uppercase tracking-wide px-2 py-1 rounded bg-amber-100 text-amber-800';
+				reasonBadge.textContent = REASON_LABELS[entry.reason] ?? entry.reason;
+				header.appendChild(reasonBadge);
+
+				if (entry.reportCount > 1) {
+					const spike = document.createElement('span');
+					spike.className =
+						'inline-block text-xs font-semibold px-2 py-1 rounded bg-red-100 text-red-800';
+					spike.textContent = `× ${entry.reportCount} reports`;
+					spike.title = 'Multiple reporters flagged this profile — review for brigading';
+					header.appendChild(spike);
+				}
+				const age = document.createElement('span');
+				age.className = 'ml-auto text-xs text-slate-500';
+				age.textContent = relativeTime(entry.createdAt);
+				header.appendChild(age);
+				li.appendChild(header);
+
+				// Who / whom.
+				const whoRow = document.createElement('p');
+				whoRow.className = 'text-sm text-slate-700';
+				whoRow.innerHTML = ''; // reset — we build via textContent below
+				const reporterStrong = document.createElement('strong');
+				reporterStrong.textContent = 'Reporter: ';
+				whoRow.appendChild(reporterStrong);
+				const reporterText = document.createElement('span');
+				reporterText.textContent = entry.reporterId;
+				whoRow.appendChild(reporterText);
+				whoRow.appendChild(document.createElement('br'));
+				const reportedStrong = document.createElement('strong');
+				reportedStrong.textContent = 'Reported profile: ';
+				whoRow.appendChild(reportedStrong);
+				const reportedLink = document.createElement('a');
+				reportedLink.href = `/find/${entry.reportedProfileId}`;
+				reportedLink.className = 'text-primary-600 hover:underline';
+				reportedLink.textContent = entry.reportedProfileId;
+				whoRow.appendChild(reportedLink);
+				li.appendChild(whoRow);
+
+				// Note (optional).
+				if (entry.note) {
+					const noteBox = document.createElement('p');
+					noteBox.className = 'text-sm text-slate-600 bg-slate-50 rounded p-3 whitespace-pre-wrap';
+					noteBox.textContent = entry.note;
+					li.appendChild(noteBox);
+				}
+
+				// Actions.
+				const actions = document.createElement('div');
+				actions.className = 'flex items-center justify-end gap-2 mt-1';
+				const dismissBtn = document.createElement('button');
+				dismissBtn.type = 'button';
+				dismissBtn.className =
+					'px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition-colors';
+				dismissBtn.textContent = 'Dismiss';
+				dismissBtn.dataset.action = 'dismiss';
+				const unlistBtn = document.createElement('button');
+				unlistBtn.type = 'button';
+				unlistBtn.className =
+					'px-3 py-1.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors';
+				unlistBtn.textContent = 'Unlist';
+				unlistBtn.dataset.action = 'unlist';
+				actions.appendChild(dismissBtn);
+				actions.appendChild(unlistBtn);
+				li.appendChild(actions);
+
+				// Inline error line (per-row, revealed if resolve fails).
+				const rowError = document.createElement('p');
+				rowError.className = 'hidden text-sm text-red-600';
+				rowError.dataset.role = 'row-error';
+				li.appendChild(rowError);
+
+				const onAction = async (actionBtn: HTMLButtonElement) => {
+					const action = actionBtn.dataset.action as 'dismiss' | 'unlist';
+					if (action === 'unlist') {
+						const ok = window.confirm(
+							'Unlist this profile? The owner will see a moderator-action banner on their edit page and the toggle to re-publish will be disabled.'
+						);
+						if (!ok) return;
+					}
+					dismissBtn.disabled = true;
+					unlistBtn.disabled = true;
+					rowError.classList.add('hidden');
+					try {
+						await resolveReport({
+							reportId: entry.id,
+							reportedProfileId: entry.reportedProfileId,
+							action,
+						});
+						// Row removed from the queue on success. If this was
+						// the last row, re-render the empty state.
+						li.remove();
+						const list = document.getElementById('reports-list');
+						if (list && list.children.length === 0) {
+							hide('reports-list');
+							show('empty-state');
+						}
+					} catch (err) {
+						rowError.textContent =
+							err instanceof Error && err.message
+								? `Couldn't ${action}: ${err.message}`
+								: `Couldn't ${action} the report. Try again.`;
+						rowError.classList.remove('hidden');
+						dismissBtn.disabled = false;
+						unlistBtn.disabled = false;
+					}
+				};
+
+				dismissBtn.addEventListener('click', () => void onAction(dismissBtn));
+				unlistBtn.addEventListener('click', () => void onAction(unlistBtn));
+				return li;
+			}
+
+			async function init(): Promise<void> {
+				const principal = await getPrincipalWithRoles().catch(() => null);
+				if (!principal) {
+					window.location.href = '/.auth/login/github?post_login_redirect_uri=/admin/reports';
+					return;
+				}
+				if (!isAdminPrincipal(principal)) {
+					failed(
+						'Admin access required',
+						'This page is only accessible to moderators and administrators.'
+					);
+					return;
+				}
+
+				let reports: ReportQueueEntry[];
+				try {
+					reports = await listReports();
+				} catch (err) {
+					failed(
+						"Couldn't load the moderation queue",
+						err instanceof Error && err.message ? err.message : 'Please refresh.'
+					);
+					return;
+				}
+
+				hide('loading-state');
+				show('admin-main');
+
+				if (reports.length === 0) {
+					show('empty-state');
+					return;
+				}
+
+				const list = document.getElementById('reports-list');
+				if (!list) return;
+				for (const entry of reports) {
+					list.appendChild(renderRow(entry));
+				}
+				show('reports-list');
+			}
+
+			document.getElementById('admin-refresh-btn')?.addEventListener('click', () => {
+				window.location.reload();
+			});
+
+			init();
+		</script>
+	</body>
+</html>
