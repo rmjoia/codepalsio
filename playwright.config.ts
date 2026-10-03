@@ -34,7 +34,17 @@ export default defineConfig({
 	projects: [
 		{
 			name: 'chromium',
-			use: { ...devices['Desktop Chrome'] },
+			use: {
+				...devices['Desktop Chrome'],
+				// Allow overriding the Chromium executable at the environment
+				// level — needed in sandboxed dev environments where the
+				// Playwright CDN is unreachable but a system Chromium is
+				// pre-installed. CI leaves this unset and uses the version
+				// Playwright manages.
+				...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+					? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } }
+					: {}),
+			},
 		},
 	],
 	// Serve the built static site. astro preview serves dist/ for
