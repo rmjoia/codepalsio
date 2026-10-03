@@ -170,6 +170,23 @@ import SEO from '../../components/SEO.astro';
 					<div id="profile-contact-buttons" class="flex flex-wrap gap-2"></div>
 				</section>
 
+				<!-- Report affordance (spec 003 US2). A small, secondary-styled
+					button below Contact so it reads as "if something's off, do
+					this" rather than competing with the primary CTA. Hidden on
+					self-view (self-report rejected per spec 003 edge cases, and
+					defensive against the server-side guard — see
+					report-submit.ts). Hidden under 403/404 states because the
+					whole #profile-state is hidden in those branches. -->
+				<div id="profile-report-wrap" class="hidden mb-6">
+					<button
+						id="profile-report-btn"
+						type="button"
+						class="text-sm text-slate-500 hover:text-red-600 underline underline-offset-2 transition-colors"
+					>
+						Report this profile
+					</button>
+				</div>
+
 				<!-- Footer: last updated -->
 				<p
 					id="profile-updated"
@@ -181,11 +198,126 @@ import SEO from '../../components/SEO.astro';
 
 		<Footer />
 
+		<!-- Report dialog (spec 003 US2). <dialog> element is browser-native —
+			no custom modal library needed, keyboard + escape handling comes for
+			free, and the backdrop ::backdrop pseudo-element gets a tasteful dim
+			without extra DOM. Starts hidden; the Report button calls
+			showModal() which also makes it inert-blocking for the rest of the
+			page (focus trapped, Tab stays inside). -->
+		<dialog
+			id="report-dialog"
+			class="rounded-xl p-0 w-full max-w-md backdrop:bg-slate-900/50 backdrop:backdrop-blur-sm"
+		>
+			<form id="report-form" method="dialog" class="p-6">
+				<h2 class="text-lg font-bold text-slate-900 mb-2">Report this profile</h2>
+				<p class="text-sm text-slate-600 mb-4">
+					Reports are reviewed by platform moderators. We won't share your identity with the
+					reported user. See
+					<a
+						href="/terms"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="text-primary-600 hover:text-primary-700 underline">Terms § 9</a
+					>.
+				</p>
+
+				<fieldset class="mb-4">
+					<legend class="text-sm font-semibold text-slate-900 mb-2">Reason</legend>
+					<div class="space-y-2 text-sm text-slate-700">
+						<label class="flex items-start gap-2 cursor-pointer">
+							<input type="radio" name="report-reason" value="off_topic" class="mt-0.5" required />
+							<span>
+								<strong>Off-topic outreach</strong> — dating, romantic, or purely social contact (unrelated
+								to coding collaboration)
+							</span>
+						</label>
+						<label class="flex items-start gap-2 cursor-pointer">
+							<input type="radio" name="report-reason" value="harassment" class="mt-0.5" />
+							<span
+								><strong>Harassment</strong> — targeted unwanted contact, slurs, repeated unwelcome outreach</span
+							>
+						</label>
+						<label class="flex items-start gap-2 cursor-pointer">
+							<input type="radio" name="report-reason" value="impersonation" class="mt-0.5" />
+							<span
+								><strong>Impersonation</strong> — this profile claims to be someone they're not</span
+							>
+						</label>
+						<label class="flex items-start gap-2 cursor-pointer">
+							<input type="radio" name="report-reason" value="spam" class="mt-0.5" />
+							<span>
+								<strong>Spam</strong> — unsolicited commercial outreach (recruiting, sales, marketing)
+								or deceptive content
+							</span>
+						</label>
+						<label class="flex items-start gap-2 cursor-pointer">
+							<input type="radio" name="report-reason" value="other" class="mt-0.5" />
+							<span><strong>Other</strong> — add context in the note below</span>
+						</label>
+					</div>
+				</fieldset>
+
+				<label for="report-note" class="block text-sm font-semibold text-slate-900 mb-1">
+					Note <span class="font-normal text-slate-500">(optional)</span>
+				</label>
+				<textarea
+					id="report-note"
+					name="report-note"
+					rows="3"
+					maxlength="500"
+					class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 mb-1"
+					placeholder="What happened? Links, dates, context — up to 500 characters."></textarea>
+				<p class="text-xs text-slate-500 mb-4">
+					<span id="report-note-count">0</span> / 500
+				</p>
+
+				<p
+					id="report-error"
+					class="hidden text-sm text-red-600 mb-3"
+					role="alert"
+					aria-live="polite"
+				>
+				</p>
+
+				<div class="flex items-center justify-end gap-2">
+					<button
+						id="report-cancel-btn"
+						type="button"
+						class="px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+					>
+						Cancel
+					</button>
+					<button
+						id="report-submit-btn"
+						type="submit"
+						class="px-4 py-2 text-sm font-semibold text-white bg-primary-500 hover:bg-primary-600 disabled:bg-slate-400 disabled:cursor-not-allowed rounded-lg transition-colors"
+					>
+						Submit report
+					</button>
+				</div>
+			</form>
+		</dialog>
+
+		<!-- Toast confirmation (shown after a successful report submission).
+			Isolated from the dialog so it survives dialog close. Starts hidden;
+			shown briefly after the POST resolves. -->
+		<div
+			id="report-toast"
+			role="status"
+			aria-live="polite"
+			class="hidden fixed bottom-6 right-6 bg-slate-900 text-white px-4 py-3 rounded-lg shadow-xl text-sm"
+		>
+			Thanks, we'll review.
+		</div>
+
 		<script>
 			import {
 				getPublicProfileByUsername,
 				getProfileAvatarUrl,
+				getPrincipal,
+				submitReport,
 				type PublicProfile,
+				type ReportReason,
 			} from '../../services/api';
 
 			/**
@@ -314,6 +446,124 @@ import SEO from '../../components/SEO.astro';
 				section.classList.remove('hidden');
 			}
 
+			/**
+			 * Report-affordance wiring (spec 003 US2).
+			 *
+			 * Called from the resolved-profile branch of renderProfile. The
+			 * button + dialog markup lives in the body (near Footer); this
+			 * function (a) hides the button on self-view, (b) opens the
+			 * dialog on click, (c) wires submission to POST /api/report.
+			 *
+			 * Self-view check: compare the viewer's SWA userDetails (GitHub
+			 * login) to the profile's githubUsername, case-insensitive —
+			 * same semantics as the "you're listed" banner in /find. The
+			 * server also rejects self-reports (defence in depth); this
+			 * client-side hide is UX hygiene so the button simply never
+			 * appears when it wouldn't work.
+			 */
+			async function wireReportAffordance(profile: PublicProfile): Promise<void> {
+				const wrap = document.getElementById('profile-report-wrap');
+				const btn = document.getElementById('profile-report-btn') as HTMLButtonElement | null;
+				const dialog = document.getElementById('report-dialog') as HTMLDialogElement | null;
+				if (!wrap || !btn || !dialog) return;
+
+				// Only show the Report button to signed-in users who are
+				// NOT the profile owner. Anonymous viewers already can't
+				// reach the detail page (SWA route gate); if principal
+				// resolution fails for any reason, fail-closed and don't
+				// surface the button.
+				const principal = await getPrincipal().catch(() => null);
+				if (!principal) return;
+				const viewerLogin = (principal.userDetails ?? '').toLowerCase();
+				const ownerLogin = (profile.githubUsername ?? '').toLowerCase();
+				if (viewerLogin && ownerLogin && viewerLogin === ownerLogin) {
+					// Self-view — keep hidden.
+					return;
+				}
+
+				wrap.classList.remove('hidden');
+
+				const form = document.getElementById('report-form') as HTMLFormElement | null;
+				const cancelBtn = document.getElementById('report-cancel-btn') as HTMLButtonElement | null;
+				const submitBtn = document.getElementById('report-submit-btn') as HTMLButtonElement | null;
+				const noteEl = document.getElementById('report-note') as HTMLTextAreaElement | null;
+				const noteCount = document.getElementById('report-note-count');
+				const errorEl = document.getElementById('report-error');
+				const toast = document.getElementById('report-toast');
+
+				btn.addEventListener('click', () => {
+					// Reset form state each time the dialog opens — a prior
+					// error or a prior reason selection shouldn't bleed into
+					// a fresh report.
+					form?.reset();
+					if (noteCount) noteCount.textContent = '0';
+					if (errorEl) {
+						errorEl.textContent = '';
+						errorEl.classList.add('hidden');
+					}
+					dialog.showModal();
+				});
+
+				cancelBtn?.addEventListener('click', () => dialog.close());
+
+				noteEl?.addEventListener('input', () => {
+					if (noteCount) noteCount.textContent = String(noteEl.value.length);
+				});
+
+				form?.addEventListener('submit', async (e) => {
+					// The <form method="dialog"> default closes the dialog
+					// WITHOUT firing a POST — prevent that and drive the
+					// fetch ourselves so errors stay visible in the error
+					// element instead of closing on failure.
+					e.preventDefault();
+					if (!submitBtn) return;
+
+					const reasonInput = form.querySelector<HTMLInputElement>(
+						'input[name="report-reason"]:checked'
+					);
+					if (!reasonInput) {
+						if (errorEl) {
+							errorEl.textContent = 'Please pick a reason.';
+							errorEl.classList.remove('hidden');
+						}
+						return;
+					}
+					const reason = reasonInput.value as ReportReason;
+					const note = noteEl?.value?.trim() || undefined;
+
+					submitBtn.disabled = true;
+					submitBtn.textContent = 'Submitting…';
+					if (errorEl) errorEl.classList.add('hidden');
+
+					try {
+						await submitReport({
+							reportedProfileId: profile.id,
+							reason,
+							note,
+						});
+						dialog.close();
+						// Short-lived confirmation toast — the response is
+						// deliberately opaque (FR-113), so this is the only
+						// feedback the reporter gets.
+						if (toast) {
+							toast.classList.remove('hidden');
+							setTimeout(() => toast.classList.add('hidden'), 4000);
+						}
+					} catch (err) {
+						if (errorEl) {
+							errorEl.textContent =
+								err instanceof Error && err.message
+									? `Couldn't submit: ${err.message}`
+									: "Couldn't submit the report. Please try again.";
+							errorEl.classList.remove('hidden');
+						}
+					} finally {
+						submitBtn.disabled = false;
+						submitBtn.textContent = 'Submit report';
+					}
+				});
+			}
+
 			function renderProfile(profile: PublicProfile): void {
 				const nameEl = document.getElementById('profile-display-name');
 				const handleEl = document.getElementById('profile-handle');
@@ -391,6 +641,12 @@ import SEO from '../../components/SEO.astro';
 
 				renderMeta(profile);
 				renderContact(profile);
+				// Fire-and-forget — the report-affordance wiring doesn't block
+				// the rest of the render (it only reveals a button once the
+				// principal resolves, independent of profile paint). Awaiting
+				// here would force renderProfile() async and ripple through
+				// its callers for no visible-UX gain.
+				void wireReportAffordance(profile);
 
 				if (profile.updatedAt) {
 					const el = document.getElementById('profile-updated');

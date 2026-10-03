@@ -37,6 +37,10 @@
 			"allowedRoles": ["authenticated"]
 		},
 		{
+			"route": "/api/report-submit",
+			"allowedRoles": ["authenticated"]
+		},
+		{
 			"route": "/api/profile-get",
 			"allowedRoles": ["authenticated"]
 		},
