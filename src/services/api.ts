@@ -36,6 +36,54 @@ async function safeJson(res: Response): Promise<unknown> {
 	}
 }
 
+/**
+ * Suspension redirect gate (spec 003 FR-124b). Every authenticated API
+ * handler returns `403 { reason: 'suspended' }` for suspended users. This
+ * helper detects that signal and hard-navigates to `/suspended` instead
+ * of letting the error bubble up as an ApiError the UI would surface as
+ * a generic failure.
+ *
+ * Returns `true` when it has initiated a navigation (caller should bail
+ * out silently), `false` otherwise. Calling it is safe on any Response —
+ * non-403 responses, or 403s without the sentinel body, are no-ops.
+ *
+ * The caller's await should NEVER resolve after a successful redirect —
+ * use {@link gateSuspendedResponse} which hangs the promise so the UI
+ * can't flash a "something went wrong" toast before navigation unloads
+ * the page.
+ */
+export async function redirectIfSuspended(res: Response): Promise<boolean> {
+	if (res.status !== 403) return false;
+	let body: unknown;
+	try {
+		// Clone — if the sentinel check fails, the original body is still
+		// available for the caller's own error reporting.
+		body = await res.clone().json();
+	} catch {
+		return false;
+	}
+	if (body && typeof body === 'object' && (body as { reason?: unknown }).reason === 'suspended') {
+		if (typeof window !== 'undefined') {
+			window.location.href = '/suspended';
+		}
+		return true;
+	}
+	return false;
+}
+
+/**
+ * Helpers call this at the top of their non-OK branch. On a suspension
+ * signal, it initiates the redirect and then awaits a never-settling
+ * promise so the caller's `.catch` doesn't fire before `window.location`
+ * replaces the document. On any other status it's a no-op and the
+ * caller continues to its own error handling.
+ */
+async function gateSuspendedResponse(res: Response): Promise<void> {
+	if (await redirectIfSuspended(res)) {
+		await new Promise<never>(() => {});
+	}
+}
+
 export interface ClientPrincipal {
 	identityProvider: string;
 	userId: string;
@@ -179,7 +227,13 @@ export function getPrincipalWithRoles(): Promise<ClientPrincipal | null> {
 		if (!principal) return null;
 		try {
 			const r = await fetch('/api/get-roles');
-			if (!r.ok) return principal;
+			if (!r.ok) {
+				// A 403 { reason: 'suspended' } from get-roles redirects the
+				// user to /suspended; otherwise soft-fail with the un-enriched
+				// principal so the admin UI stays hidden (safe default).
+				await gateSuspendedResponse(r);
+				return principal;
+			}
 			const body = (await r.json()) as { roles?: unknown };
 			if (!Array.isArray(body.roles)) return principal;
 			const extra = body.roles.filter((x): x is string => typeof x === 'string');
@@ -261,6 +315,7 @@ export type DirectoryProfile = Pick<
 export async function getPublicProfiles(): Promise<DirectoryProfile[]> {
 	const res = await fetch('/api/profiles');
 	if (!res.ok) {
+		await gateSuspendedResponse(res);
 		throw new ApiError(res.status, 'profiles', await safeJson(res));
 	}
 	const data = await res.json();
@@ -307,7 +362,13 @@ export type PublicProfileResult =
 export async function getPublicProfileByUsername(username: string): Promise<PublicProfileResult> {
 	const res = await fetch(`/api/profile-by-username?username=${encodeURIComponent(username)}`);
 	if (res.status === 404) return { kind: 'not-found' };
-	if (res.status === 403) return { kind: 'private' };
+	// The suspension redirect fires BEFORE the 403=private branch so a
+	// suspended viewer gets navigated to /suspended rather than seeing a
+	// "profile is private" shell with nothing to click.
+	if (res.status === 403) {
+		await gateSuspendedResponse(res);
+		return { kind: 'private' };
+	}
 	if (!res.ok) {
 		throw new ApiError(res.status, 'profile-by-username', await safeJson(res));
 	}
@@ -336,6 +397,7 @@ export async function getProfile(): Promise<Profile | null> {
 	const res = await fetch('/api/profile-get');
 	if (!res.ok) {
 		if (res.status === 404) return null;
+		await gateSuspendedResponse(res);
 		throw new ApiError(res.status, 'profile-get', await safeJson(res));
 	}
 	const data = await res.json();
@@ -353,6 +415,7 @@ export async function saveProfile(input: ProfileInput): Promise<Profile> {
 		body: JSON.stringify(input),
 	});
 	if (!res.ok) {
+		await gateSuspendedResponse(res);
 		const body = await safeJson(res);
 		const err: { error?: string } | undefined =
 			body && typeof body === 'object' ? (body as { error?: string }) : undefined;
@@ -392,6 +455,7 @@ export async function submitReport(input: ReportSubmission): Promise<void> {
 		body: JSON.stringify(input),
 	});
 	if (!res.ok) {
+		await gateSuspendedResponse(res);
 		const body = await safeJson(res);
 		const err: { error?: string } | undefined =
 			body && typeof body === 'object' ? (body as { error?: string }) : undefined;
@@ -420,12 +484,21 @@ export interface ReportQueueEntry {
 	reportCount: number;
 }
 
-export type ResolveAction = 'dismiss' | 'unlist';
+/**
+ * Resolution actions for a moderation report. Must stay in sync with
+ * `RESOLVE_ACTIONS` in api/src/report-resolve.ts — the handler rejects
+ * any string outside the server-side allow-list.
+ *   - 'dismiss' — no violation, close the report (no profile change)
+ *   - 'unlist'  — flip profileVisibility to private + stamp unlistedBy
+ *   - 'suspend' — ban the reported user via UserRecord.suspended=true
+ */
+export type ResolveAction = 'dismiss' | 'unlist' | 'suspend';
 
 /** GET /api/reports-list — admin-only. 401/403 throw ApiError. */
 export async function listReports(): Promise<ReportQueueEntry[]> {
 	const res = await fetch('/api/reports-list');
 	if (!res.ok) {
+		await gateSuspendedResponse(res);
 		const body = await safeJson(res);
 		const err: { error?: string } | undefined =
 			body && typeof body === 'object' ? (body as { error?: string }) : undefined;
@@ -448,6 +521,7 @@ export async function resolveReport(input: {
 		body: JSON.stringify(input),
 	});
 	if (!res.ok) {
+		await gateSuspendedResponse(res);
 		const body = await safeJson(res);
 		const err: { error?: string } | undefined =
 			body && typeof body === 'object' ? (body as { error?: string }) : undefined;
@@ -463,6 +537,7 @@ export async function resolveReport(input: {
 export async function deleteAccount(): Promise<void> {
 	const res = await fetch('/api/account-delete', { method: 'POST' });
 	if (!res.ok) {
+		await gateSuspendedResponse(res);
 		throw new ApiError(res.status, 'account-delete', await safeJson(res));
 	}
 }
@@ -511,6 +586,7 @@ export async function getAdminUsers(): Promise<AdminUsersResponse> {
 	// management namespace. Same rename applied across the admin endpoints.
 	const res = await fetch('/api/manage-users');
 	if (!res.ok) {
+		await gateSuspendedResponse(res);
 		throw new ApiError(res.status, 'manage-users', await safeJson(res));
 	}
 	return await res.json();
@@ -528,7 +604,10 @@ export interface AdminListEntry {
 
 export async function listAdmins(): Promise<AdminListEntry[]> {
 	const res = await fetch('/api/roster-list');
-	if (!res.ok) throw new ApiError(res.status, 'roster-list', await safeJson(res));
+	if (!res.ok) {
+		await gateSuspendedResponse(res);
+		throw new ApiError(res.status, 'roster-list', await safeJson(res));
+	}
 	const data = await res.json();
 	return data?.admins ?? [];
 }
@@ -539,7 +618,10 @@ export async function grantAdmin(githubUsername: string): Promise<AdminListEntry
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ githubUsername }),
 	});
-	if (!res.ok) throw new ApiError(res.status, 'roster-grant', await safeJson(res));
+	if (!res.ok) {
+		await gateSuspendedResponse(res);
+		throw new ApiError(res.status, 'roster-grant', await safeJson(res));
+	}
 	const data = await res.json();
 	return data.admin;
 }
@@ -550,5 +632,8 @@ export async function revokeAdmin(githubUsername: string): Promise<void> {
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ githubUsername }),
 	});
-	if (!res.ok) throw new ApiError(res.status, 'roster-revoke', await safeJson(res));
+	if (!res.ok) {
+		await gateSuspendedResponse(res);
+		throw new ApiError(res.status, 'roster-revoke', await safeJson(res));
+	}
 }

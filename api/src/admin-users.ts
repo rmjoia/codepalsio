@@ -9,6 +9,7 @@ import {
 	type AdminRosterRepository,
 } from './lib/admin-roster';
 import { isAdminFor, parseAdminLogins, principalHasAdminRole } from './lib/roles';
+import { assertNotSuspended } from './lib/suspension';
 
 /**
  * Test seam — production handler builds these from env. The optional
@@ -121,6 +122,11 @@ export async function adminUsersHandler(
 		roster: createAdminRosterRepository(cfg.connectionString, cfg.database),
 		bootstrapLogins: parseAdminLogins(process.env.ADMIN_GITHUB_LOGINS),
 	};
+
+	// Suspension gate (spec 003 FR-124b).
+	const suspendedResponse = await assertNotSuspended(principal, authDeps.users);
+	if (suspendedResponse) return suspendedResponse;
+
 	const isAdmin = authDeps.verifyAdmin
 		? await authDeps.verifyAdmin(principal)
 		: principalHasAdminRole(principal) ||

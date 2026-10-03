@@ -2,6 +2,7 @@ import { app, type HttpRequest, type InvocationContext, type HttpResponseInit } 
 import { getCosmosConfig } from './lib/cosmos';
 import { getClientPrincipal } from './lib/principal';
 import { createUserRepository } from './lib/users';
+import { assertNotSuspended } from './lib/suspension';
 import { createAdminRosterRepository } from './lib/admin-roster';
 import { parseAdminLogins, resolveRoles } from './lib/roles';
 
@@ -106,6 +107,23 @@ export async function getRolesHandler(
 
 	try {
 		const repo = createUserRepository(cfg.connectionString, cfg.database);
+
+		// Suspension gate (spec 003 FR-124b). get-roles is called by the
+		// frontend fetch wrapper early in every signed-in page load; the
+		// 403 reason:'suspended' response triggers the frontend redirect
+		// to /suspended before any other API call runs.
+		const suspended = await assertNotSuspended(
+			{
+				userId: resolved.swaUserId,
+				userDetails: resolved.githubUsername,
+				identityProvider: resolved.identityProvider,
+				userRoles: [],
+				claims: [],
+			} as unknown as import('./lib/types').ClientPrincipal,
+			repo
+		);
+		if (suspended) return suspended;
+
 		const roster = createAdminRosterRepository(cfg.connectionString, cfg.database);
 		const roles = await resolveRoles(resolved, {
 			repo,

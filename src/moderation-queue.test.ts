@@ -53,12 +53,13 @@ describe('admin/reports.astro — moderation queue (spec 003 US3)', () => {
 			expect(queue).toMatch(/\bisAdminPrincipal\b/);
 		});
 
-		it('calls resolveReport with action: "dismiss" | "unlist" (no suspend yet)', () => {
-			// S5 adds suspend. S4 ships dismiss + unlist only. Pin that
-			// both buttons use those action values on their dataset.
+		it('wires all three moderation actions (dismiss / unlist / suspend)', () => {
+			// S5 ships suspend. Pin each dataset.action — a drive-by refactor
+			// that renames one of them without updating the API would
+			// silently break the queue.
 			expect(queue).toMatch(/dataset\.action\s*=\s*['"]dismiss['"]/);
 			expect(queue).toMatch(/dataset\.action\s*=\s*['"]unlist['"]/);
-			expect(queue).not.toMatch(/dataset\.action\s*=\s*['"]suspend['"]/);
+			expect(queue).toMatch(/dataset\.action\s*=\s*['"]suspend['"]/);
 		});
 
 		it('surfaces a spike indicator when reportCount > 1 (brigading signal)', () => {
@@ -69,6 +70,15 @@ describe('admin/reports.astro — moderation queue (spec 003 US3)', () => {
 
 		it('asks for confirmation before unlisting (reversible but consequential)', () => {
 			expect(queue).toMatch(/window\.confirm\(/);
+		});
+
+		it('requires a typed SUSPEND confirmation before suspending (irreversible, harshest action)', () => {
+			// Suspend is the harshest action — one-click OK is too easy to
+			// slip. The queue uses window.prompt and checks for the literal
+			// string 'SUSPEND'. If this test fails, verify the typed-
+			// confirmation UX is still in place.
+			expect(queue).toMatch(/window\.prompt\(/);
+			expect(queue).toMatch(/typed\s*!==\s*['"]SUSPEND['"]/);
 		});
 	});
 });

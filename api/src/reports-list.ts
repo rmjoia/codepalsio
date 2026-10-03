@@ -9,6 +9,7 @@ import { getCosmosConfig } from './lib/cosmos';
 import { createReportRepository, type ReportRecord } from './lib/reports';
 import { createAdminRosterRepository, type AdminRosterRepository } from './lib/admin-roster';
 import { createUserRepository, type UserRepository } from './lib/users';
+import { assertNotSuspended } from './lib/suspension';
 import { isAdminFor, parseAdminLogins, principalHasAdminRole } from './lib/roles';
 import type { ClientPrincipal } from './lib/types';
 
@@ -69,6 +70,10 @@ export async function reportsListHandler(
 			bootstrapLogins: parseAdminLogins(process.env.ADMIN_GITHUB_LOGINS),
 		};
 	}
+
+	// Suspension gate (spec 003 FR-124b).
+	const suspendedResponse = await assertNotSuspended(principal, repos.users);
+	if (suspendedResponse) return suspendedResponse;
 
 	const isAdmin = repos.verifyAdmin
 		? await repos.verifyAdmin(principal)

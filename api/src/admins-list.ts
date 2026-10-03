@@ -8,6 +8,7 @@ import {
 	type AdminRosterRepository,
 } from './lib/admin-roster';
 import { isAdminFor, parseAdminLogins, principalHasAdminRole } from './lib/roles';
+import { assertNotSuspended } from './lib/suspension';
 import type { ClientPrincipal } from './lib/types';
 
 /**
@@ -87,6 +88,11 @@ export async function adminsListHandler(
 			bootstrapLogins: parseAdminLogins(process.env.ADMIN_GITHUB_LOGINS),
 		};
 	}
+
+	// Suspension gate (spec 003 FR-124b). A suspended admin cannot act;
+	// suspension overrides the admin role.
+	const suspended = await assertNotSuspended(principal, repos.users);
+	if (suspended) return suspended;
 
 	// Fast path: invitation-assigned admin-tier role grants access without
 	// a roster lookup. Falls through to the roster path only for legacy /

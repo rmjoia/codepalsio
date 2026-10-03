@@ -10,21 +10,21 @@ import { createReportRepository, type ReportRecord } from './lib/reports';
 import { createAuditRepository, type AuditRepository } from './lib/audit';
 import { createAdminRosterRepository, type AdminRosterRepository } from './lib/admin-roster';
 import { createUserRepository, type UserRepository } from './lib/users';
+import { assertNotSuspended } from './lib/suspension';
 import { isAdminFor, parseAdminLogins, principalHasAdminRole } from './lib/roles';
 import { trimmedString } from './lib/validation';
 import type { ClientPrincipal, Profile } from './lib/types';
 
 /**
- * Allowed actions for S4. `suspend` is deferred to S5 (requires the
- * `assertNotSuspended` enforcement layer touching every authenticated
- * handler). Pin the literal union here so the server rejects anything
- * else before any Cosmos write.
+ * Allowed resolve actions. Pin the literal union here so the server
+ * rejects anything else before any Cosmos write.
  *
- * Spec 003 US3 ultimately defines dismiss/unlist/suspend/relist. This
- * module adds dismiss + unlist in S4; S5 extends it to suspend; a future
- * slice adds relist.
+ * Spec 003 US3 ultimately defines dismiss/unlist/suspend/relist. S4
+ * shipped dismiss + unlist; S5 adds suspend (relies on the
+ * `assertNotSuspended` enforcement layer in every authenticated handler
+ * — see `lib/suspension.ts`). A future slice adds relist.
  */
-export const RESOLVE_ACTIONS = ['dismiss', 'unlist'] as const;
+export const RESOLVE_ACTIONS = ['dismiss', 'unlist', 'suspend'] as const;
 export type ResolveAction = (typeof RESOLVE_ACTIONS)[number];
 
 export function isResolveAction(value: unknown): value is ResolveAction {
@@ -48,7 +48,8 @@ export interface ReportResolveRepos {
 
 /**
  * POST /api/report-resolve — admin-only. Body:
- *   { reportId: string, reportedProfileId: string, action: 'dismiss'|'unlist', reason?: string }
+ *   { reportId: string, reportedProfileId: string,
+ *     action: 'dismiss'|'unlist'|'suspend', reason?: string }
  *
  * The reportedProfileId is required (and MUST match the stored
  * reportedProfileId on the report row) because Cosmos partition-key
@@ -64,6 +65,12 @@ export interface ReportResolveRepos {
  * written. The profile owner's edit page detects `unlistedBy` and shows
  * a moderator-action banner; the visibility toggle is disabled until
  * an admin clears the flag.
+ *
+ * On suspend (S5): the reported user's UserRecord.suspended is set to
+ * true. Every subsequent authenticated API call from that user is
+ * blocked by `assertNotSuspended` (lib/suspension.ts) → the frontend
+ * fetch wrapper redirects them to /suspended. The report row is
+ * resolved + audited the same way as unlist.
  *
  * Self-protection: moderator cannot resolve a report targeting their
  * own profile (even to dismiss — gaming the system is still gaming the
@@ -118,6 +125,11 @@ export async function reportResolveHandler(
 			roster: createAdminRosterRepository(cfg!.connectionString, cfg!.database),
 			bootstrapLogins: parseAdminLogins(process.env.ADMIN_GITHUB_LOGINS),
 		} satisfies ReportResolveRepos);
+
+	// Suspension gate (spec 003 FR-124b). A suspended admin cannot
+	// moderate — suspension overrides the admin role.
+	const suspendedResponse = await assertNotSuspended(principal, repos.users);
+	if (suspendedResponse) return suspendedResponse;
 
 	const isAdmin = repos.verifyAdmin
 		? await repos.verifyAdmin(principal)
@@ -200,6 +212,56 @@ export async function reportResolveHandler(
 		}
 	}
 
+	// If suspending (spec 003 US3 / FR-124b): mark the reported user's
+	// UserRecord.suspended = true. Enforced on every subsequent request
+	// from them via assertNotSuspended on every authenticated handler.
+	// Self-protection: moderator cannot suspend themselves (checked
+	// above via reportedUserId === principal.userId).
+	//
+	// Lookup strategy: user records are keyed by `gh-<githubUsername>`,
+	// so we need the reported user's GitHub login — not their SWA userId
+	// (which is the hashed principal). report-submit denormalises
+	// `reportedUsername` onto the report at submission time; we fall back
+	// to a profile-read for legacy reports written before S5.
+	if (action === 'suspend') {
+		try {
+			let username = report.reportedUsername;
+			if (!username) {
+				const fetchProfile =
+					repos.fetchProfile ?? (async (id: string) => defaultFetchProfile(id, cfg!));
+				const profile = await fetchProfile(reportedProfileId);
+				username = profile?.githubUsername;
+			}
+			if (!username) {
+				context.error(
+					`report-resolve: cannot resolve githubUsername for suspend ` +
+						`(reportId=${report.id}, reportedUserId=${report.reportedUserId})`
+				);
+				return { status: 500, jsonBody: { error: 'Failed to suspend user' } };
+			}
+			const target = await repos.users.findByGithubUsernameAcrossShapes(username);
+			// If no record exists yet (reported user has never completed
+			// first login past user-record creation), we still create one
+			// via upsert so the suspension flag sticks the moment they
+			// return.
+			const record = target ?? {
+				id: `gh-${username.toLowerCase()}`,
+				githubUsername: username,
+				roles: [],
+				updatedAt: timestamp,
+				swaUserId: report.reportedUserId,
+			};
+			await repos.users.upsert({
+				...record,
+				suspended: true,
+				updatedAt: timestamp,
+			});
+		} catch (error) {
+			context.error('report-resolve: suspend user upsert failed', error);
+			return { status: 500, jsonBody: { error: 'Failed to suspend user' } };
+		}
+	}
+
 	// Update the report row — preserve all original fields, set status +
 	// resolution. The deterministic id makes this a point upsert.
 	const resolvedReport: ReportRecord = {
@@ -220,10 +282,16 @@ export async function reportResolveHandler(
 	}
 
 	// Audit row — append-only.
+	const auditAction =
+		action === 'dismiss'
+			? ('dismiss_report' as const)
+			: action === 'unlist'
+				? ('unlist_profile' as const)
+				: ('suspend_user' as const);
 	try {
 		await repos.audit.append({
 			adminId: principal.userId,
-			action: action === 'dismiss' ? 'dismiss_report' : 'unlist_profile',
+			action: auditAction,
 			targetUserId: report.reportedUserId,
 			targetProfileId: report.reportedProfileId,
 			reportId: report.id,
