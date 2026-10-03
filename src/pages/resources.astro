@@ -1,0 +1,508 @@
+---
+import '../styles/global.css';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import SEO from '../components/SEO.astro';
+
+/**
+ * /resources — curated outbound links. The whole file is static data +
+ * markup, zero scripts. Every link is to a source we recommend, with
+ * `rel="noopener noreferrer"` + `target="_blank"` for safe cross-origin
+ * navigation (same pattern established in #78 / #87 / #92).
+ *
+ * Legal posture (per issue #93): we don't scrape, we don't aggregate, we
+ * don't cache content from these sources. We hyperlink. Fair use, no
+ * copyright exposure, zero infra cost. If a future "news feed" slice
+ * polls RSS, that'll be a separate issue with its own posture doc.
+ *
+ * Curation discipline: every link below has been chosen because it is
+ *   (a) authoritative — the author / organisation IS the subject matter,
+ *       not a secondary summary;
+ *   (b) free to access — no paywall gate on the primary content;
+ *   (c) durable — a site that has survived > 3 years and shows active
+ *       maintenance (dates on content, working comment sections, etc.).
+ * Removing a link because the source went stale is part of the ongoing
+ * maintenance; adding links is a PR with the three-point rationale.
+ */
+
+interface ResourceLink {
+	title: string;
+	description: string;
+	href: string;
+	/** The host / brand, for attribution. */
+	source: string;
+}
+
+interface ResourceSection {
+	icon: string;
+	title: string;
+	intro: string;
+	links: ResourceLink[];
+}
+
+const sections: ResourceSection[] = [
+	{
+		icon: '🧱',
+		title: 'Code quality & best practices',
+		intro:
+			'Patterns, principles, and habits that compound over a career. Not language-specific — the ideas transfer.',
+		links: [
+			{
+				title: 'Google Engineering Practices',
+				description:
+					"Google's open guide to code reviews, change authorship, and reviewer expectations. The small-CL doctrine alone will level up every team that reads it.",
+				href: 'https://google.github.io/eng-practices/',
+				source: 'google.github.io',
+			},
+			{
+				title: 'Refactoring Guru',
+				description:
+					'Design patterns and refactoring techniques explained with vivid diagrams and runnable examples across many languages.',
+				href: 'https://refactoring.guru/',
+				source: 'refactoring.guru',
+			},
+			{
+				title: "You Don't Know JS Yet (book series, free online)",
+				description:
+					"Kyle Simpson's deep JavaScript series. Free to read in full on GitHub. Essential for anyone who ships JS and wants to stop guessing.",
+				href: 'https://github.com/getify/You-Dont-Know-JS',
+				source: 'github.com/getify',
+			},
+			{
+				title: 'Martin Fowler — Bliki',
+				description:
+					'Short, pointed essays on refactoring, continuous integration, enterprise patterns, and the discipline of writing software. Timeless.',
+				href: 'https://martinfowler.com/bliki/',
+				source: 'martinfowler.com',
+			},
+			{
+				title: 'Clean Code (summary)',
+				description:
+					"Robert C. Martin's canonical rules for readable code. Not everyone agrees with every chapter, but the vocabulary it gives teams is worth the read.",
+				href: 'https://github.com/JuanCrg90/Clean-Code-Notes',
+				source: 'github.com/JuanCrg90',
+			},
+		],
+	},
+	{
+		icon: '🏛️',
+		title: 'Architecture & system design',
+		intro: 'How to make systems that scale with your team and traffic — before you need to.',
+		links: [
+			{
+				title: 'The Twelve-Factor App',
+				description:
+					'The 12 constraints that make a web app operable in a modern cloud deployment. Short, specific, foundational.',
+				href: 'https://12factor.net/',
+				source: '12factor.net',
+			},
+			{
+				title: 'microservices.io',
+				description:
+					"Chris Richardson's pattern catalogue for microservices — when they help, when they hurt, and the exact tradeoffs for each pattern.",
+				href: 'https://microservices.io/',
+				source: 'microservices.io',
+			},
+			{
+				title: 'The System Design Primer',
+				description:
+					"Donne Martin's open resource for learning how to design large systems. Interview-oriented but useful for anyone building anything.",
+				href: 'https://github.com/donnemartin/system-design-primer',
+				source: 'github.com/donnemartin',
+			},
+			{
+				title: 'Clean Architecture (Uncle Bob) — summary',
+				description:
+					'The "layers that depend inward" pattern made famous by Robert C. Martin. A good lens for keeping business logic decoupled from frameworks.',
+				href: 'https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html',
+				source: 'cleancoder.com',
+			},
+			{
+				title: 'Designing Data-Intensive Applications (book outline)',
+				description:
+					"Martin Kleppmann's book is the modern canonical reference for distributed systems. The author also hosts open talks + the chapter outlines on his site.",
+				href: 'https://dataintensive.net/',
+				source: 'dataintensive.net',
+			},
+		],
+	},
+	{
+		icon: '🔒',
+		title: 'Security',
+		intro:
+			'Writing secure code is a skill, not a trait. These resources are hands-on — expect to find real attacks, real defences, and labs you can run.',
+		links: [
+			{
+				title: 'OWASP Top 10',
+				description:
+					'The baseline every web developer should know. Pair with the OWASP Cheat Sheet series for actionable mitigations per language / framework.',
+				href: 'https://owasp.org/www-project-top-ten/',
+				source: 'owasp.org',
+			},
+			{
+				title: 'OWASP Cheat Sheet Series',
+				description:
+					'Per-topic quick references: authentication, XSS, SQL injection, cryptography, session management. Deep, free, maintained by practitioners.',
+				href: 'https://cheatsheetseries.owasp.org/',
+				source: 'owasp.org',
+			},
+			{
+				title: 'PortSwigger Web Security Academy',
+				description:
+					'From the makers of Burp Suite — a free lab-based course on web app security. The gold standard; completing the labs makes you measurably better.',
+				href: 'https://portswigger.net/web-security',
+				source: 'portswigger.net',
+			},
+			{
+				title: 'web.dev Security',
+				description:
+					"Google's practical security guides for web developers: CSP, CORS, cookies, HTTPS, Trusted Types. Short reads, high signal.",
+				href: 'https://web.dev/explore/secure',
+				source: 'web.dev',
+			},
+			{
+				title: 'HackerOne Hacker101',
+				description:
+					'Free security training by HackerOne. Oriented at bug bounty hunters but the lessons translate directly to defensive coding.',
+				href: 'https://www.hacker101.com/',
+				source: 'hacker101.com',
+			},
+		],
+	},
+	{
+		icon: '🧪',
+		title: 'Testing',
+		intro:
+			'The craft of writing tests you want to run, not tests you want to delete. Pragmatic over dogmatic.',
+		links: [
+			{
+				title: 'Kent C. Dodds — Testing JavaScript',
+				description:
+					'Blog posts, free egghead videos, and the "trophy" testing model. Opinionated in a useful way.',
+				href: 'https://kentcdodds.com/blog?q=testing',
+				source: 'kentcdodds.com',
+			},
+			{
+				title: 'Martin Fowler — Testing taxonomy',
+				description:
+					"Unit vs integration vs contract vs end-to-end — Fowler's essays clarified the vocabulary the industry now uses. Useful before every architecture decision.",
+				href: 'https://martinfowler.com/testing/',
+				source: 'martinfowler.com',
+			},
+			{
+				title: 'Google Testing Blog',
+				description:
+					'Internal Google testing patterns made public: test-sizing, hermetic tests, flaky-test triage. Years of lessons from a huge codebase.',
+				href: 'https://testing.googleblog.com/',
+				source: 'testing.googleblog.com',
+			},
+		],
+	},
+	{
+		icon: '🎓',
+		title: 'Free courses & structured learning',
+		intro:
+			'Full curricula, no paywall, no credit card. Suitable for self-study or as pair-programming source material.',
+		links: [
+			{
+				title: 'freeCodeCamp',
+				description:
+					'Full certifications in web dev, data science, and more. Free, project-based, with built-in community.',
+				href: 'https://www.freecodecamp.org/',
+				source: 'freecodecamp.org',
+			},
+			{
+				title: 'The Odin Project',
+				description:
+					'Full-stack curriculum (Ruby or JavaScript tracks). Project-first; the community is excellent.',
+				href: 'https://www.theodinproject.com/',
+				source: 'theodinproject.com',
+			},
+			{
+				title: 'CS50 (Harvard)',
+				description:
+					"Harvard's introduction to computer science, free online. Lectures, problem sets, and a strong finishing project. Rigorous foundations.",
+				href: 'https://cs50.harvard.edu/',
+				source: 'cs50.harvard.edu',
+			},
+			{
+				title: 'Full Stack Open (University of Helsinki)',
+				description:
+					'Modern full-stack with React, Node, TypeScript, GraphQL, testing, deployment. One of the best free university-grade courses available.',
+				href: 'https://fullstackopen.com/en/',
+				source: 'fullstackopen.com',
+			},
+			{
+				title: 'MIT OpenCourseWare — EECS',
+				description:
+					'The actual MIT computer science syllabus — courses, problem sets, exams. No credit, no fee, no filler.',
+				href: 'https://ocw.mit.edu/collections/engineering/',
+				source: 'ocw.mit.edu',
+			},
+		],
+	},
+	{
+		icon: '📚',
+		title: 'Reference docs — modern & authoritative',
+		intro: "Not tutorials — the sources you'll cmd-click into every day once you're shipping.",
+		links: [
+			{
+				title: 'MDN Web Docs',
+				description:
+					'The reference for everything in the browser: HTML, CSS, JavaScript, Web APIs. Mozilla-maintained, community-edited, high quality.',
+				href: 'https://developer.mozilla.org/',
+				source: 'developer.mozilla.org',
+			},
+			{
+				title: 'web.dev',
+				description:
+					"Google's guides to modern web development — performance (Core Web Vitals), accessibility, PWAs, security. Practical and current.",
+				href: 'https://web.dev/',
+				source: 'web.dev',
+			},
+			{
+				title: 'React docs',
+				description:
+					'The 2023 rewrite is one of the clearest framework docs ever written. Even if you don\'t use React, the "Thinking in" sections teach the mental model.',
+				href: 'https://react.dev/',
+				source: 'react.dev',
+			},
+			{
+				title: 'Astro docs',
+				description:
+					'The framework powering this site. Clear, example-first, with pattern recipes for common integrations.',
+				href: 'https://docs.astro.build/',
+				source: 'docs.astro.build',
+			},
+			{
+				title: 'Node.js API docs',
+				description:
+					'The authoritative Node reference. The guides section is underrated — streams, async hooks, worker threads are each worth a dedicated session.',
+				href: 'https://nodejs.org/en/docs/',
+				source: 'nodejs.org',
+			},
+		],
+	},
+	{
+		icon: '📰',
+		title: 'News & community',
+		intro:
+			"Where developers go to see what's shipping today. Set a 15-minute daily cap on these; they'll eat your afternoon otherwise.",
+		links: [
+			{
+				title: 'Hacker News',
+				description:
+					'The front page of what engineering circles are reading today. The comments are usually more valuable than the links.',
+				href: 'https://news.ycombinator.com/',
+				source: 'news.ycombinator.com',
+			},
+			{
+				title: 'Lobsters',
+				description:
+					'Invitation-only variant of HN with a stricter on-topic policy — higher signal, lower volume, focused on computing.',
+				href: 'https://lobste.rs/',
+				source: 'lobste.rs',
+			},
+			{
+				title: 'dev.to',
+				description:
+					'A friendlier Medium for developers. Mixed quality but the community is active and the comment culture is kind.',
+				href: 'https://dev.to/',
+				source: 'dev.to',
+			},
+			{
+				title: 'Smashing Magazine',
+				description:
+					'Front-end-focused, long-form, well-edited. Especially strong on CSS, accessibility, and design-system patterns.',
+				href: 'https://www.smashingmagazine.com/',
+				source: 'smashingmagazine.com',
+			},
+			{
+				title: 'The Changelog podcast',
+				description:
+					'Weekly interviews with open-source maintainers. The best way to find out which tools are actually being adopted vs. which are only being announced.',
+				href: 'https://changelog.com/podcast',
+				source: 'changelog.com',
+			},
+		],
+	},
+	{
+		icon: '📬',
+		title: 'Newsletters (free)',
+		intro:
+			'Curated weekly digests. Email is the right medium for this — one inbox, one time slot, no infinite scroll.',
+		links: [
+			{
+				title: 'JavaScript Weekly',
+				description:
+					"Peter Cooper's long-running newsletter. The default for keeping up with the JS ecosystem without doomscrolling GitHub.",
+				href: 'https://javascriptweekly.com/',
+				source: 'javascriptweekly.com',
+			},
+			{
+				title: 'Bytes',
+				description:
+					'The front-end-focused companion to the above. Funny, well-curated, lands in your inbox weekly.',
+				href: 'https://bytes.dev/',
+				source: 'bytes.dev',
+			},
+			{
+				title: 'Node Weekly',
+				description:
+					'Same house as JavaScript Weekly, server-side focused. New runtimes, security advisories, release notes.',
+				href: 'https://nodeweekly.com/',
+				source: 'nodeweekly.com',
+			},
+			{
+				title: 'CSS Weekly',
+				description:
+					"Zoran Jambor's weekly round-up. If you touch styling at all, this is how you stay current without becoming a CSS Twitter addict.",
+				href: 'https://css-weekly.com/',
+				source: 'css-weekly.com',
+			},
+			{
+				title: 'Pointer.io',
+				description:
+					'Engineering management + leadership newsletter. Not just coding — this is where you learn the parts of the job nobody teaches at a bootcamp.',
+				href: 'https://www.pointer.io/',
+				source: 'pointer.io',
+			},
+		],
+	},
+];
+
+const sectionCount = sections.length;
+const linkCount = sections.reduce((acc, s) => acc + s.links.length, 0);
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="theme-color" content="#00bcd4" />
+		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+		<SEO
+			title="Resources — Learn to build secure, well-designed software | CodePals"
+			description={`A curated list of ${linkCount}+ free resources across ${sectionCount} categories: code quality, architecture, security, testing, courses, docs, news, and newsletters. Hand-picked for working developers.`}
+			canonical="/resources"
+		/>
+	</head>
+	<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
+		<Header />
+
+		<main class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+			<header class="mb-12">
+				<h1 class="text-4xl sm:text-5xl font-bold text-slate-900 mb-4">
+					Resources for working developers
+				</h1>
+				<p class="text-lg text-slate-700 max-w-3xl leading-relaxed mb-3">
+					A hand-curated list of {linkCount}+ free resources across {sectionCount} categories. Code quality,
+					architecture, security, testing, docs, courses, news, newsletters. Chosen because they're <strong
+						>authoritative</strong
+					> (the author IS the subject matter),
+					<strong>free</strong> (no paywall on the primary content), and
+					<strong>durable</strong> (they've survived &gt; 3 years and show active maintenance).
+				</p>
+				<p class="text-sm text-slate-600 max-w-3xl">
+					Everything here is a link — we don't scrape or re-publish anyone else's writing. If you
+					find a resource that belongs on this list, open an issue on
+					<a
+						href="https://github.com/rmjoia/codepalsio/issues/new"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="text-primary-600 hover:text-primary-700 underline">GitHub</a
+					>.
+				</p>
+			</header>
+
+			<nav
+				aria-label="Jump to section"
+				class="mb-12 bg-white rounded-xl shadow-sm border border-slate-200 p-5"
+			>
+				<p class="text-sm font-semibold text-slate-700 mb-2 uppercase tracking-wide">
+					Jump to section
+				</p>
+				<ul class="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+					{
+						sections.map((s) => (
+							<li>
+								<a
+									href={`#${s.title
+										.toLowerCase()
+										.replace(/[^a-z0-9]+/g, '-')
+										.replace(/^-|-$/g, '')}`}
+									class="text-primary-600 hover:text-primary-700 hover:underline"
+								>
+									{s.icon} {s.title}
+								</a>
+							</li>
+						))
+					}
+				</ul>
+			</nav>
+
+			{
+				sections.map((section) => {
+					const sectionId = section.title
+						.toLowerCase()
+						.replace(/[^a-z0-9]+/g, '-')
+						.replace(/^-|-$/g, '');
+					return (
+						<section id={sectionId} class="mb-14 scroll-mt-20">
+							<header class="mb-5">
+								<h2 class="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-3 mb-2">
+									<span aria-hidden="true">{section.icon}</span>
+									<span>{section.title}</span>
+								</h2>
+								<p class="text-slate-700 max-w-3xl">{section.intro}</p>
+							</header>
+							<ul class="grid grid-cols-1 md:grid-cols-2 gap-4">
+								{section.links.map((link) => (
+									<li class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md hover:border-primary-200 transition-all">
+										<a
+											href={link.href}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="block group"
+										>
+											<h3 class="text-lg font-semibold text-slate-900 group-hover:text-primary-700 mb-1">
+												{link.title}
+												<span
+													aria-hidden="true"
+													class="inline-block ml-1 text-primary-500 group-hover:translate-x-0.5 transition-transform"
+												>
+													↗
+												</span>
+											</h3>
+											<p class="text-sm text-slate-700 mb-2 leading-relaxed">{link.description}</p>
+											<p class="text-xs text-slate-500 font-mono">{link.source}</p>
+										</a>
+									</li>
+								))}
+							</ul>
+						</section>
+					);
+				})
+			}
+
+			<footer class="mt-16 pt-8 border-t border-slate-200 text-sm text-slate-600 max-w-3xl">
+				<p class="mb-3">
+					<strong>Found a dead link, or a resource that belongs here?</strong>
+					Open an issue on
+					<a
+						href="https://github.com/rmjoia/codepalsio/issues/new"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="text-primary-600 hover:text-primary-700 underline">the repo</a
+					> or submit a PR. We keep the list honest.
+				</p>
+				<p class="italic text-slate-500">
+					Last reviewed: {new Date().toISOString().split('T')[0]} · Owned by the CodePals community.
+				</p>
+			</footer>
+		</main>
+
+		<Footer />
+	</body>
+</html>
