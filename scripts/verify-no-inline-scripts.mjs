@@ -1,16 +1,27 @@
 #!/usr/bin/env node
 /**
  * Post-build guard: fail if any built HTML page contains an inline
- * `<script>` block. Astro normally bundles `<script>` blocks as external
- * files, but a small-enough compiled script can be inlined as
- * `<script type="module">...</script>` — which our CSP (`script-src 'self'`,
- * no `'unsafe-inline'`) will block, breaking the page.
+ * `<script>` block containing executable JavaScript. Astro normally
+ * bundles `<script>` blocks as external files, but a small-enough
+ * compiled script can be inlined as `<script type="module">...</script>` —
+ * which our CSP (`script-src 'self'`, no `'unsafe-inline'`) will block,
+ * breaking the page.
  *
  * Runs after `astro build` so it sees the actual deployed HTML, not the
  * source. Exits non-zero on violation so CI fails.
  *
- * Allowed: `<script src="...">` (external reference, CSP-compliant)
- * Blocked: any `<script>...</script>` with non-empty inline content
+ * Allowed:
+ *   - `<script src="...">` (external reference, CSP-compliant)
+ *   - `<script type="application/ld+json">...</script>` — JSON-LD
+ *     structured data (schema.org). This is DATA, not executable
+ *     JavaScript. Browsers never execute it as script; CSP's
+ *     `script-src` directive only applies to executable scripts, and
+ *     JSON-LD with the explicit non-JS MIME type is allowed by all
+ *     browsers under any CSP policy. Google / Bing read it as the
+ *     primary mechanism for structured data (SEO). Confirmed:
+ *     https://w3c.github.io/webappsec-csp/#directive-script-src.
+ * Blocked:
+ *   - any other `<script>...</script>` with non-empty inline body
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -19,11 +30,13 @@ import { join, relative } from 'node:path';
 const ROOT = new URL('../dist', import.meta.url).pathname;
 const violations = [];
 
-// Match opening <script> that's NOT self-closing and NOT a `<script src="...">`
-// reference. The body capture is non-greedy and tolerates type="module".
-// We then check the body is non-empty (just whitespace is OK — Astro sometimes
-// emits `<script ...></script>` placeholders).
-const INLINE_SCRIPT_RE = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+// Match opening <script> that's NOT self-closing, NOT a `<script src="...">`
+// reference, and NOT `<script type="application/ld+json">`. The body
+// capture is non-greedy and tolerates type="module". We then check the
+// body is non-empty (just whitespace is OK — Astro sometimes emits
+// `<script ...></script>` placeholders).
+const INLINE_SCRIPT_RE =
+	/<script(?![^>]*\bsrc=)(?![^>]*type=["']application\/ld\+json["'])[^>]*>([\s\S]*?)<\/script>/g;
 
 function walk(dir) {
 	for (const entry of readdirSync(dir)) {
@@ -52,12 +65,16 @@ function scanFile(file) {
 walk(ROOT);
 
 if (violations.length > 0) {
-	console.error('\n❌ Inline <script> blocks found in built HTML — these will be blocked by CSP `script-src \'self\'`:\n');
+	console.error(
+		"\n❌ Inline <script> blocks found in built HTML — these will be blocked by CSP `script-src 'self'`:\n"
+	);
 	for (const v of violations) {
 		console.error(`  ${v.file}`);
 		console.error(`    body: ${v.snippet}\n`);
 	}
-	console.error('Fix: move the script into a larger Astro <script> block (so the bundle exceeds Astro\'s inlining threshold), or import its logic from a module that\'s already bundled externally. See src/components/Header.astro for the current pattern.\n');
+	console.error(
+		"Fix: move the script into a larger Astro <script> block (so the bundle exceeds Astro's inlining threshold), or import its logic from a module that's already bundled externally. See src/components/Header.astro for the current pattern.\n"
+	);
 	process.exit(1);
 }
 

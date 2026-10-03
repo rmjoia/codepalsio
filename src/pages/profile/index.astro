@@ -1,6 +1,7 @@
 ---
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
+import SEO from '../../components/SEO.astro';
 ---
 
 <!doctype html>
@@ -8,7 +9,14 @@ import Footer from '../../components/Footer.astro';
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>My Profile - CodePals</title>
+		<meta name="theme-color" content="#00bcd4" />
+		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+		<SEO
+			title="My Profile — CodePals"
+			description="Your CodePals profile. Edit your bio, skills, interests, and visibility settings."
+			canonical="/profile"
+			noindex={true}
+		/>
 	</head>
 	<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
 		<Header />

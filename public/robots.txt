@@ -1,0 +1,18 @@
+# CodePals.io robots.txt — allow all well-behaved crawlers.
+#
+# Pages behind /find/* and /profile/* require authentication at the
+# SWA route gate; crawlers hitting them get 401 and quietly drop them
+# from indexing. /admin/* and /api/* are explicitly disallowed here as
+# defence in depth — nothing of SEO value lives there, and some
+# aggressive crawlers do try to index 401 pages' URLs regardless.
+#
+# The sitemap at the bottom is the authoritative list of what we WANT
+# in the index.
+
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+Disallow: /.auth/
+
+Sitemap: https://codepals.io/sitemap.xml

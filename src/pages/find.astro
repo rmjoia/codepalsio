@@ -1,6 +1,7 @@
 ---
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
+import SEO from '../components/SEO.astro';
 ---
 
 <!doctype html>
@@ -8,7 +9,14 @@ import Footer from '../components/Footer.astro';
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Find CodePals - Discover the community</title>
+		<meta name="theme-color" content="#00bcd4" />
+		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+		<SEO
+			title="Find CodePals — Discover the community"
+			description="Browse public profiles in the CodePals community. Find developers to pair with, learn from, or mentor."
+			canonical="/find"
+			noindex={true}
+		/>
 	</head>
 	<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
 		<Header />

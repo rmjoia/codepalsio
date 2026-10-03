@@ -3,6 +3,7 @@ import '../styles/global.css';
 import TermsModal from '../components/TermsModal.astro';
 import PrivacyModal from '../components/PrivacyModal.astro';
 import CodeOfConductModal from '../components/CodeOfConductModal.astro';
+import SEO from '../components/SEO.astro';
 
 const user = Astro.url.searchParams.get('user') || 'there';
 ---
@@ -12,8 +13,14 @@ const user = Astro.url.searchParams.get('user') || 'there';
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Welcome to CodePals - Let's Get Started</title>
+		<meta name="theme-color" content="#00bcd4" />
 		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+		<SEO
+			title="Welcome to CodePals — Let's get started"
+			description="Finish setting up your CodePals account. Accept the Terms of Service and complete your developer profile."
+			canonical="/welcome"
+			noindex={true}
+		/>
 	</head>
 	<body
 		class="bg-gradient-to-br from-primary-50 to-accent-50 min-h-screen flex items-center justify-center p-4"

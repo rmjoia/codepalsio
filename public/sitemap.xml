@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Static sitemap listing the publicly-crawlable routes on codepals.io.
+
+	Not listed (and why):
+	- /welcome, /find, /find/<username>, /profile/*, /admin/* — gated to
+	  `authenticated` at the SWA level; crawlers get 401 and dead-end.
+	- /404, /403 — error pages, not canonical content.
+
+	Future (deferred — see issue #91 "Out of scope"):
+	- Dynamic per-profile entries for /find/<username> — needs either an
+	  SSR build step or a scheduled sitemap-regenerator.
+
+	Lastmod values are placeholders bumped by hand on content changes;
+	a build-time step can replace them with git-last-modified later.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+	<url>
+		<loc>https://codepals.io/</loc>
+		<changefreq>weekly</changefreq>
+		<priority>1.0</priority>
+	</url>
+	<url>
+		<loc>https://codepals.io/terms</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+	</url>
+	<url>
+		<loc>https://codepals.io/privacy</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+	</url>
+	<url>
+		<loc>https://codepals.io/code-of-conduct</loc>
+		<changefreq>monthly</changefreq>
+		<priority>0.5</priority>
+	</url>
+</urlset>
