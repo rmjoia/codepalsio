@@ -4,6 +4,8 @@ import { getContainer, getCosmosConfig } from './lib/cosmos';
 import { PROFILE_FIELDS } from './lib/profile-repo';
 import { applyFieldVisibility } from './lib/visibility';
 import { checkRateLimit } from './lib/rate-limit';
+import { createUserRepository } from './lib/users';
+import { assertNotSuspended } from './lib/suspension';
 import type { Profile } from './lib/types';
 
 /**
@@ -147,6 +149,14 @@ export async function profileByUsernameHandler(
 		context.error('profile-by-username: missing COSMOS_DB_CONNECTION_STRING or COSMOS_DB_DATABASE_NAME');
 		return { status: 500, jsonBody: { error: 'Server configuration error' } };
 	}
+
+	// Suspension gate (spec 003 FR-124b). Prevents a suspended user from
+	// enumerating profiles via /find.
+	const suspended = await assertNotSuspended(
+		principal,
+		createUserRepository(cfg.connectionString, cfg.database)
+	);
+	if (suspended) return suspended;
 
 	try {
 		const container = getContainer(cfg.connectionString, cfg.database, 'profiles');

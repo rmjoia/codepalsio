@@ -11,6 +11,8 @@ import type { HttpRequest, InvocationContext } from '@azure/functions';
  *   - Dismiss: status flips, audit written, profile untouched
  *   - Unlist: profile mutated with unlistedBy, status flips to resolved,
  *     audit written
+ *   - Suspend (S5): user record gets suspended=true, status flips to
+ *     resolved, audit written with action=suspend_user
  *   - Audit-failure soft-handling (log but don't roll back)
  */
 const mocks = vi.hoisted(() => ({
@@ -40,6 +42,7 @@ vi.mock('./lib/principal', () => ({
 import { reportResolveHandler, type ReportResolveRepos } from './report-resolve';
 import type { ReportRecord } from './lib/reports';
 import type { Profile } from './lib/types';
+import { FakeUserRepository } from './lib/users.fake';
 
 const fakeContext = {
 	log: vi.fn(),
@@ -59,6 +62,7 @@ const sampleReport = (over: Partial<ReportRecord> = {}): ReportRecord => ({
 	reporterId: 'reporter-1',
 	reportedProfileId: 'profile-abc',
 	reportedUserId: 'user-reported',
+	reportedUsername: 'alice',
 	reason: 'harassment',
 	note: 'They were off-topic.',
 	createdAt: '2026-10-01T10:00:00Z',
@@ -86,7 +90,9 @@ function makeRepos(overrides: Partial<ReportResolveRepos> = {}): ReportResolveRe
 			upsert: mocks.upsertReportMock,
 		} as unknown as ReportResolveRepos['reports'],
 		audit: { append: mocks.appendAuditMock } as unknown as ReportResolveRepos['audit'],
-		users: {} as ReportResolveRepos['users'],
+		// Real FakeUserRepository so the suspend path can look up by
+		// username and we can assert the suspended flag was written.
+		users: new FakeUserRepository(),
 		roster: {} as ReportResolveRepos['roster'],
 		verifyAdmin: mocks.verifyAdminMock,
 		fetchProfile: mocks.fetchProfileMock,
@@ -157,17 +163,15 @@ describe('POST /api/report-resolve — reportResolveHandler', () => {
 			expect(res.status).toBe(400);
 		});
 
-		it('rejects suspend here (deferred to S5)', async () => {
-			// S4 only implements dismiss + unlist. Suspend lands in S5 as
-			// a separate reviewable slice. Pin the restriction here so a
-			// future refactor doesn't accidentally activate suspend before
-			// its enforcement layer (assertNotSuspended) is in place.
+		it('accepts suspend (S5)', async () => {
+			// S5 adds 'suspend' to the allow-list. Behavioural tests for
+			// the suspend path live in the dedicated describe block below.
 			const res = await reportResolveHandler(
 				makeRequest(validBody({ action: 'suspend' })),
 				fakeContext,
 				makeRepos()
 			);
-			expect(res.status).toBe(400);
+			expect(res.status).toBe(200);
 		});
 	});
 
@@ -281,6 +285,144 @@ describe('POST /api/report-resolve — reportResolveHandler', () => {
 			expect(res.status).toBe(500);
 			expect(mocks.upsertReportMock).not.toHaveBeenCalled();
 			expect(mocks.appendAuditMock).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('suspend (S5)', () => {
+		it('sets suspended=true on the existing user record, flips report to resolved, writes audit', async () => {
+			const repos = makeRepos();
+			// Pre-populate the users store with the reported user's record.
+			await repos.users.upsert({
+				id: 'gh-alice',
+				githubUsername: 'alice',
+				roles: [],
+				updatedAt: '2026-09-01T00:00:00Z',
+			});
+
+			const res = await reportResolveHandler(
+				makeRequest(validBody({ action: 'suspend' })),
+				fakeContext,
+				repos
+			);
+			expect(res.status).toBe(200);
+			expect(res.jsonBody).toMatchObject({ success: true, newStatus: 'resolved' });
+
+			// User record now suspended.
+			const after = await repos.users.findByGithubUsername('alice');
+			expect(after?.suspended).toBe(true);
+			expect(after?.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+			// Report row flipped to resolved with action=suspend.
+			const upserted = mocks.upsertReportMock.mock.calls[0][0];
+			expect(upserted.status).toBe('resolved');
+			expect(upserted.resolution).toMatchObject({
+				adminId: adminPrincipal.userId,
+				action: 'suspend',
+			});
+
+			// Audit row uses the suspend_user action, not unlist_profile.
+			const auditEntry = mocks.appendAuditMock.mock.calls[0][0];
+			expect(auditEntry.action).toBe('suspend_user');
+			expect(auditEntry.targetUserId).toBe('user-reported');
+			expect(auditEntry.reportId).toBe('report-x');
+		});
+
+		it('creates a stub user record when none exists yet', async () => {
+			// Edge case: the reported user has never had profile-save run
+			// successfully (or had their user record deleted). The handler
+			// still writes a stub `gh-<login>` record with suspended=true
+			// so the flag sticks on their next sign-in.
+			const repos = makeRepos();
+			expect(await repos.users.findByGithubUsername('alice')).toBeNull();
+
+			const res = await reportResolveHandler(
+				makeRequest(validBody({ action: 'suspend' })),
+				fakeContext,
+				repos
+			);
+			expect(res.status).toBe(200);
+
+			const after = await repos.users.findByGithubUsername('alice');
+			expect(after).not.toBeNull();
+			expect(after?.suspended).toBe(true);
+			expect(after?.githubUsername).toBe('alice');
+			expect(after?.swaUserId).toBe('user-reported');
+		});
+
+		it('falls back to the profile read when reportedUsername is absent (pre-S5 report)', async () => {
+			// Legacy reports written before S5 don't have reportedUsername.
+			// The handler must fall back to fetching the profile.
+			mocks.findByIdMock.mockResolvedValueOnce(
+				sampleReport({ reportedUsername: undefined })
+			);
+			const repos = makeRepos();
+
+			const res = await reportResolveHandler(
+				makeRequest(validBody({ action: 'suspend' })),
+				fakeContext,
+				repos
+			);
+			expect(res.status).toBe(200);
+			expect(mocks.fetchProfileMock).toHaveBeenCalledWith('profile-abc');
+
+			const after = await repos.users.findByGithubUsername('alice');
+			expect(after?.suspended).toBe(true);
+		});
+
+		it('returns 500 when neither the report nor the profile reveal a username', async () => {
+			mocks.findByIdMock.mockResolvedValueOnce(
+				sampleReport({ reportedUsername: undefined })
+			);
+			mocks.fetchProfileMock.mockResolvedValueOnce(null);
+
+			const res = await reportResolveHandler(
+				makeRequest(validBody({ action: 'suspend' })),
+				fakeContext,
+				makeRepos()
+			);
+			expect(res.status).toBe(500);
+			expect(mocks.upsertReportMock).not.toHaveBeenCalled();
+		});
+
+		it('does not flip the report when the user upsert throws', async () => {
+			// Suspend's commit order: user record first, then report row.
+			// If the user upsert fails, the report must stay 'open' so the
+			// admin can retry.
+			const brokenRepos = makeRepos({
+				users: {
+					findByGithubUsername: async () => null,
+					findByGithubUsernameAcrossShapes: async () => null,
+					upsert: async () => {
+						throw new Error('cosmos down');
+					},
+				} as unknown as ReportResolveRepos['users'],
+			});
+			const res = await reportResolveHandler(
+				makeRequest(validBody({ action: 'suspend' })),
+				fakeContext,
+				brokenRepos
+			);
+			expect(res.status).toBe(500);
+			expect(mocks.upsertReportMock).not.toHaveBeenCalled();
+			expect(mocks.appendAuditMock).not.toHaveBeenCalled();
+		});
+
+		it('rejects self-suspension', async () => {
+			// Already covered by the generic self-protection test, but pin
+			// the invariant for suspend specifically — this is the harshest
+			// action and self-suspension would be the easiest footgun for a
+			// rogue admin ("suspend yourself, then come back as another
+			// admin to unsuspend"). Server-side belt-and-braces.
+			mocks.findByIdMock.mockResolvedValueOnce(
+				sampleReport({ reportedUserId: adminPrincipal.userId })
+			);
+			const res = await reportResolveHandler(
+				makeRequest(validBody({ action: 'suspend' })),
+				fakeContext,
+				makeRepos()
+			);
+			expect(res.status).toBe(403);
+			expect(mocks.upsertReportMock).not.toHaveBeenCalled();
 		});
 	});
 

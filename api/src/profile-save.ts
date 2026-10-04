@@ -9,6 +9,7 @@ import { getClientPrincipal } from './lib/principal';
 import { getContainer, getCosmosConfig } from './lib/cosmos';
 import { findProfileWithAutoHeal } from './lib/profile-repo';
 import { createUserRepository } from './lib/users';
+import { assertNotSuspended } from './lib/suspension';
 import {
 	LIMITS,
 	boundedInteger,
@@ -43,6 +44,13 @@ export async function profileSaveHandler(
 		context.error('profile-save: missing COSMOS_DB_CONNECTION_STRING or COSMOS_DB_DATABASE_NAME');
 		return { status: 500, jsonBody: { error: 'Server configuration error' } };
 	}
+
+	// Suspension gate (spec 003 FR-124b). A suspended user cannot save,
+	// update, or publish their profile — short-circuits before validation
+	// so a suspended account can't thrash the Cosmos input layer.
+	const _userRepoForSuspensionCheck = createUserRepository(cfg.connectionString, cfg.database);
+	const suspended = await assertNotSuspended(principal, _userRepoForSuspensionCheck);
+	if (suspended) return suspended;
 
 	let body: Record<string, unknown>;
 	try {

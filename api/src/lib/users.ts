@@ -34,6 +34,22 @@ export interface UserRecord {
 	 * as visible — presence is on unless explicitly disabled.
 	 */
 	presenceVisible?: boolean;
+	/**
+	 * Account suspension flag (spec 003 US3 / FR-124b). When `true`, the
+	 * user is blocked from using the platform: every authenticated API
+	 * handler returns `403 { reason: 'suspended' }` early via
+	 * assertNotSuspended (see `lib/suspension.ts`), and the frontend
+	 * fetch wrapper redirects to `/suspended` on that response.
+	 *
+	 * Set by a moderator via POST /api/report-resolve action='suspend'.
+	 * Clearing requires a moderator (unsuspend endpoint — future slice)
+	 * or a direct Cosmos edit for MVP. Suspensions are reversible by
+	 * design; account deletion is the irreversible path.
+	 *
+	 * NEVER exposed to the frontend as a raw value — only the derived
+	 * 403 reason: 'suspended' leaves the server.
+	 */
+	suspended?: boolean;
 	updatedAt: string;
 }
 

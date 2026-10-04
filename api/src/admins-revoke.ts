@@ -9,6 +9,7 @@ import {
 	type AdminRosterRepository,
 } from './lib/admin-roster';
 import { isAdminFor, parseAdminLogins, principalHasAdminRole } from './lib/roles';
+import { assertNotSuspended } from './lib/suspension';
 import type { ClientPrincipal } from './lib/types';
 
 const GITHUB_USERNAME_RE = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
@@ -69,6 +70,10 @@ export async function adminsRevokeHandler(
 			bootstrapLogins: parseAdminLogins(process.env.ADMIN_GITHUB_LOGINS),
 		};
 	}
+
+	// Suspension gate (spec 003 FR-124b).
+	const suspendedResponse = await assertNotSuspended(principal, repos.users);
+	if (suspendedResponse) return suspendedResponse;
 
 	// Fast path: invitation-assigned admin-tier role grants access without
 	// a roster lookup. Falls through to the roster path only for legacy /

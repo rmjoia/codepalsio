@@ -16,6 +16,10 @@
 			"allowedRoles": ["anonymous"]
 		},
 		{
+			"route": "/suspended",
+			"allowedRoles": ["anonymous", "authenticated"]
+		},
+		{
 			"route": "/profile/*",
 			"allowedRoles": ["authenticated"]
 		},

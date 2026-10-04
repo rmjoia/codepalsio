@@ -1,6 +1,8 @@
 import { app, type HttpRequest, type InvocationContext, type HttpResponseInit } from '@azure/functions';
 import { getClientPrincipal } from './lib/principal';
 import { getCosmosClient, getCosmosConfig } from './lib/cosmos';
+import { createUserRepository } from './lib/users';
+import { assertNotSuspended } from './lib/suspension';
 
 app.http('account-delete', {
 	methods: ['POST'],
@@ -16,6 +18,16 @@ app.http('account-delete', {
 			context.error('account-delete: missing COSMOS_DB_CONNECTION_STRING or COSMOS_DB_DATABASE_NAME');
 			return { status: 500, jsonBody: { error: 'Server configuration error' } };
 		}
+
+		// Suspension gate (spec 003 FR-124b). A suspended user cannot
+		// self-delete via this endpoint; appeals + deletion requests go
+		// through abuse@codepals.io so a moderator can review context
+		// before granting (e.g. preserving evidence of abuse against
+		// other users). GDPR deletion rights are honoured via the email
+		// channel, not blocked outright.
+		const userRepo = createUserRepository(cfg.connectionString, cfg.database);
+		const suspended = await assertNotSuspended(principal, userRepo);
+		if (suspended) return suspended;
 
 		try {
 			const client = getCosmosClient(cfg.connectionString);
