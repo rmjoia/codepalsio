@@ -164,8 +164,16 @@ import SEO from '../../components/SEO.astro';
 						Get in touch
 					</h2>
 					<p id="profile-contact-note" class="text-sm text-slate-600 mb-3">
-						In-app messaging is coming soon. For now, say hi via one of the links below — the owner
-						picks where to be reached.
+						In-app messaging is coming soon. For now, find them via one of the links below, or say
+						hi in our{' '}
+						<a
+							href="https://discord.gg/6RCRNCUq8Q"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-primary-600 hover:text-primary-700 font-semibold underline"
+							>Discord community</a
+						>{' '}
+						where everyone can be reached.
 					</p>
 					<div id="profile-contact-buttons" class="flex flex-wrap gap-2"></div>
 				</section>
@@ -424,7 +432,11 @@ import SEO from '../../components/SEO.astro';
 					routes.push({ label: 'Website', href: profile.websiteUrl, variant: 'secondary' });
 				}
 
-				if (routes.length === 0) return;
+				// Always reveal the section even if the profile exposes zero
+				// explicit contact URLs — the inline Discord link in the
+				// note copy is itself a reachable path, and hiding the
+				// whole section would hide that too. The buttons container
+				// may simply end up empty.
 
 				// Button-style anchors (not inline text) so the Contact affordance
 				// reads as the primary CTA on this page. target=_blank +
