@@ -518,6 +518,45 @@ const linkCount = sections.reduce((acc, s) => acc + s.links.length, 0);
 	<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
 		<Header />
 
+		<!--
+			Floating right-rail "Jump to section" ToC. Hidden below xl so
+			narrower viewports keep the in-flow nav (below the header)
+			rather than losing horizontal space to the sidebar. The ToC
+			highlights the active section via an IntersectionObserver —
+			see the script near the bottom of the page.
+		-->
+		<aside
+			id="toc-floating"
+			aria-label="Table of contents"
+			class="hidden xl:block fixed top-24 right-6 w-56 max-h-[calc(100vh-8rem)] overflow-y-auto bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-sm z-10"
+		>
+			<p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">On this page</p>
+			<ul id="toc-floating-list" class="space-y-1">
+				{
+					sections.map((s) => {
+						const id = s.title
+							.toLowerCase()
+							.replace(/[^a-z0-9]+/g, '-')
+							.replace(/^-|-$/g, '');
+						return (
+							<li>
+								<a
+									href={`#${id}`}
+									data-toc-target={id}
+									class="toc-link block px-2 py-1 rounded text-slate-600 hover:text-primary-700 hover:bg-slate-50 border-l-2 border-transparent transition-colors"
+								>
+									<span aria-hidden="true" class="mr-1">
+										{s.icon}
+									</span>
+									{s.title}
+								</a>
+							</li>
+						);
+					})
+				}
+			</ul>
+		</aside>
+
 		<main class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
 			<header class="mb-12">
 				<h1 class="text-4xl sm:text-5xl font-bold text-slate-900 mb-4">
@@ -630,6 +669,11 @@ const linkCount = sections.reduce((acc, s) => acc + s.links.length, 0);
 			</footer>
 		</main>
 
+		<!--
+			No per-page script tag: the ToC scrollspy is wired into
+			Header's bundled external script via initTocScrollspy. See
+			src/lib/toc-scrollspy.ts for the implementation.
+		-->
 		<Footer />
 	</body>
 </html>

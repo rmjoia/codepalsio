@@ -369,6 +369,7 @@ import '../styles/global.css';
 	import { setupModalDelegation } from '../lib/modals';
 	import { setupSmoothScroll } from '../lib/smooth-scroll';
 	import { setupOnboardingForm } from '../lib/onboarding-form';
+	import { initTocScrollspy } from '../lib/toc-scrollspy';
 
 	// Initialize all page-agnostic global behaviours from here so they ride
 	// in Header.astro's bundled external script (every page loads Header).
@@ -389,6 +390,9 @@ import '../styles/global.css';
 	setupModalDelegation();
 	setupSmoothScroll();
 	setupOnboardingForm();
+	// No-op on pages without an [data-toc-target] link. Lives here so it
+	// rides Header's external bundle rather than inlining per-page.
+	initTocScrollspy();
 
 	/**
 	 * Resolve and paint the auth-dependent header state. Extracted into a
