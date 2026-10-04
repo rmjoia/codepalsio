@@ -56,6 +56,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Deny-all by default. Each job below grants itself only what it needs
+# (contents: read for checkout; the Azure SWA deploy action documents
+# its required scopes). A compromised third-party action — or any
+# `npm run <script>` with a malicious postinstall — can then only read,
+# not push commits, open releases, or create issues on its own.
+# See .github/dependabot.yml for the github-actions ecosystem that
+# keeps the actions themselves up to date.
+permissions: {}
+
 jobs:
   # ─────────────────────────────────────────────────────────────────────
   # Stage 1 — Validate. All quality gates. Must pass before deploy.
@@ -63,6 +72,8 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     name: Validate (lint, audit, tests, build)
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -137,6 +148,11 @@ jobs:
     environment:
       name: dev
       url: https://dev.codepals.io
+    # The SWA deploy action documents `pull-requests: write` as needed on
+    # pull_request events (to post deployment-preview comments). We only
+    # trigger on `push`, so contents: read is sufficient.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -167,6 +183,8 @@ jobs:
     needs: dev_deploy
     runs-on: ubuntu-latest
     name: E2E (dev.codepals.io)
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -250,6 +268,8 @@ jobs:
     environment:
       name: production
       url: https://codepals.io
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -282,6 +302,8 @@ jobs:
     needs: prod_deploy
     runs-on: ubuntu-latest
     name: E2E (codepals.io)
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

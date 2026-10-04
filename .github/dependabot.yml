@@ -1,0 +1,83 @@
+# Dependabot — automated dependency updates.
+#
+# Why this exists: PR #56 (devalue sparse-array DoS, GHSA-77vg-94rm-hx3p)
+# was the trigger. The advisory landed ~14h after the previous Validate
+# run; every subsequent CI run failed until someone noticed and bumped
+# by hand. Dependabot opens the bump PR as soon as the advisory lands,
+# which keeps the "surprise CI red on an unrelated PR" case rare.
+#
+# Three ecosystems:
+#   - npm (/)        : frontend production + dev deps
+#   - npm (/api)     : Azure Functions runtime + its dev tooling
+#   - github-actions : the actions used by .github/workflows/*.yml,
+#                      including SHA pinning when we move to that
+#
+# Grouping: minor + patch updates land in one PR per ecosystem per week.
+# Major updates get their own PR so breaking changes are reviewed in
+# isolation. The weekly cadence matches CLAUDE.md's "re-run audit before
+# merging any PR open > a few hours" discipline — Dependabot is the
+# proactive half, the manual re-run is the belt-and-braces.
+
+version: 2
+updates:
+  # ─────────────────────────── Frontend ───────────────────────────
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - frontend
+    groups:
+      frontend-minor-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # http-cache-semantics advisory GHSA-ch52-4w7c-c8xp — all versions
+      # ≤4.2.0 are vulnerable with no upstream fix. Reachability analysis
+      # in .specify/known-advisories.md shows no exposure in our build
+      # tree. `npm run audit` is set to --audit-level=critical to tolerate
+      # it; Dependabot would open the "no fix available" PR daily
+      # otherwise. Review the ignore when 4.3.0+ ships upstream.
+      - dependency-name: http-cache-semantics
+
+  # ─────────────────────────── API ────────────────────────────────
+  - package-ecosystem: npm
+    directory: /api
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - api
+    groups:
+      api-minor-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+
+  # ───────────────────── GitHub Actions ───────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+    groups:
+      actions-minor-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch

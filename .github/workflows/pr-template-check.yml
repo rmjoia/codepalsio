@@ -11,10 +11,18 @@ on:
     branches:
       - main
 
+# Deny-all by default. This job only reads the PR body from the event
+# payload — no checkout, no API writes.
+permissions: {}
+
 jobs:
   verified-by:
     runs-on: ubuntu-latest
     name: PR body has 'Verified by' (Constitution P9)
+    permissions:
+      # pull-requests: read lets the job read the PR body from the event
+      # context in case GitHub ever stops passing it inline.
+      pull-requests: read
     steps:
       - name: Check PR body
         env:
