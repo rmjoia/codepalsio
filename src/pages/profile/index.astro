@@ -190,6 +190,11 @@ import SEO from '../../components/SEO.astro';
 						</p>
 					</div>
 
+					<div id="profile-lookingfor-card" class="bg-white rounded-xl shadow p-6 hidden">
+						<h2 class="text-xl font-bold text-slate-900 mb-4">Working on / Need help with</h2>
+						<p id="profile-lookingfor" class="text-slate-700 whitespace-pre-wrap"></p>
+					</div>
+
 					<div class="bg-white rounded-xl shadow p-6">
 						<h2 class="text-xl font-bold text-slate-900 mb-4">Interests</h2>
 						<div id="profile-interests" class="flex flex-wrap gap-2 hidden"></div>
@@ -249,6 +254,24 @@ import SEO from '../../components/SEO.astro';
 						></textarea>
 						<p class="mt-1 text-sm text-slate-500">
 							<span id="bio-count">0</span>/500 characters (minimum 50)
+						</p>
+					</div>
+
+					<div>
+						<label for="lookingFor" class="block text-sm font-semibold text-slate-900 mb-2">
+							What are you working on or need help with?
+						</label>
+						<textarea
+							id="lookingFor"
+							name="lookingFor"
+							rows="3"
+							maxlength="500"
+							placeholder="e.g. 'Trying to understand event sourcing in a .NET service' or 'Pair-programming on a Rust compiler side project — want someone to review PRs'"
+							class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+						></textarea>
+						<p class="mt-1 text-sm text-slate-500">
+							<span id="lookingFor-count">0</span>/500 characters — searchable on <code>/find</code
+							>. Optional, but it's the single most useful signal for finding the right CodePal.
 						</p>
 					</div>
 
@@ -612,6 +635,21 @@ import SEO from '../../components/SEO.astro';
 							</div>
 							<div class="flex items-center justify-between gap-3">
 								<label
+									for="field-vis-lookingFor"
+									class="text-sm text-slate-700 flex-shrink-0 w-28 sm:w-32">Working on</label
+								>
+								<select
+									id="field-vis-lookingFor"
+									data-field="lookingFor"
+									class="field-visibility-select flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+								>
+									<option value="public">Public — everyone</option>
+									<option value="authenticated">CodePals only — signed-in</option>
+									<option value="private">Only me</option>
+								</select>
+							</div>
+							<div class="flex items-center justify-between gap-3">
+								<label
 									for="field-vis-githubUrl"
 									class="text-sm text-slate-700 flex-shrink-0 w-28 sm:w-32">GitHub URL</label
 								>
@@ -774,6 +812,23 @@ import SEO from '../../components/SEO.astro';
 					skillsEmpty.classList.remove('hidden');
 				}
 
+				// Working on / Need help with — the D5 free-text signal.
+				// Entire card hides when the field is empty so returning
+				// users see an unlabeled gap rather than a card-with-nothing-
+				// in-it.
+				const lookingForCard = document.getElementById('profile-lookingfor-card');
+				const lookingForEl = document.getElementById('profile-lookingfor');
+				if (lookingForCard && lookingForEl) {
+					const value = (profile?.lookingFor ?? '').trim();
+					if (value) {
+						lookingForEl.textContent = value;
+						lookingForCard.classList.remove('hidden');
+					} else {
+						lookingForEl.textContent = '';
+						lookingForCard.classList.add('hidden');
+					}
+				}
+
 				// Interests
 				const interestsEl = document.getElementById('profile-interests');
 				const interestsEmpty = document.getElementById('profile-interests-empty');
@@ -908,14 +963,20 @@ import SEO from '../../components/SEO.astro';
 				const profile = currentProfile;
 				const displayNameEl = document.getElementById('displayName') as HTMLInputElement | null;
 				const bioEl = document.getElementById('bio') as HTMLTextAreaElement | null;
+				const lookingForEl = document.getElementById('lookingFor') as HTMLTextAreaElement | null;
 				const locationEl = document.getElementById('location') as HTMLInputElement | null;
 				const timezoneEl = document.getElementById('timezone') as HTMLInputElement | null;
 				const bioCountEl = document.getElementById('bio-count');
+				const lookingForCountEl = document.getElementById('lookingFor-count');
 
 				if (displayNameEl) displayNameEl.value = profile?.displayName || '';
 				if (bioEl) {
 					bioEl.value = profile?.bio || '';
 					if (bioCountEl) bioCountEl.textContent = String(bioEl.value.length);
+				}
+				if (lookingForEl) {
+					lookingForEl.value = profile?.lookingFor || '';
+					if (lookingForCountEl) lookingForCountEl.textContent = String(lookingForEl.value.length);
 				}
 				if (locationEl) locationEl.value = profile?.location || '';
 				if (timezoneEl) {
@@ -1149,6 +1210,12 @@ import SEO from '../../components/SEO.astro';
 				?.addEventListener('click', () => window.location.reload());
 
 			// Bio character counter
+			document.getElementById('lookingFor')?.addEventListener('input', (e) => {
+				const target = e.target as HTMLTextAreaElement;
+				const counter = document.getElementById('lookingFor-count');
+				if (counter) counter.textContent = String(target.value.length);
+			});
+
 			document.getElementById('bio')?.addEventListener('input', (e) => {
 				const target = e.target as HTMLTextAreaElement;
 				const counter = document.getElementById('bio-count');
@@ -1180,6 +1247,7 @@ import SEO from '../../components/SEO.astro';
 
 				const displayNameEl = document.getElementById('displayName') as HTMLInputElement | null;
 				const bioEl = document.getElementById('bio') as HTMLTextAreaElement | null;
+				const lookingForEl = document.getElementById('lookingFor') as HTMLTextAreaElement | null;
 				const locationEl = document.getElementById('location') as HTMLInputElement | null;
 				const timezoneEl = document.getElementById('timezone') as HTMLInputElement | null;
 				const yearsEl = document.getElementById('years-of-experience') as HTMLInputElement | null;
@@ -1303,6 +1371,7 @@ import SEO from '../../components/SEO.astro';
 						linkedinUrl: linkedinUrlFromHandle(linkedinUrlEl?.value),
 						websiteUrl: trimmedUrl(websiteUrlEl?.value),
 						preferredLanguages: languagesArray.length > 0 ? languagesArray : undefined,
+						lookingFor: trimmedUrl(lookingForEl?.value),
 					});
 					currentProfile = saved;
 					populateViewMode(currentProfile);

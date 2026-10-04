@@ -71,6 +71,7 @@ export const HIDEABLE_FIELDS = [
 	'websiteUrl',
 	'preferredLanguages',
 	'yearsOfExperience',
+	'lookingFor',
 ] as const;
 export type HideableField = (typeof HIDEABLE_FIELDS)[number];
 
@@ -109,6 +110,16 @@ export interface Profile {
 	websiteUrl?: string;
 	preferredLanguages?: string[];
 	yearsOfExperience?: number;
+	/**
+	 * Free-text answer to "What are you working on, or what do you need
+	 * help with?". The single most useful signal on the directory card
+	 * for connecting with the right person — richer than skills/interests
+	 * because it describes the current moment rather than the standing
+	 * profile. Capped at 500 characters at the handler boundary
+	 * (lib/validation.ts). Searchable server-side via the `q` parameter
+	 * on /api/profiles.
+	 */
+	lookingFor?: string;
 	/**
 	 * Moderator action marker (spec 003 US3): when set, this profile was
 	 * removed from public discovery by the named admin, not by the owner.

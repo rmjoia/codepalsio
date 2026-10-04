@@ -70,6 +70,39 @@ import SEO from '../components/SEO.astro';
 				</p>
 			</div>
 
+			<!-- Search box. Debounced client-side; fires a fresh /api/profiles?q=
+				 request so the matching happens against ALL public profiles,
+				 not just the already-loaded page. -->
+			<div class="mb-8">
+				<label for="directory-search" class="sr-only">Search CodePals</label>
+				<div class="relative">
+					<svg
+						class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+						aria-hidden="true"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 1 0 6 6a7.5 7.5 0 0 0 10.65 10.65z"></path>
+					</svg>
+					<input
+						type="search"
+						id="directory-search"
+						placeholder="Search by name, skill, bio, or what someone's working on…"
+						autocomplete="off"
+						maxlength="100"
+						class="w-full pl-10 pr-4 py-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+					/>
+				</div>
+				<p id="search-help" class="mt-2 text-xs text-slate-500">
+					Tip: try a project name, language, or something like "need help with React".
+				</p>
+			</div>
+
 			<!-- Empty state (no public profiles yet) -->
 			<div
 				id="empty-state"
@@ -86,6 +119,26 @@ import SEO from '../components/SEO.astro';
 				>
 					Edit my profile
 				</a>
+			</div>
+
+			<!-- No-results state (search returned zero rows). Distinct from
+				 empty-state so the copy makes sense: there ARE public profiles,
+				 just none matching this query. -->
+			<div
+				id="no-results-state"
+				class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center"
+			>
+				<div class="text-5xl mb-4">🔎</div>
+				<h2 class="text-xl font-bold text-slate-900 mb-2">No CodePals match that search</h2>
+				<p class="text-slate-600 mb-6">
+					Try a broader word, or clear the search to browse everyone.
+				</p>
+				<button
+					id="no-results-clear-btn"
+					class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+				>
+					Clear search
+				</button>
 			</div>
 
 			<!-- Card grid -->
@@ -205,6 +258,19 @@ import SEO from '../components/SEO.astro';
 					card.appendChild(bio);
 				}
 
+				// "What are you working on?" — the D5 signal. Rendered as a
+				// quoted paragraph with a leading dash so it stands out from
+				// the bio typographically without needing a labelled row.
+				// Truncated via line-clamp-2 so very long entries don't
+				// stretch the card.
+				if (profile.lookingFor) {
+					const lf = document.createElement('p');
+					lf.className =
+						'text-sm text-primary-700 bg-primary-50 border-l-2 border-primary-400 px-3 py-2 rounded-r mb-3 line-clamp-2 italic';
+					lf.textContent = profile.lookingFor;
+					card.appendChild(lf);
+				}
+
 				// Skills (cap at 5 chips, +N more if over). Optional under
 				// per-field visibility — guard against the absent case.
 				const skillsList = profile.skills ?? [];
@@ -265,14 +331,87 @@ import SEO from '../components/SEO.astro';
 				return card;
 			}
 
+			// Caller's own userDetails, resolved once at init and reused on
+			// every re-render so the listed-banner state stays stable
+			// across searches.
+			let viewerLogin: string | null = null;
+
+			function renderResults(profiles: DirectoryProfile[], query: string): void {
+				const grid = document.getElementById('directory-grid');
+				const empty = document.getElementById('empty-state');
+				const noResults = document.getElementById('no-results-state');
+				const bannerListed = document.getElementById('banner-listed');
+				const bannerNotListed = document.getElementById('banner-not-listed');
+
+				// Reset all state before painting.
+				grid?.classList.add('hidden');
+				empty?.classList.add('hidden');
+				noResults?.classList.add('hidden');
+				if (grid) grid.innerHTML = '';
+				bannerListed?.classList.add('hidden');
+				bannerNotListed?.classList.add('hidden');
+
+				if (profiles.length === 0) {
+					// Zero rows: different message depending on whether the
+					// query was empty (no public profiles exist yet) vs a
+					// filter that matched nothing (profiles exist but none
+					// match).
+					if (query.trim()) {
+						noResults?.classList.remove('hidden');
+					} else {
+						empty?.classList.remove('hidden');
+					}
+					return;
+				}
+
+				// Pick the banner that matches the caller's listed-ness.
+				// Only shown on the unfiltered view — "You're listed" is
+				// confusing when you've just narrowed to profiles that
+				// don't include you.
+				if (!query.trim()) {
+					const listed = isSelfListed(profiles, viewerLogin);
+					(listed ? bannerListed : bannerNotListed)?.classList.remove('hidden');
+				}
+
+				if (grid) {
+					profiles.forEach((p) => grid.appendChild(buildCard(p)));
+					grid.classList.remove('hidden');
+				}
+			}
+
+			async function runSearch(query: string): Promise<void> {
+				const grid = document.getElementById('directory-grid');
+				// Fade existing content slightly instead of blanking so the
+				// search feels responsive even on a slow network.
+				if (grid) grid.style.opacity = '0.5';
+				try {
+					const profiles = await getPublicProfiles(query);
+					renderResults(profiles, query);
+				} catch (err) {
+					console.error('Directory search failed:', err);
+					const error = document.getElementById('error-state');
+					document.getElementById('loading-state')?.classList.add('hidden');
+					document.getElementById('directory-main')?.classList.add('hidden');
+					error?.classList.remove('hidden');
+				} finally {
+					if (grid) grid.style.opacity = '';
+				}
+			}
+
+			// Debounce the search input so we don't fire a network request on
+			// every keystroke. 250ms matches the "feels responsive but doesn't
+			// hammer the server" sweet spot — short enough that typing a
+			// 10-char query hits the API ~once, not 10 times.
+			let debounceHandle: ReturnType<typeof setTimeout> | null = null;
+			function scheduleSearch(query: string): void {
+				if (debounceHandle !== null) clearTimeout(debounceHandle);
+				debounceHandle = setTimeout(() => void runSearch(query), 250);
+			}
+
 			async function init() {
 				const loading = document.getElementById('loading-state');
 				const error = document.getElementById('error-state');
 				const main = document.getElementById('directory-main');
-				const grid = document.getElementById('directory-grid');
-				const empty = document.getElementById('empty-state');
-				const bannerListed = document.getElementById('banner-listed');
-				const bannerNotListed = document.getElementById('banner-not-listed');
 
 				try {
 					// Kick off both fetches in parallel — they're independent
@@ -281,30 +420,12 @@ import SEO from '../components/SEO.astro';
 					// scope, so this doesn't add a second /.auth/me round
 					// trip if any other component already asked.
 					const [profiles, principal] = await Promise.all([getPublicProfiles(), getPrincipal()]);
+					viewerLogin = principal?.userDetails ?? null;
 
 					loading?.classList.add('hidden');
 					main?.classList.remove('hidden');
 
-					if (profiles.length === 0) {
-						// Empty state owns the "be the first" copy — both
-						// banners stay hidden so we don't repeat the call to
-						// action.
-						empty?.classList.remove('hidden');
-						return;
-					}
-
-					// Pick the banner that matches the caller's listed-ness.
-					// Defensive: if the principal couldn't be resolved (it's
-					// nullable; shouldn't happen on an authenticated-gated
-					// route but the type allows it), fall back to the
-					// "want to be listed?" copy.
-					const listed = isSelfListed(profiles, principal?.userDetails ?? null);
-					(listed ? bannerListed : bannerNotListed)?.classList.remove('hidden');
-
-					if (grid) {
-						profiles.forEach((p) => grid.appendChild(buildCard(p)));
-						grid.classList.remove('hidden');
-					}
+					renderResults(profiles, '');
 				} catch (err) {
 					console.error('Directory load failed:', err);
 					loading?.classList.add('hidden');
@@ -315,6 +436,16 @@ import SEO from '../components/SEO.astro';
 			document
 				.getElementById('directory-refresh-btn')
 				?.addEventListener('click', () => window.location.reload());
+
+			document.getElementById('directory-search')?.addEventListener('input', (e) => {
+				scheduleSearch((e.target as HTMLInputElement).value);
+			});
+
+			document.getElementById('no-results-clear-btn')?.addEventListener('click', () => {
+				const searchEl = document.getElementById('directory-search') as HTMLInputElement | null;
+				if (searchEl) searchEl.value = '';
+				void runSearch('');
+			});
 
 			init();
 		</script>

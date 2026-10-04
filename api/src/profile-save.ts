@@ -163,6 +163,12 @@ export async function profileSaveHandler(
 				);
 				return langs.length > 0 ? langs : undefined;
 			})(),
+			// "What are you working on / need help with?" — optional, free-text,
+			// capped at LIMITS.lookingFor. Private profiles can save it; public
+			// profiles don't require it (unlike bio/skills/interests which gate
+			// listing). Trimmed-and-elided for an empty-after-trim input so the
+			// stored doc stays empty-field-aware.
+			lookingFor: trimmedString(body.lookingFor, LIMITS.lookingFor),
 			// Years of experience — accepts a number OR a numeric string
 			// (the edit form's <input type="number"> ships a string value).
 			// Garbage / out-of-range becomes undefined; 60 is the upper

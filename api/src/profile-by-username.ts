@@ -51,7 +51,7 @@ export type PublicProfile = Pick<
 	| 'yearsOfExperience'
 	| 'updatedAt'
 > &
-	Partial<Pick<Profile, 'bio' | 'skills' | 'interests'>>;
+	Partial<Pick<Profile, 'bio' | 'skills' | 'interests' | 'lookingFor'>>;
 
 /**
  * Reduce a stored Profile to the public-facing projection. Single point
@@ -75,6 +75,7 @@ export function toPublicProfile(profile: Profile): PublicProfile {
 		websiteUrl: profile.websiteUrl,
 		preferredLanguages: profile.preferredLanguages,
 		yearsOfExperience: profile.yearsOfExperience,
+		lookingFor: profile.lookingFor,
 		updatedAt: profile.updatedAt,
 	};
 }
