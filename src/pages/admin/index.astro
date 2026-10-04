@@ -51,7 +51,7 @@ import SEO from '../../components/SEO.astro';
 			</div>
 
 			<!-- KPI cards -->
-			<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+			<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
 				<div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
 					<p class="text-xs uppercase tracking-wide text-slate-500 mb-1">Total profiles</p>
 					<p id="kpi-total" class="text-3xl font-bold text-slate-900">—</p>
@@ -68,6 +68,43 @@ import SEO from '../../components/SEO.astro';
 					<p class="text-xs uppercase tracking-wide text-slate-500 mb-1">Complete</p>
 					<p id="kpi-complete" class="text-3xl font-bold text-primary-600">—</p>
 				</div>
+			</div>
+
+			<!-- GitHub Issues stat tile. Fetched client-side from the public
+				 GitHub REST API (no auth, 60/hr rate limit per IP — more than
+				 enough for the admin viewer count). Cached 5 min in
+				 localStorage so a page reload doesn't burn a request. Lives
+				 next to the profile KPIs because the admin glances here for
+				 "anything new to triage?" and GitHub Issues is the user-help
+				 channel (see .github/ISSUE_TEMPLATE/user-help.yml). -->
+			<div class="mb-8">
+				<a
+					id="github-issues-tile"
+					href="https://github.com/rmjoia/codepalsio/issues?q=is%3Aopen+is%3Aissue"
+					target="_blank"
+					rel="noopener noreferrer"
+					class="block bg-white rounded-xl p-5 shadow-sm border border-slate-200 hover:border-primary-400 hover:shadow transition-all"
+				>
+					<div class="flex items-center justify-between">
+						<div>
+							<p class="text-xs uppercase tracking-wide text-slate-500 mb-1">Open GitHub issues</p>
+							<p id="kpi-open-issues" class="text-3xl font-bold text-slate-900">—</p>
+							<p id="kpi-open-issues-note" class="text-xs text-slate-400 mt-1">
+								Checking github.com…
+							</p>
+						</div>
+						<svg
+							class="w-10 h-10 text-slate-300"
+							fill="currentColor"
+							viewBox="0 0 24 24"
+							aria-hidden="true"
+						>
+							<path
+								d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.57.1.78-.25.78-.56v-2.17c-3.19.69-3.87-1.37-3.87-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.23-1.28-5.23-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5z"
+							></path>
+						</svg>
+					</div>
+				</a>
 			</div>
 
 			<!-- Manage admins -->
@@ -169,6 +206,67 @@ import SEO from '../../components/SEO.astro';
 			function setText(id: string, value: string | number): void {
 				const el = document.getElementById(id);
 				if (el) el.textContent = String(value);
+			}
+
+			/**
+			 * Read the open-issue count from the public GitHub REST API and
+			 * paint it onto the admin stat tile. Soft-fails on any error so
+			 * a flaky GitHub never breaks /admin.
+			 *
+			 * Cached 5 min in localStorage so an admin refreshing the page
+			 * doesn't burn a request against the unauthenticated API's
+			 * 60/hr/IP ceiling. The cache key includes the API path so a
+			 * future repo rename flushes stale counts automatically.
+			 *
+			 * The repository endpoint returns `open_issues_count` which
+			 * includes BOTH issues and pull requests — fine for the
+			 * "anything new to triage?" glance; a dedicated search would
+			 * be more accurate but costs a round trip for a small win.
+			 */
+			async function loadOpenIssueCount(): Promise<void> {
+				const tile = document.getElementById('github-issues-tile');
+				const countEl = document.getElementById('kpi-open-issues');
+				const noteEl = document.getElementById('kpi-open-issues-note');
+				if (!tile || !countEl || !noteEl) return;
+
+				const CACHE_KEY = 'codepals.admin.github.open_issues_count';
+				const CACHE_TTL_MS = 5 * 60 * 1000;
+
+				// Serve from cache first for an instant paint; still kick off
+				// the refresh so the number stays live within the TTL.
+				try {
+					const raw = localStorage.getItem(CACHE_KEY);
+					if (raw) {
+						const parsed = JSON.parse(raw) as { count: number; at: number };
+						if (Date.now() - parsed.at < CACHE_TTL_MS) {
+							countEl.textContent = String(parsed.count);
+							noteEl.textContent = 'cached — refreshes every 5 min';
+							return;
+						}
+					}
+				} catch {
+					// Private window / disabled storage → no cache. Fall through.
+				}
+
+				try {
+					const res = await fetch('https://api.github.com/repos/rmjoia/codepalsio', {
+						headers: { Accept: 'application/vnd.github+json' },
+					});
+					if (!res.ok) throw new Error(`github ${res.status}`);
+					const body = (await res.json()) as { open_issues_count?: number };
+					const count = typeof body.open_issues_count === 'number' ? body.open_issues_count : 0;
+					countEl.textContent = String(count);
+					noteEl.textContent = `issues + PRs · updated ${new Date().toLocaleTimeString()}`;
+					try {
+						localStorage.setItem(CACHE_KEY, JSON.stringify({ count, at: Date.now() }));
+					} catch {
+						// Non-fatal — the count is still painted for this view.
+					}
+				} catch (err) {
+					// Keep the dash; replace the note with a soft error.
+					noteEl.textContent = 'Couldn’t reach github.com — click to view';
+					console.warn('github issue count fetch failed:', err);
+				}
 			}
 
 			function badge(text: string, cls: string): HTMLElement {
@@ -282,6 +380,13 @@ import SEO from '../../components/SEO.astro';
 				const errorMessage = document.getElementById('error-message');
 				const tbody = document.getElementById('users-tbody');
 				const empty = document.getElementById('users-empty');
+
+				// Fire the GitHub open-issue count fetch in parallel — it's
+				// a public read with no auth, so no need to serialise with
+				// the admin KPI fetch. Soft-fail on any error (we just
+				// show a dash); we don't want a flaky GitHub to break the
+				// whole admin page.
+				void loadOpenIssueCount();
 
 				try {
 					const { profiles, kpis } = await getAdminUsers();
