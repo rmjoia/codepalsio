@@ -111,5 +111,47 @@ describe('Header.astro — auth-loading skeleton invariants', () => {
 				/getElementById\(['"]mobile-sign-in-btn['"]\)\s*\?\.\s*classList\s*\.\s*remove\(\s*['"]hidden['"]\s*\)/
 			);
 		});
+
+		it('re-runs auth init on bfcache restore (fixes login-disappears-on-back-nav)', () => {
+			// Browsers restore the DOM + module scope on back/forward
+			// navigation when the page is served from the back-forward
+			// cache. The memoized principal fetch sticks, so without a
+			// pageshow listener the UI reflects stale auth state from the
+			// snapshot moment. Pin BOTH: the listener registration AND the
+			// cache reset + repaint it does.
+			expect(source).toMatch(/addEventListener\(['"]pageshow['"]/);
+			expect(source).toMatch(/\.persisted/);
+			expect(source).toMatch(/resetPrincipalCache\(\)/);
+			// The auth-init function must exist AND be re-called inside
+			// the pageshow handler. Pin the shape: an async function
+			// named runAuthInit + an invocation of it inside the handler.
+			expect(source).toMatch(/async\s+function\s+runAuthInit\s*\(/);
+			// Count: runAuthInit should be called at least twice —
+			// once for initial paint, once from the pageshow handler.
+			const invocations = source.match(/\brunAuthInit\(\)/g) ?? [];
+			expect(
+				invocations.length,
+				'runAuthInit must be invoked at init AND on pageshow'
+			).toBeGreaterThanOrEqual(2);
+		});
+
+		it('resets DOM to the pre-auth state at the start of each runAuthInit', () => {
+			// Idempotence invariant: when runAuthInit runs a second time
+			// (bfcache restore), the previous paint may have left the
+			// user-menu visible / nav-find revealed / sign-in hidden. If
+			// the current principal is null, we need to UN-reveal those.
+			// Pin the reset block by looking for the user-menu-container
+			// being hidden INSIDE the function body (before the await).
+			const fnStart = source.indexOf('async function runAuthInit');
+			expect(fnStart, 'runAuthInit must exist').toBeGreaterThan(-1);
+			const awaitIdx = source.indexOf('await getPrincipalWithRoles', fnStart);
+			expect(awaitIdx, 'runAuthInit must call getPrincipalWithRoles').toBeGreaterThan(fnStart);
+			const resetBlock = source.slice(fnStart, awaitIdx);
+			// Before the await, user-menu-container must be hidden-reset
+			// so the previous paint's state doesn't leak into this one.
+			expect(resetBlock).toMatch(
+				/getElementById\(['"]user-menu-container['"]\)[\s\S]*?classList[\s\S]*?add\(['"]hidden['"]\)/
+			);
+		});
 	});
 });

@@ -338,6 +338,7 @@ import '../styles/global.css';
 		getAvatarUrl,
 		isAdminPrincipal,
 		deleteAccount,
+		resetPrincipalCache,
 	} from '../services/api';
 	import { setupModalDelegation } from '../lib/modals';
 	import { setupSmoothScroll } from '../lib/smooth-scroll';
@@ -363,7 +364,33 @@ import '../styles/global.css';
 	setupSmoothScroll();
 	setupOnboardingForm();
 
-	(async () => {
+	/**
+	 * Resolve and paint the auth-dependent header state. Extracted into a
+	 * named, idempotent function so BFCache restores can re-run it (see
+	 * pageshow handler below).
+	 *
+	 * Idempotence: at the start we RESET every element to its "pre-auth-
+	 * resolved" state (skeletons visible, user-menu + nav-find hidden,
+	 * sign-in buttons hidden). Then we paint based on the current
+	 * principal. This handles the back-forward case where the previous
+	 * paint saw a signed-in user but the current principal is null (user
+	 * signed out in another tab) — without the reset we'd leave a stale
+	 * user menu visible.
+	 */
+	async function runAuthInit(): Promise<void> {
+		// Reset to the pre-auth-resolved baseline.
+		document.getElementById('desktop-auth-skeleton')?.classList.remove('hidden');
+		document.getElementById('mobile-auth-skeleton')?.classList.remove('hidden');
+		document.getElementById('sign-in-btn')?.classList.add('hidden');
+		document.getElementById('mobile-sign-in-btn')?.classList.add('hidden');
+		document.getElementById('user-menu-container')?.classList.add('hidden');
+		document.getElementById('nav-find')?.classList.add('hidden');
+		document.getElementById('mobile-user-info')?.classList.add('hidden');
+		document.getElementById('mobile-signed-in-actions')?.classList.add('hidden');
+		document.getElementById('mobile-nav-find')?.classList.add('hidden');
+		document.getElementById('admin-link')?.classList.add('hidden');
+		document.getElementById('mobile-admin-link')?.classList.add('hidden');
+
 		// Use the enriched principal — both invitation-assigned roles (manager,
 		// moderator, etc.) and roster-enriched 'admin' flow through userRoles.
 		// isAdminPrincipal recognises any admin-tier role for menu visibility.
@@ -390,7 +417,6 @@ import '../styles/global.css';
 		const isAdmin = isAdminPrincipal(principal);
 
 		// === Desktop ===
-		document.getElementById('sign-in-btn')?.classList.add('hidden');
 		document.getElementById('user-menu-container')?.classList.remove('hidden');
 		document.getElementById('nav-find')?.classList.remove('hidden');
 
@@ -416,15 +442,9 @@ import '../styles/global.css';
 		// `mobile-user-info` and `mobile-signed-in-actions` already have `flex`
 		// in their static class list alongside `hidden` — Tailwind's `hidden`
 		// wins until removed, so dropping `hidden` is all that's needed.
-		const mobileSignIn = document.getElementById('mobile-sign-in-btn');
-		const mobileUserInfo = document.getElementById('mobile-user-info');
-		const mobileSignedInActions = document.getElementById('mobile-signed-in-actions');
-		const mobileNavFind = document.getElementById('mobile-nav-find');
-
-		mobileSignIn?.classList.add('hidden');
-		mobileUserInfo?.classList.remove('hidden');
-		mobileSignedInActions?.classList.remove('hidden');
-		mobileNavFind?.classList.remove('hidden');
+		document.getElementById('mobile-user-info')?.classList.remove('hidden');
+		document.getElementById('mobile-signed-in-actions')?.classList.remove('hidden');
+		document.getElementById('mobile-nav-find')?.classList.remove('hidden');
 
 		const mobileAvatar = document.getElementById('mobile-user-avatar') as HTMLImageElement | null;
 		if (avatarUrl && mobileAvatar) {
@@ -441,7 +461,24 @@ import '../styles/global.css';
 		if (mobileName) mobileName.textContent = '@' + username;
 
 		if (isAdmin) document.getElementById('mobile-admin-link')?.classList.remove('hidden');
-	})();
+	}
+
+	// Initial paint.
+	runAuthInit();
+
+	// BFCache rehydration (fixes "login state disappears on back-nav").
+	// Browsers that support bfcache preserve the DOM + module scope across
+	// a back/forward navigation; scripts don't re-run, so the memoized
+	// principal fetch sticks and the UI reflects the auth state from the
+	// snapshot moment. On restore we bust the memo + repaint from a fresh
+	// /.auth/me so the UI always matches reality — including the case
+	// where the user signed in or out in another tab since the snapshot.
+	window.addEventListener('pageshow', (event) => {
+		if ((event as PageTransitionEvent).persisted) {
+			resetPrincipalCache();
+			runAuthInit();
+		}
+	});
 
 	// Account deletion (wired for both desktop + mobile buttons).
 	async function handleDelete() {

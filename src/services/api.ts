@@ -191,6 +191,24 @@ let principalPromise: Promise<ClientPrincipal | null> | null = null;
 let enrichedPrincipalPromise: Promise<ClientPrincipal | null> | null = null;
 
 /**
+ * Reset the memoized principal fetches so the NEXT call to
+ * `getPrincipal` / `getPrincipalWithRoles` re-fetches from the server.
+ *
+ * Needed on BFCache restore (`window.pageshow` with `event.persisted ===
+ * true`): bfcache preserves the module-scope `principalPromise` from
+ * the original page load, so a user who signed in or out in another
+ * tab since the back-forward snapshot would see stale auth state.
+ * Also useful after `account-delete` or an explicit logout flow if we
+ * want the next page interaction to re-resolve immediately.
+ *
+ * No-op if no fetch has been issued yet.
+ */
+export function resetPrincipalCache(): void {
+	principalPromise = null;
+	enrichedPrincipalPromise = null;
+}
+
+/**
  * Resolve the current SWA client principal, memoized for the page lifetime.
  * Returns null for anonymous sessions or any network/parse failure — callers
  * decide how to react (redirect to login, show signed-out UI, etc.).
