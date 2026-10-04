@@ -220,6 +220,33 @@ import SEO from '../components/SEO.astro';
 					card.appendChild(skills);
 				}
 
+				// Languages — a key "can we talk?" signal on the card.
+				// Rendered as neutral slate chips so skills (primary) stay
+				// the visually dominant row. Cap at 3 — this is a card, not
+				// a profile page.
+				const langsList = profile.preferredLanguages ?? [];
+				if (langsList.length > 0) {
+					const langs = document.createElement('div');
+					langs.className = 'flex flex-wrap gap-1.5 mb-3';
+					const prefix = document.createElement('span');
+					prefix.className = 'text-xs text-slate-500 mr-1';
+					prefix.textContent = 'Speaks:';
+					langs.appendChild(prefix);
+					langsList.slice(0, 3).forEach((lang) => {
+						const chip = document.createElement('span');
+						chip.className = 'px-2 py-0.5 text-xs bg-slate-100 text-slate-700 rounded-full';
+						chip.textContent = lang;
+						langs.appendChild(chip);
+					});
+					if (langsList.length > 3) {
+						const more = document.createElement('span');
+						more.className = 'px-2 py-0.5 text-xs text-slate-500';
+						more.textContent = `+${langsList.length - 3} more`;
+						langs.appendChild(more);
+					}
+					card.appendChild(langs);
+				}
+
 				// Footer: location + timezone
 				const meta: string[] = [];
 				if (profile.location) meta.push(profile.location);

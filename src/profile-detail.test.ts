@@ -88,13 +88,18 @@ describe('find/<username> — Contact affordance (issue #73)', () => {
 			expect(source).toMatch(/a\.rel\s*=\s*['"]noopener\s+noreferrer['"]/);
 		});
 
-		it('builds <a> text with textContent (not innerHTML)', () => {
+		it('writes the label via textContent (never innerHTML)', () => {
 			// Defence in depth: label strings are hardcoded today, but
 			// treating any string that lands in the DOM as potentially
 			// untrusted is a cheap habit. If a future change pipes a
 			// user-supplied label through here, textContent keeps it
 			// safe; innerHTML would be an XSS vector.
-			expect(source).toMatch(/a\.textContent\s*=\s*label/);
+			//
+			// Match any `<identifier>.textContent = label` (today
+			// labelSpan.textContent = label; previously a.textContent =
+			// label). The invariant is "the label goes through
+			// textContent," not any particular element name.
+			expect(source).toMatch(/\.textContent\s*=\s*label/);
 			expect(source).not.toMatch(/\.innerHTML\s*=/);
 		});
 	});

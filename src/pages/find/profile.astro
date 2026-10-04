@@ -415,21 +415,43 @@ import SEO from '../../components/SEO.astro';
 				// github.com/<username>; LinkedIn and Website only when
 				// explicitly set. The fallback matters — a profile with no
 				// explicit URLs still has a reachable owner via GitHub.
-				const routes: Array<{ label: string; href: string; variant: 'primary' | 'secondary' }> = [];
+				type RouteKind = 'github' | 'linkedin' | 'website';
+				const routes: Array<{
+					kind: RouteKind;
+					label: string;
+					href: string;
+					variant: 'primary' | 'secondary';
+				}> = [];
 				if (profile.githubUrl) {
-					routes.push({ label: 'GitHub', href: profile.githubUrl, variant: 'primary' });
+					routes.push({
+						kind: 'github',
+						label: 'GitHub',
+						href: profile.githubUrl,
+						variant: 'primary',
+					});
 				} else if (profile.githubUsername) {
 					routes.push({
+						kind: 'github',
 						label: 'GitHub',
 						href: `https://github.com/${profile.githubUsername}`,
 						variant: 'primary',
 					});
 				}
 				if (profile.linkedinUrl) {
-					routes.push({ label: 'LinkedIn', href: profile.linkedinUrl, variant: 'secondary' });
+					routes.push({
+						kind: 'linkedin',
+						label: 'LinkedIn',
+						href: profile.linkedinUrl,
+						variant: 'secondary',
+					});
 				}
 				if (profile.websiteUrl) {
-					routes.push({ label: 'Website', href: profile.websiteUrl, variant: 'secondary' });
+					routes.push({
+						kind: 'website',
+						label: 'Website',
+						href: profile.websiteUrl,
+						variant: 'secondary',
+					});
 				}
 
 				// Always reveal the section even if the profile exposes zero
@@ -438,12 +460,28 @@ import SEO from '../../components/SEO.astro';
 				// whole section would hide that too. The buttons container
 				// may simply end up empty.
 
+				// Inline SVG icons per route. Each is a 20×20 viewBox so the
+				// stroke / fill scales cleanly next to the button label.
+				// Icons use `fill="currentColor"` so they inherit the button
+				// text colour (white on primary, primary-600 on secondary).
+				// aria-hidden because the adjacent label already names the
+				// link — screen readers announce "GitHub, link" not "icon
+				// GitHub".
+				const ICON_PATHS: Record<RouteKind, string> = {
+					github:
+						'M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.57.1.78-.25.78-.56v-2.17c-3.19.69-3.87-1.37-3.87-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.23-1.28-5.23-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5z',
+					linkedin:
+						'M20.45 20.45h-3.56v-5.57c0-1.33-.03-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.42v1.56h.05c.48-.9 1.65-1.85 3.39-1.85 3.63 0 4.3 2.39 4.3 5.5v6.24zM5.34 7.44a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.8 0 0 .77 0 1.73v20.54C0 23.23.8 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z',
+					website:
+						'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm7.93 9h-3.12a16.1 16.1 0 0 0-1.57-6.17A8.03 8.03 0 0 1 19.93 11zM12 4c1.08 1.37 2.28 3.78 2.82 7H9.18C9.72 7.78 10.92 5.37 12 4zM4.07 11a8.03 8.03 0 0 1 4.69-6.17A16.1 16.1 0 0 0 7.19 11H4.07zM4.07 13H7.2c.17 2.2.7 4.3 1.57 6.17A8.03 8.03 0 0 1 4.07 13zm4.77 0h6.32c-.54 3.22-1.74 5.63-2.82 7-1.08-1.37-2.28-3.78-2.82-7h.68zm6.4 6.17c.87-1.87 1.4-3.97 1.57-6.17h3.12a8.03 8.03 0 0 1-4.69 6.17z',
+				};
+
 				// Button-style anchors (not inline text) so the Contact affordance
 				// reads as the primary CTA on this page. target=_blank +
 				// rel=noopener,noreferrer are mandatory for cross-origin links
 				// (prevents the opened page from controlling our window.opener
 				// and avoids leaking the referrer header).
-				routes.forEach(({ label, href, variant }) => {
+				routes.forEach(({ kind, label, href, variant }) => {
 					const a = document.createElement('a');
 					a.href = href;
 					a.target = '_blank';
@@ -452,7 +490,22 @@ import SEO from '../../components/SEO.astro';
 						variant === 'primary'
 							? 'inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg font-semibold hover:bg-primary-600 transition-colors text-sm'
 							: 'inline-flex items-center gap-2 px-4 py-2 bg-white text-primary-600 border border-primary-500 rounded-lg font-semibold hover:bg-primary-50 transition-colors text-sm';
-					a.textContent = label;
+
+					const svgNs = 'http://www.w3.org/2000/svg';
+					const svg = document.createElementNS(svgNs, 'svg');
+					svg.setAttribute('class', 'w-4 h-4');
+					svg.setAttribute('viewBox', '0 0 24 24');
+					svg.setAttribute('fill', 'currentColor');
+					svg.setAttribute('aria-hidden', 'true');
+					const path = document.createElementNS(svgNs, 'path');
+					path.setAttribute('d', ICON_PATHS[kind]);
+					svg.appendChild(path);
+
+					const labelSpan = document.createElement('span');
+					labelSpan.textContent = label;
+
+					a.appendChild(svg);
+					a.appendChild(labelSpan);
 					container.appendChild(a);
 				});
 				section.classList.remove('hidden');
