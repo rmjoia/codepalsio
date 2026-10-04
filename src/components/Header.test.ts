@@ -129,7 +129,10 @@ describe('Header.astro — auth-loading skeleton invariants', () => {
 			// Count: runAuthInit should be called at least twice —
 			// once for initial paint, once from the pageshow handler.
 			const invocations = source.match(/\brunAuthInit\(\)/g) ?? [];
-			expect(invocations.length, 'runAuthInit must be invoked at init AND on pageshow').toBeGreaterThanOrEqual(2);
+			expect(
+				invocations.length,
+				'runAuthInit must be invoked at init AND on pageshow'
+			).toBeGreaterThanOrEqual(2);
 		});
 
 		it('resets DOM to the pre-auth state at the start of each runAuthInit', () => {
