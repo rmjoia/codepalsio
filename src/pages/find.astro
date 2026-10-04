@@ -229,15 +229,13 @@ import SEO from '../components/SEO.astro';
 				// Languages — a key "can we talk?" signal on the card.
 				// Rendered as neutral slate chips so skills (primary) stay
 				// the visually dominant row. Cap at 3 — this is a card, not
-				// a profile page.
+				// a profile page; viewers drill in to see the full list.
+				// No prefix label: the chip text (English, Português, …) is
+				// self-explanatory, same as the skills row above.
 				const langsList = profile.preferredLanguages ?? [];
 				if (langsList.length > 0) {
 					const langs = document.createElement('div');
 					langs.className = 'flex flex-wrap gap-1.5 mb-3';
-					const prefix = document.createElement('span');
-					prefix.className = 'text-xs text-slate-500 mr-1';
-					prefix.textContent = 'Speaks:';
-					langs.appendChild(prefix);
 					langsList.slice(0, 3).forEach((lang) => {
 						const chip = document.createElement('span');
 						chip.className = 'px-2 py-0.5 text-xs bg-slate-100 text-slate-700 rounded-full';
