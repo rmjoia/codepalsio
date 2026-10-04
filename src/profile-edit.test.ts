@@ -263,31 +263,69 @@ describe('profile/index.astro — per-field visibility UI', () => {
 			expect(source).toMatch(/bindTagInput\(\s*['"]languages-input['"]\s*,/);
 		});
 
-		it.each([
-			['githubUrl', 'GitHub'],
-			['linkedinUrl', 'LinkedIn'],
-			['websiteUrl', 'Website'],
-		])('declares a type="url" input for #%s with https-only pattern', (id) => {
+		it('declares a type="url" input for #websiteUrl with https-only pattern', () => {
 			// type="url" gives the browser URL-keyboard on mobile + format
 			// hint. The pattern="https://.*" is a soft hint (server's
 			// sanitizedUrl is the hard gate; rejecting non-https there is
 			// the XSS protection — see lib/validation.ts).
-			const tag = source.match(new RegExp(`<input[^>]*?id=["']${id}["'][^>]*?>`));
-			expect(tag, `<input id="${id}"> must exist`).not.toBeNull();
+			//
+			// `githubUrl` + `linkedinUrl` are NO LONGER type="url" inputs:
+			// they're text inputs that collect only the handle, with a
+			// readonly `https://github.com/` / `https://linkedin.com/in/`
+			// prefix next to the field (see the dedicated handle test
+			// below). Only websiteUrl stays a full-URL input, since there's
+			// no fixed shape to prefix for personal websites.
+			const tag = source.match(/<input[^>]*?id=["']websiteUrl["'][^>]*?>/);
+			expect(tag, `<input id="websiteUrl"> must exist`).not.toBeNull();
 			expect(tag![0]).toMatch(/type=["']url["']/);
 			expect(tag![0]).toMatch(/pattern=["']https:\/\/\.\*["']/);
+		});
+
+		it.each([
+			['githubUrl', 'https://github.com/'],
+			['linkedinUrl', 'https://linkedin.com/in/'],
+		])('#%s is a handle-only text input prefixed by a readonly span showing %s', (id, prefix) => {
+			// UX decision: for sites with a fixed URL shape (GitHub,
+			// LinkedIn), the user enters only the handle. The full URL
+			// is reconstructed on save. The readonly prefix sets
+			// expectations about what the final URL will look like.
+			const tag = source.match(new RegExp(`<input[^>]*?id=["']${id}["'][^>]*?>`));
+			expect(tag, `<input id="${id}"> must exist`).not.toBeNull();
+			expect(tag![0]).toMatch(/type=["']text["']/);
+			expect(tag![0]).not.toMatch(/pattern=/);
+			// Prefix span must sit before the input and render the
+			// full-URL prefix for the user to see. Astro prettier
+			// formats multi-attr elements with the `>` on a new line
+			// (`</span\n>`), so match on `</span` without the
+			// trailing `>`.
+			const regex = new RegExp(
+				`<span[\\s\\S]*?>${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</span[\\s\\S]{0,400}?<input[^>]*?id=["']${id}["']`
+			);
+			expect(source).toMatch(regex);
 		});
 
 		it('pre-populates each new field from the loaded profile', () => {
 			// Without these, a returning user opening the edit form sees
 			// blank inputs even when their stored profile has the data —
-			// then a "save" would wipe the stored values.
+			// then a "save" would wipe the stored values. For GitHub +
+			// LinkedIn the stored value is a full URL but the input shows
+			// only the handle, so the pre-populate goes through a
+			// handle-extraction helper.
 			expect(source).toMatch(/yearsEl.*=.*document\.getElementById\(['"]years-of-experience['"]\)/);
 			expect(source).toMatch(/profile\?\.yearsOfExperience/);
 			expect(source).toMatch(/profile\?\.preferredLanguages/);
-			expect(source).toMatch(/profile\?\.githubUrl/);
-			expect(source).toMatch(/profile\?\.linkedinUrl/);
+			expect(source).toMatch(/githubHandleFromUrl\(profile\?\.githubUrl\)/);
+			expect(source).toMatch(/linkedinHandleFromUrl\(profile\?\.linkedinUrl\)/);
 			expect(source).toMatch(/profile\?\.websiteUrl/);
+		});
+
+		it('builds the full URL from the handle on save (round-trips cleanly)', () => {
+			// On save we have to reverse the transform: wrap the handle in
+			// the prefix. The helper tolerates a pasted-full-URL input so
+			// `githubUrlFromHandle('https://github.com/foo')` → the right
+			// URL, not a double-prefix.
+			expect(source).toMatch(/githubUrl:\s*githubUrlFromHandle\(githubUrlEl\?\.value\)/);
+			expect(source).toMatch(/linkedinUrl:\s*linkedinUrlFromHandle\(linkedinUrlEl\?\.value\)/);
 		});
 
 		it('parses the years input with Number() (matches server boundedInteger)', () => {
