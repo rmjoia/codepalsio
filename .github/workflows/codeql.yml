@@ -1,0 +1,72 @@
+name: CodeQL
+
+# Static-analysis gate for the TypeScript surface. Catches patterns that
+# unit tests + ESLint miss by design: taint flows (user-controlled input
+# reaching a dangerous sink), SSRF-shaped URL fetches, insecure crypto,
+# path traversal via profile ids, prototype pollution, etc. See the
+# CodeQL JS/TS query pack:
+# https://codeql.github.com/codeql-query-help/javascript/
+#
+# Runs on push to any branch (same cadence as Validate so a red CodeQL
+# can't sneak into main via a merge), on pull_request to main (so the
+# finding appears on the PR itself), and on a weekly schedule to catch
+# newly-added queries CodeQL ships without a code change here.
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - main
+  schedule:
+    # Monday 06:00 UTC. Weekday morning so a new finding is visible when
+    # the author is around.
+    - cron: '0 6 * * 1'
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  analyze:
+    name: Analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      # Required for CodeQL to upload results to the Security tab.
+      security-events: write
+      # Required for checkout to read the repo.
+      contents: read
+      # Required so CodeQL can read action metadata.
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - javascript-typescript
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # security-and-quality adds code-quality queries to the default
+          # security-extended pack. Both buckets are useful on an MVP:
+          # security findings land first, quality findings catch footguns
+          # before they ship.
+          queries: security-and-quality
+
+      # No manual build step: autobuild handles our Astro + Vite setup.
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
