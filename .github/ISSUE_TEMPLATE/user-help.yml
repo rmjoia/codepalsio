@@ -1,0 +1,64 @@
+name: User help & feedback
+description: Ask a question, report a bug, or suggest an improvement to CodePals.io
+title: '[Help]: '
+labels:
+  - user-feedback
+  - triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to tell us what's happening. For privacy-sensitive
+        reports (harassment, impersonation, account recovery), please email
+        **abuse@codepals.io** instead — GitHub Issues are public.
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: What are you reporting?
+      options:
+        - 🐛 Something is broken (bug)
+        - 💡 Idea or feature request
+        - ❓ How do I use the site? (question)
+        - 📝 Content issue (typo, wrong link, outdated info)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What were you trying to do, and what happened?
+      description: As specific as you can — the step you were on, what you clicked, and what the result was.
+      placeholder: |
+        I was on /find trying to search for someone working on Rust. I typed "rust"
+        in the search box and the page went blank for a moment, then came back empty
+        even though I know at least one person has rust in their profile.
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_expected
+    attributes:
+      label: What did you expect to happen?
+      placeholder: I expected to see a list of profiles mentioning Rust in their skills or "working on" field.
+    validations:
+      required: false
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser + OS (if the issue is UI-related)
+      placeholder: Chrome 141 on macOS 14 — or "N/A"
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+
+        **Before you submit:** this issue will be public. Please don't paste
+        private information (session cookies, personal emails, auth tokens, DMs
+        from other users). For anything confidential, email **abuse@codepals.io** —
+        we respond within five business days.
