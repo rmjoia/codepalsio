@@ -56,11 +56,14 @@ describe('find/<username> — Contact affordance (issue #73)', () => {
 			expect(source).not.toMatch(/function\s+renderLinks\s*\(/);
 		});
 
-		it('falls back to github.com/<githubUsername> when githubUrl is absent', () => {
-			// The whole point of the fallback: every CodePal has a GitHub
-			// login, so every profile is reachable via GitHub even without
-			// an explicit URL. Pin the exact template string pattern.
-			expect(source).toMatch(/`https:\/\/github\.com\/\$\{profile\.githubUsername\}`/);
+		it('does NOT auto-derive a GitHub link from the OAuth login (GDPR Art. 25)', () => {
+			// The old fallback — build `https://github.com/${profile.githubUsername}`
+			// when githubUrl was absent — published the user's GitHub
+			// profile without consent. The user signed in with GitHub to
+			// authenticate, not to advertise their GitHub URL. Explicit
+			// opt-in via the githubUrl form field is the consent gate.
+			// Pin the ABSENCE of the derived-link template.
+			expect(source).not.toMatch(/`https:\/\/github\.com\/\$\{profile\.githubUsername\}`/);
 		});
 
 		it('surfaces LinkedIn and Website only when explicitly set (no fake fallback)', () => {
@@ -88,13 +91,18 @@ describe('find/<username> — Contact affordance (issue #73)', () => {
 			expect(source).toMatch(/a\.rel\s*=\s*['"]noopener\s+noreferrer['"]/);
 		});
 
-		it('builds <a> text with textContent (not innerHTML)', () => {
+		it('writes the label via textContent (never innerHTML)', () => {
 			// Defence in depth: label strings are hardcoded today, but
 			// treating any string that lands in the DOM as potentially
 			// untrusted is a cheap habit. If a future change pipes a
 			// user-supplied label through here, textContent keeps it
 			// safe; innerHTML would be an XSS vector.
-			expect(source).toMatch(/a\.textContent\s*=\s*label/);
+			//
+			// Match any `<identifier>.textContent = label` (today
+			// labelSpan.textContent = label; previously a.textContent =
+			// label). The invariant is "the label goes through
+			// textContent," not any particular element name.
+			expect(source).toMatch(/\.textContent\s*=\s*label/);
 			expect(source).not.toMatch(/\.innerHTML\s*=/);
 		});
 	});

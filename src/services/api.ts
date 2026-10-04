@@ -306,7 +306,7 @@ export type DirectoryProfile = Pick<
 	Profile,
 	'id' | 'githubUsername' | 'displayName' | 'availability' | 'location' | 'timezone' | 'updatedAt'
 > &
-	Partial<Pick<Profile, 'bio' | 'skills'>>;
+	Partial<Pick<Profile, 'bio' | 'skills' | 'preferredLanguages' | 'githubUrl'>>;
 
 /**
  * GET /api/profiles → returns the public profiles directory (excludes the

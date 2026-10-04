@@ -198,6 +198,14 @@ import SEO from '../../components/SEO.astro';
 						</p>
 					</div>
 
+					<div class="bg-white rounded-xl shadow p-6">
+						<h2 class="text-xl font-bold text-slate-900 mb-4">Languages I speak</h2>
+						<div id="profile-languages" class="flex flex-wrap gap-2 hidden"></div>
+						<p id="profile-languages-empty" class="text-slate-600 italic hidden">
+							No languages added yet. Click "Edit Profile" to add some.
+						</p>
+					</div>
+
 					<div id="profile-details-card" class="hidden bg-white rounded-xl shadow p-6">
 						<h2 class="text-xl font-bold text-slate-900 mb-4">Details</h2>
 						<div class="space-y-2">
@@ -322,12 +330,12 @@ import SEO from '../../components/SEO.astro';
 								list="timezone-options"
 								autocomplete="off"
 								placeholder="Start typing — e.g. Europe/Dublin, America/New_York"
-								class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+								class="tz-input w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
 							/>
 							<datalist id="timezone-options"></datalist>
 							<p class="mt-1 text-xs text-slate-500">
 								IANA timezone (e.g. <code>Europe/Lisbon</code>, <code>Pacific/Honolulu</code>,
-								<code>Africa/Lagos</code>). Click the field for suggestions.
+								<code>Africa/Lagos</code>). Start typing to see suggestions.
 							</p>
 						</div>
 					</div>
@@ -764,6 +772,27 @@ import SEO from '../../components/SEO.astro';
 				} else {
 					interestsEl.classList.add('hidden');
 					interestsEmpty.classList.remove('hidden');
+				}
+
+				// Languages I speak. Same chip pattern as skills/interests;
+				// slate palette so the three sections read as a coherent trio.
+				const languagesEl = document.getElementById('profile-languages');
+				const languagesEmpty = document.getElementById('profile-languages-empty');
+				if (languagesEl && languagesEmpty) {
+					languagesEl.innerHTML = '';
+					if (profile?.preferredLanguages?.length > 0) {
+						profile.preferredLanguages.forEach((lang) => {
+							const span = document.createElement('span');
+							span.className = 'px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm';
+							span.textContent = lang;
+							languagesEl.appendChild(span);
+						});
+						languagesEl.classList.remove('hidden');
+						languagesEmpty.classList.add('hidden');
+					} else {
+						languagesEl.classList.add('hidden');
+						languagesEmpty.classList.remove('hidden');
+					}
 				}
 
 				// Details card. Build via DOM/textContent rather than innerHTML —
@@ -1218,5 +1247,22 @@ import SEO from '../../components/SEO.astro';
 
 			init();
 		</script>
+
+		<style is:global>
+			/*
+			 * Hide the WebKit native dropdown arrow on datalist-bound inputs
+			 * (Chrome / Edge). Browsers show it to hint "clickable dropdown",
+			 * but with an already-complete value in the field (e.g.
+			 * Europe/Paris) nothing opens on click because every suggestion
+			 * is filtered out — reads as "broken dropdown" to users.
+			 *
+			 * The field still accepts free text and surfaces matching
+			 * suggestions as the user types; the arrow is removed, not the
+			 * suggestions themselves.
+			 */
+			input.tz-input::-webkit-calendar-picker-indicator {
+				display: none !important;
+			}
+		</style>
 	</body>
 </html>
