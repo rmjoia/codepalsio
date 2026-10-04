@@ -284,28 +284,25 @@ describe('profile/index.astro — per-field visibility UI', () => {
 		it.each([
 			['githubUrl', 'https://github.com/'],
 			['linkedinUrl', 'https://linkedin.com/in/'],
-		])(
-			'#%s is a handle-only text input prefixed by a readonly span showing %s',
-			(id, prefix) => {
-				// UX decision: for sites with a fixed URL shape (GitHub,
-				// LinkedIn), the user enters only the handle. The full URL
-				// is reconstructed on save. The readonly prefix sets
-				// expectations about what the final URL will look like.
-				const tag = source.match(new RegExp(`<input[^>]*?id=["']${id}["'][^>]*?>`));
-				expect(tag, `<input id="${id}"> must exist`).not.toBeNull();
-				expect(tag![0]).toMatch(/type=["']text["']/);
-				expect(tag![0]).not.toMatch(/pattern=/);
-				// Prefix span must sit before the input and render the
-				// full-URL prefix for the user to see. Astro prettier
-				// formats multi-attr elements with the `>` on a new line
-				// (`</span\n>`), so match on `</span` without the
-				// trailing `>`.
-				const regex = new RegExp(
-					`<span[\\s\\S]*?>${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</span[\\s\\S]{0,400}?<input[^>]*?id=["']${id}["']`
-				);
-				expect(source).toMatch(regex);
-			}
-		);
+		])('#%s is a handle-only text input prefixed by a readonly span showing %s', (id, prefix) => {
+			// UX decision: for sites with a fixed URL shape (GitHub,
+			// LinkedIn), the user enters only the handle. The full URL
+			// is reconstructed on save. The readonly prefix sets
+			// expectations about what the final URL will look like.
+			const tag = source.match(new RegExp(`<input[^>]*?id=["']${id}["'][^>]*?>`));
+			expect(tag, `<input id="${id}"> must exist`).not.toBeNull();
+			expect(tag![0]).toMatch(/type=["']text["']/);
+			expect(tag![0]).not.toMatch(/pattern=/);
+			// Prefix span must sit before the input and render the
+			// full-URL prefix for the user to see. Astro prettier
+			// formats multi-attr elements with the `>` on a new line
+			// (`</span\n>`), so match on `</span` without the
+			// trailing `>`.
+			const regex = new RegExp(
+				`<span[\\s\\S]*?>${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</span[\\s\\S]{0,400}?<input[^>]*?id=["']${id}["']`
+			);
+			expect(source).toMatch(regex);
+		});
 
 		it('pre-populates each new field from the loaded profile', () => {
 			// Without these, a returning user opening the edit form sees
