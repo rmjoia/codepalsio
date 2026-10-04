@@ -124,6 +124,27 @@ const sections: ResourceSection[] = [
 				href: 'https://dataintensive.net/',
 				source: 'dataintensive.net',
 			},
+			{
+				title: 'Domain-Driven Design — reference (Eric Evans)',
+				description:
+					'The free 50-page distillation of the original DDD book. Ubiquitous language, bounded contexts, aggregates — the vocabulary every architect uses. Read this once; refer back for the next decade.',
+				href: 'https://www.domainlanguage.com/wp-content/uploads/2016/05/DDD_Reference_2015-03.pdf',
+				source: 'domainlanguage.com',
+			},
+			{
+				title: 'DDD Starter Modelling Process (Nick Tune)',
+				description:
+					'A practical, step-by-step guide to applying DDD to a new project. Event storming → context mapping → aggregate design, with worked examples. The modern on-ramp if the Evans book feels abstract.',
+				href: 'https://github.com/ddd-crew/ddd-starter-modelling-process',
+				source: 'github.com/ddd-crew',
+			},
+			{
+				title: 'Microsoft — DDD-oriented microservice design',
+				description:
+					"Microsoft's architecture guide for applying DDD + CQRS + event sourcing in .NET-shaped services, but the patterns translate to any stack. Especially useful on tactical patterns (entities, value objects, repositories).",
+				href: 'https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/',
+				source: 'learn.microsoft.com',
+			},
 		],
 	},
 	{
@@ -196,6 +217,34 @@ const sections: ResourceSection[] = [
 				href: 'https://testing.googleblog.com/',
 				source: 'testing.googleblog.com',
 			},
+			{
+				title: 'Test-Driven Development by Example (Kent Beck — book summary)',
+				description:
+					"The original red-green-refactor loop, by the author who coined it. Even if you don't practice strict TDD, the thinking-in-small-steps discipline it teaches makes everything else easier.",
+				href: 'https://tidyfirst.substack.com/',
+				source: 'tidyfirst.substack.com',
+			},
+			{
+				title: 'Playwright — official docs',
+				description:
+					'The modern E2E / browser-automation framework. First-class TypeScript, auto-wait, multi-browser, hermetic fixtures. The getting-started + the testing-strategy pages are mandatory before writing your first spec.',
+				href: 'https://playwright.dev/docs/intro',
+				source: 'playwright.dev',
+			},
+			{
+				title: 'Vitest docs — unit + integration patterns',
+				description:
+					'The vite-native unit test runner. Fast, Jest-compatible API, great TypeScript ergonomics. The "mocking" and "test context" pages cover the integration patterns most tutorials skip.',
+				href: 'https://vitest.dev/guide/',
+				source: 'vitest.dev',
+			},
+			{
+				title: 'The Practical Test Pyramid (Ham Vocke / Martin Fowler)',
+				description:
+					'The pyramid you were probably taught, drawn properly: lots of unit tests, fewer integration, few E2E, with concrete code examples for each layer. The reference for scoping a test strategy.',
+				href: 'https://martinfowler.com/articles/practical-test-pyramid.html',
+				source: 'martinfowler.com',
+			},
 		],
 	},
 	{
@@ -238,6 +287,84 @@ const sections: ResourceSection[] = [
 					'The actual MIT computer science syllabus — courses, problem sets, exams. No credit, no fee, no filler.',
 				href: 'https://ocw.mit.edu/collections/engineering/',
 				source: 'ocw.mit.edu',
+			},
+			{
+				title: 'Coursera — Computer Science catalog (free audit)',
+				description:
+					'University courses from Stanford, Princeton, Michigan, Google and others. The content is free to audit — only the certificate costs. "Audit" means every video, every reading, every quiz.',
+				href: 'https://www.coursera.org/browse/computer-science',
+				source: 'coursera.org',
+			},
+			{
+				title: 'edX — Computer Science (free audit)',
+				description:
+					'edX hosts MIT, Harvard and Berkeley CS courses with the same free-to-audit model. The "Verified Certificate" is optional; the learning is not.',
+				href: 'https://www.edx.org/learn/computer-science',
+				source: 'edx.org',
+			},
+			{
+				title: 'Anthropic Academy — build with Claude',
+				description:
+					'Interactive courses on prompt engineering, agent building, tool use, and the Model Context Protocol. Free, hands-on, maintained by the team shipping the models.',
+				href: 'https://anthropic.skilljar.com/',
+				source: 'anthropic.skilljar.com',
+			},
+			{
+				title: 'Anthropic cookbook — code examples',
+				description:
+					"The repo of worked examples for every major Claude capability (tool use, vision, RAG, agents, PDF handling, extended thinking). Clone it, run it, modify it — it's the fastest route from docs to working code.",
+				href: 'https://github.com/anthropics/anthropic-cookbook',
+				source: 'github.com/anthropics',
+			},
+		],
+	},
+	{
+		icon: '🤖',
+		title: 'AI development & engineering with LLMs',
+		intro:
+			'The LLM space moves faster than any blog can cover. These are the authors + resources whose signal-to-noise ratio has held up through the hype cycle.',
+		links: [
+			{
+				title: 'Anthropic — building effective agents (engineering blog)',
+				description:
+					'The clearest working-engineer post on when to reach for an agent vs. a plain prompt, and the patterns (prompt chaining, routing, orchestrator-workers, evaluator-optimizer) that compose cleanly. Required reading before building anything bigger than a chat loop.',
+				href: 'https://www.anthropic.com/engineering/building-effective-agents',
+				source: 'anthropic.com',
+			},
+			{
+				title: 'Simon Willison — LLM-focused blog',
+				description:
+					'The single highest-signal LLM blog on the web. Daily link-blogging across every major release, every security disclosure, every usable technique. If you only subscribe to one LLM-focused RSS, make it this one.',
+				href: 'https://simonwillison.net/tags/llms/',
+				source: 'simonwillison.net',
+			},
+			{
+				title: 'Prompt Engineering Guide (DAIR.AI)',
+				description:
+					'Community-maintained guide covering zero-shot, few-shot, chain-of-thought, ReAct, Tree-of-Thought and everything in between. Each technique has a worked example you can paste into any model.',
+				href: 'https://www.promptingguide.ai/',
+				source: 'promptingguide.ai',
+			},
+			{
+				title: 'OWASP Top 10 for LLM Applications',
+				description:
+					'The security-specific threats LLM apps face: prompt injection, insecure output handling, training data poisoning, supply chain, excessive agency. Treat this as mandatory before shipping any LLM-touching feature.',
+				href: 'https://owasp.org/www-project-top-10-for-large-language-model-applications/',
+				source: 'owasp.org',
+			},
+			{
+				title: 'Chip Huyen — ML engineering blog',
+				description:
+					'Production-oriented ML + LLM content from the author of "Designing Machine Learning Systems". Especially strong on evaluation, deployment, and the costs no tutorial mentions.',
+				href: 'https://huyenchip.com/blog/',
+				source: 'huyenchip.com',
+			},
+			{
+				title: 'Hamel Husain — LLM evaluations in depth',
+				description:
+					'Pragmatic, worked write-ups on building evals that actually catch regressions. If "we need better evals" sounds vague, this is where it becomes concrete.',
+				href: 'https://hamel.dev/',
+				source: 'hamel.dev',
 			},
 		],
 	},
@@ -384,7 +511,7 @@ const linkCount = sections.reduce((acc, s) => acc + s.links.length, 0);
 		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
 		<SEO
 			title="Resources — Learn to build secure, well-designed software | CodePals"
-			description={`A curated list of ${linkCount}+ free resources across ${sectionCount} categories: code quality, architecture, security, testing, courses, docs, news, and newsletters. Hand-picked for working developers.`}
+			description={`A curated list of ${linkCount}+ free resources across ${sectionCount} categories: code quality, architecture, DDD, security, testing, TDD, Playwright, AI development with LLMs, free courses, docs, news, and newsletters. Hand-picked for working developers.`}
 			canonical="/resources"
 		/>
 	</head>
@@ -398,9 +525,9 @@ const linkCount = sections.reduce((acc, s) => acc + s.links.length, 0);
 				</h1>
 				<p class="text-lg text-slate-700 max-w-3xl leading-relaxed mb-3">
 					A hand-curated list of {linkCount}+ free resources across {sectionCount} categories. Code quality,
-					architecture, security, testing, docs, courses, news, newsletters. Chosen because they're <strong
-						>authoritative</strong
-					> (the author IS the subject matter),
+					architecture (incl. DDD), security, testing (incl. TDD + Playwright), AI development with LLMs,
+					docs, courses, news, newsletters. Chosen because they're <strong>authoritative</strong> (the
+					author IS the subject matter),
 					<strong>free</strong> (no paywall on the primary content), and
 					<strong>durable</strong> (they've survived &gt; 3 years and show active maintenance).
 				</p>
