@@ -174,7 +174,13 @@ import SEO from '../components/SEO.astro';
 				name.className = 'font-semibold text-slate-900 truncate';
 				name.textContent = profile.displayName;
 				nameWrap.appendChild(name);
-				if (profile.githubUsername) {
+				// Display the @githubUsername handle ONLY when the owner has
+				// explicitly set their githubUrl in the profile form. Showing
+				// the handle derived from the OAuth login — which every
+				// signed-in user has — would publish their GitHub identity
+				// without consent. Explicit opt-in is the GDPR Article 25
+				// ("by default") gate; the githubUrl field is that opt-in.
+				if (profile.githubUsername && profile.githubUrl) {
 					const handle = document.createElement('p');
 					handle.className = 'text-xs text-slate-500 truncate';
 					handle.textContent = '@' + profile.githubUsername;

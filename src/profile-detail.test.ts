@@ -56,11 +56,14 @@ describe('find/<username> — Contact affordance (issue #73)', () => {
 			expect(source).not.toMatch(/function\s+renderLinks\s*\(/);
 		});
 
-		it('falls back to github.com/<githubUsername> when githubUrl is absent', () => {
-			// The whole point of the fallback: every CodePal has a GitHub
-			// login, so every profile is reachable via GitHub even without
-			// an explicit URL. Pin the exact template string pattern.
-			expect(source).toMatch(/`https:\/\/github\.com\/\$\{profile\.githubUsername\}`/);
+		it('does NOT auto-derive a GitHub link from the OAuth login (GDPR Art. 25)', () => {
+			// The old fallback — build `https://github.com/${profile.githubUsername}`
+			// when githubUrl was absent — published the user's GitHub
+			// profile without consent. The user signed in with GitHub to
+			// authenticate, not to advertise their GitHub URL. Explicit
+			// opt-in via the githubUrl form field is the consent gate.
+			// Pin the ABSENCE of the derived-link template.
+			expect(source).not.toMatch(/`https:\/\/github\.com\/\$\{profile\.githubUsername\}`/);
 		});
 
 		it('surfaces LinkedIn and Website only when explicitly set (no fake fallback)', () => {

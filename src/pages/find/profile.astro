@@ -410,11 +410,18 @@ import SEO from '../../components/SEO.astro';
 				const section = document.getElementById('profile-contact-section');
 				if (!container || !section) return;
 
-				// Collect the available contact routes in priority order:
-				// explicit githubUrl, otherwise the fallback to the canonical
-				// github.com/<username>; LinkedIn and Website only when
-				// explicitly set. The fallback matters — a profile with no
-				// explicit URLs still has a reachable owner via GitHub.
+				// Collect the available contact routes. Each is rendered ONLY
+				// when the owner explicitly set the URL. We used to fall
+				// back to `github.com/<githubUsername>` when githubUrl was
+				// empty — reasoning: every CodePal has a GitHub login, so
+				// a reachable GitHub profile is always derivable. That is
+				// a GDPR Article 25 ("data protection by default")
+				// violation: the user signed in with GitHub to
+				// authenticate, not to publish their GitHub profile URL
+				// to an indefinite audience. "Explicit set" is the
+				// consent gate; without it the URL does not render, and
+				// the Discord-community fallback in the Get-in-touch note
+				// is the universal reach path instead.
 				type RouteKind = 'github' | 'linkedin' | 'website';
 				const routes: Array<{
 					kind: RouteKind;
@@ -427,13 +434,6 @@ import SEO from '../../components/SEO.astro';
 						kind: 'github',
 						label: 'GitHub',
 						href: profile.githubUrl,
-						variant: 'primary',
-					});
-				} else if (profile.githubUsername) {
-					routes.push({
-						kind: 'github',
-						label: 'GitHub',
-						href: `https://github.com/${profile.githubUsername}`,
 						variant: 'primary',
 					});
 				}

@@ -243,12 +243,16 @@ test.describe('/find/<username> — Contact affordance (issue #73)', () => {
 		).toBeVisible();
 	});
 
-	test('falls back to github.com/<username> when no explicit githubUrl is set', async ({
+	test('renders ZERO buttons when no explicit URLs are set (GDPR Art. 25 by default)', async ({
 		page,
 	}) => {
-		// The fallback is the whole point of the issue — a user who hasn't
-		// filled any URLs is still reachable via their canonical GitHub
-		// profile. Strip every URL from the fixture, keep githubUsername.
+		// Previously this spec pinned the opposite — that a GitHub link
+		// was auto-derived from the OAuth login so the profile stayed
+		// reachable. That was a Privacy-by-Default violation: a user who
+		// signed in with GitHub to authenticate did not thereby consent
+		// to publishing their GitHub profile URL to an indefinite
+		// audience. The fallback was removed; the Discord-community link
+		// in the Get-in-touch note is the universal reach path instead.
 		await mockAuth(page);
 		await serveDetailPageAtAnyUsername(page);
 		const noUrls = { ...FULL_PROFILE };
@@ -261,13 +265,11 @@ test.describe('/find/<username> — Contact affordance (issue #73)', () => {
 
 		await page.goto('/find/alice');
 
+		// Section still renders — the inline Discord link in the note
+		// is itself a reachable path.
 		await expect(page.locator('#profile-contact-section')).toBeVisible();
-		// Fallback link to github.com/<githubUsername>.
-		await expect(
-			page.locator('#profile-contact-buttons a[href="https://github.com/alice"]')
-		).toBeVisible();
-		// No LinkedIn / Website buttons.
-		await expect(page.locator('#profile-contact-buttons a')).toHaveCount(1);
+		// Zero outbound-profile buttons: no auto-derived GitHub link.
+		await expect(page.locator('#profile-contact-buttons a')).toHaveCount(0);
 	});
 
 	test('hides the Contact section when the profile is 403 or 404', async ({ page }) => {

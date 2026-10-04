@@ -22,7 +22,7 @@ export type DirectoryProfile = Pick<
 	Profile,
 	'id' | 'githubUsername' | 'displayName' | 'availability' | 'location' | 'timezone' | 'updatedAt'
 > &
-	Partial<Pick<Profile, 'bio' | 'skills' | 'preferredLanguages'>>;
+	Partial<Pick<Profile, 'bio' | 'skills' | 'preferredLanguages' | 'githubUrl'>>;
 
 /** Hard cap on how many public profiles the directory returns in one shot.
  * Prevents unbounded RU/response-size growth as the community grows. The UI
@@ -52,7 +52,7 @@ export const DIRECTORY_PAGE_SIZE = 100;
  * handler — the privacy invariant "userId doesn't leave the server"
  * still holds, just enforced at a different layer.
  */
-export const PROFILES_QUERY = `SELECT TOP ${DIRECTORY_PAGE_SIZE} c.id, c.userId, c.githubUsername, c.displayName, c.bio, c.skills, c.preferredLanguages, c.availability, c.location, c.timezone, c.fieldVisibility, c.updatedAt FROM c WHERE c.profileVisibility = 'public' ORDER BY c.updatedAt DESC`;
+export const PROFILES_QUERY = `SELECT TOP ${DIRECTORY_PAGE_SIZE} c.id, c.userId, c.githubUsername, c.githubUrl, c.displayName, c.bio, c.skills, c.preferredLanguages, c.availability, c.location, c.timezone, c.fieldVisibility, c.updatedAt FROM c WHERE c.profileVisibility = 'public' ORDER BY c.updatedAt DESC`;
 
 /**
  * Reduce a (possibly visibility-filtered) Profile row to the DirectoryProfile
@@ -64,6 +64,7 @@ export function toDirectoryProfile(profile: Profile): DirectoryProfile {
 	return {
 		id: profile.id,
 		githubUsername: profile.githubUsername,
+		githubUrl: profile.githubUrl,
 		displayName: profile.displayName,
 		bio: profile.bio,
 		skills: profile.skills,
