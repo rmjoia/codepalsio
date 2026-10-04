@@ -31,6 +31,14 @@ export const LIMITS = {
 	// Directory-quality minimum for skills AND interests; enforced ONLY
 	// when profileVisibility === 'public'. See #68.
 	tagsMinPublic: 2,
+	// "What are you working on / need help with?" free-text. Same cap as
+	// bio — richer than skills/interests because it describes the current
+	// moment rather than the standing profile. Unlike bio there is no
+	// directory-quality minimum: the field is purely opt-in signal.
+	lookingFor: 500,
+	// Directory search query. Same cap as lookingFor so we can match on
+	// substring without paying for a bespoke index.
+	searchQuery: 100,
 } as const;
 
 export function isAvailability(value: unknown): value is Availability {

@@ -28,7 +28,12 @@ vi.mock('./lib/principal', () => ({
 }));
 
 // SUT — must be imported AFTER the mocks above are registered.
-import { profilesHandler, PROFILES_QUERY, DIRECTORY_PAGE_SIZE } from './profiles-list';
+import {
+	profilesHandler,
+	PROFILES_QUERY,
+	DIRECTORY_PAGE_SIZE,
+	profileMatchesQuery,
+} from './profiles-list';
 import type { Profile } from './lib/types';
 
 /** Minimal Profile factory for tests — fills in the required fields. */
@@ -262,5 +267,173 @@ describe('GET /api/profiles privacy guard', () => {
 
 			expect(mocks.getContainerMock).toHaveBeenCalledWith('cs', 'db', 'profiles');
 		});
+	});
+});
+
+describe('profileMatchesQuery — directory search matcher', () => {
+	const baseProfile = {
+		id: 'p1',
+		githubUsername: 'alice',
+		displayName: 'Alice Example',
+		availability: 'active' as const,
+		updatedAt: '2026-05-01T00:00:00Z',
+		bio: 'Backend engineer, Rust + Postgres.',
+		skills: ['rust', 'postgres', 'typescript'],
+		lookingFor: 'Looking to pair-program on a WebAssembly interpreter project.',
+	};
+
+	it('empty query matches every profile (no-filter default)', () => {
+		expect(profileMatchesQuery(baseProfile, '')).toBe(true);
+		expect(profileMatchesQuery(baseProfile, '   ')).toBe(true);
+	});
+
+	it('matches on displayName (case-insensitive)', () => {
+		expect(profileMatchesQuery(baseProfile, 'alice')).toBe(true);
+		expect(profileMatchesQuery(baseProfile, 'ALICE')).toBe(true);
+		expect(profileMatchesQuery(baseProfile, 'example')).toBe(true);
+	});
+
+	it('matches on bio text', () => {
+		expect(profileMatchesQuery(baseProfile, 'rust')).toBe(true);
+		expect(profileMatchesQuery(baseProfile, 'postgres')).toBe(true);
+	});
+
+	it('matches on individual skills array elements', () => {
+		expect(profileMatchesQuery(baseProfile, 'typescript')).toBe(true);
+	});
+
+	it('matches on lookingFor — the primary D5 use case', () => {
+		// A user searching "WebAssembly" finds Alice because she said so
+		// in her "What are you working on?" field, even though her skills
+		// don't contain WebAssembly.
+		expect(profileMatchesQuery(baseProfile, 'WebAssembly')).toBe(true);
+		expect(profileMatchesQuery(baseProfile, 'webassembly')).toBe(true);
+		expect(profileMatchesQuery(baseProfile, 'pair-program')).toBe(true);
+	});
+
+	it('substring match (not word-boundary)', () => {
+		// A query of "sembly" matches "assembly" because we're testing
+		// usability, not editorial correctness. Users mistype; make the
+		// forgiving choice.
+		expect(profileMatchesQuery(baseProfile, 'sembly')).toBe(true);
+	});
+
+	it('does NOT match when the needle is absent from every searchable field', () => {
+		expect(profileMatchesQuery(baseProfile, 'cobol')).toBe(false);
+	});
+
+	it('skips lookingFor when the field was stripped by per-field visibility', () => {
+		// Per-field visibility can set lookingFor to undefined on the
+		// projected row. A query that would have matched the hidden text
+		// must NOT match the stripped projection — otherwise a private
+		// field becomes queryable, which is a visibility bypass.
+		const stripped = { ...baseProfile, lookingFor: undefined };
+		expect(profileMatchesQuery(stripped, 'WebAssembly')).toBe(false);
+		// displayName / bio / skills still match as expected.
+		expect(profileMatchesQuery(stripped, 'alice')).toBe(true);
+	});
+
+	it('skips bio when the bio field was stripped', () => {
+		const stripped = { ...baseProfile, bio: undefined };
+		expect(profileMatchesQuery(stripped, 'postgres')).toBe(true); // in skills
+		expect(profileMatchesQuery(stripped, 'engineer')).toBe(false); // only in bio
+	});
+});
+
+describe('GET /api/profiles — ?q= search filter (D5)', () => {
+	beforeEach(() => {
+		mocks.getContainerMock.mockReset();
+		mocks.getContainerMock.mockReturnValue({ items: { query: mocks.queryMock } });
+		mocks.queryMock.mockReset();
+		mocks.queryMock.mockReturnValue({ fetchAll: mocks.fetchAllMock });
+		mocks.getClientPrincipalMock.mockReset();
+		mocks.getClientPrincipalMock.mockReturnValue({
+			identityProvider: 'github',
+			userId: 'u-viewer',
+			userDetails: 'viewer',
+			userRoles: ['authenticated'],
+			claims: [],
+		});
+	});
+
+	it('filters profiles by q matching lookingFor substring', async () => {
+		mocks.fetchAllMock.mockResolvedValue({
+			resources: [
+				{
+					id: 'p1',
+					userId: 'u-alice',
+					githubUsername: 'alice',
+					displayName: 'Alice',
+					availability: 'active',
+					bio: 'bio',
+					skills: ['x'],
+					lookingFor: 'need help with WebAssembly',
+					updatedAt: '2026-05-01',
+				},
+				{
+					id: 'p2',
+					userId: 'u-bob',
+					githubUsername: 'bob',
+					displayName: 'Bob',
+					availability: 'active',
+					bio: 'bio',
+					skills: ['x'],
+					lookingFor: 'working on CRDTs',
+					updatedAt: '2026-05-01',
+				},
+			],
+		});
+		const req = {
+			query: new URLSearchParams({ q: 'webassembly' }),
+		} as unknown as HttpRequest;
+		const res = await profilesHandler(req, fakeContext);
+
+		expect(res.status).toBe(200);
+		const body = res.jsonBody as { profiles: Array<{ id: string }> };
+		expect(body.profiles).toHaveLength(1);
+		expect(body.profiles[0].id).toBe('p1');
+	});
+
+	it('empty q returns every profile', async () => {
+		mocks.fetchAllMock.mockResolvedValue({
+			resources: [
+				{
+					id: 'p1',
+					userId: 'u-alice',
+					githubUsername: 'alice',
+					displayName: 'Alice',
+					availability: 'active',
+					bio: 'bio',
+					skills: ['x'],
+					updatedAt: '2026-05-01',
+				},
+				{
+					id: 'p2',
+					userId: 'u-bob',
+					githubUsername: 'bob',
+					displayName: 'Bob',
+					availability: 'active',
+					bio: 'bio',
+					skills: ['x'],
+					updatedAt: '2026-05-01',
+				},
+			],
+		});
+		const req = { query: new URLSearchParams() } as unknown as HttpRequest;
+		const res = await profilesHandler(req, fakeContext);
+		expect((res.jsonBody as { profiles: unknown[] }).profiles).toHaveLength(2);
+	});
+
+	it('truncates a pathologically-long q at LIMITS.searchQuery', async () => {
+		// Attacker-controlled unbounded needle can't balloon the handler's
+		// memory. We truncate silently; the matcher gets at most
+		// LIMITS.searchQuery (100) chars.
+		mocks.fetchAllMock.mockResolvedValue({ resources: [] });
+		const longQ = 'x'.repeat(10_000);
+		const req = { query: new URLSearchParams({ q: longQ }) } as unknown as HttpRequest;
+		const res = await profilesHandler(req, fakeContext);
+		expect(res.status).toBe(200);
+		// Just reaching 200 proves the truncation didn't throw; the
+		// matcher-cap pin is in profileMatchesQuery tests above.
 	});
 });

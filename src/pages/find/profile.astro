@@ -132,6 +132,20 @@ import SEO from '../../components/SEO.astro';
 				</dl>
 
 				<!-- Skills -->
+				<!-- Working on / Need help with (D5). Prominent position
+					above skills — this is the single most useful "connect
+					on something concrete" signal; viewers scan for it first. -->
+				<section id="profile-lookingfor-section" class="hidden mb-6">
+					<h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">
+						Working on / Need help with
+					</h2>
+					<p
+						id="profile-lookingfor"
+						class="text-slate-800 bg-primary-50 border-l-2 border-primary-400 px-4 py-3 rounded-r whitespace-pre-wrap"
+					>
+					</p>
+				</section>
+
 				<section id="profile-skills-section" class="hidden mb-6">
 					<h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">Skills</h2>
 					<div id="profile-skills" class="flex flex-wrap gap-2"></div>
@@ -675,6 +689,20 @@ import SEO from '../../components/SEO.astro';
 				// Skills and interests are optional under per-field visibility
 				// — guard against the absent case (their <section> stays
 				// `hidden` if the field was stripped or empty).
+
+				// Working on / Need help with — appears above skills so the
+				// visitor sees the "connect on this specific thing" signal
+				// first. Hidden entirely when the field is empty.
+				const lookingFor = profile.lookingFor?.trim();
+				if (lookingFor) {
+					const lfEl = document.getElementById('profile-lookingfor');
+					const lfSection = document.getElementById('profile-lookingfor-section');
+					if (lfEl && lfSection) {
+						lfEl.textContent = lookingFor;
+						lfSection.classList.remove('hidden');
+					}
+				}
+
 				const skillsList = profile.skills ?? [];
 				if (skillsList.length > 0) {
 					const skills = document.getElementById('profile-skills');

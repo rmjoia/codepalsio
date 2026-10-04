@@ -4,6 +4,7 @@ import { getContainer, getCosmosConfig } from './lib/cosmos';
 import { applyFieldVisibility } from './lib/visibility';
 import { createUserRepository } from './lib/users';
 import { assertNotSuspended } from './lib/suspension';
+import { LIMITS } from './lib/validation';
 import type { Profile } from './lib/types';
 
 /**
@@ -22,7 +23,7 @@ export type DirectoryProfile = Pick<
 	Profile,
 	'id' | 'githubUsername' | 'displayName' | 'availability' | 'location' | 'timezone' | 'updatedAt'
 > &
-	Partial<Pick<Profile, 'bio' | 'skills' | 'preferredLanguages' | 'githubUrl'>>;
+	Partial<Pick<Profile, 'bio' | 'skills' | 'preferredLanguages' | 'githubUrl' | 'lookingFor'>>;
 
 /** Hard cap on how many public profiles the directory returns in one shot.
  * Prevents unbounded RU/response-size growth as the community grows. The UI
@@ -52,7 +53,7 @@ export const DIRECTORY_PAGE_SIZE = 100;
  * handler — the privacy invariant "userId doesn't leave the server"
  * still holds, just enforced at a different layer.
  */
-export const PROFILES_QUERY = `SELECT TOP ${DIRECTORY_PAGE_SIZE} c.id, c.userId, c.githubUsername, c.githubUrl, c.displayName, c.bio, c.skills, c.preferredLanguages, c.availability, c.location, c.timezone, c.fieldVisibility, c.updatedAt FROM c WHERE c.profileVisibility = 'public' ORDER BY c.updatedAt DESC`;
+export const PROFILES_QUERY = `SELECT TOP ${DIRECTORY_PAGE_SIZE} c.id, c.userId, c.githubUsername, c.githubUrl, c.displayName, c.bio, c.skills, c.preferredLanguages, c.availability, c.location, c.timezone, c.fieldVisibility, c.lookingFor, c.updatedAt FROM c WHERE c.profileVisibility = 'public' ORDER BY c.updatedAt DESC`;
 
 /**
  * Reduce a (possibly visibility-filtered) Profile row to the DirectoryProfile
@@ -72,8 +73,32 @@ export function toDirectoryProfile(profile: Profile): DirectoryProfile {
 		availability: profile.availability,
 		location: profile.location,
 		timezone: profile.timezone,
+		lookingFor: profile.lookingFor,
 		updatedAt: profile.updatedAt,
 	};
+}
+
+/**
+ * Match a DirectoryProfile against a search query — the server-side half
+ * of the /find directory's search box. Case-insensitive substring match
+ * across `displayName`, `bio`, `skills[]`, and `lookingFor`. Matches
+ * ONLY the fields that are still present after per-field visibility
+ * filtering, so a profile that hid its bio won't match a query against
+ * bio text.
+ *
+ * Exported so unit tests can pin the matcher's shape independently of
+ * the Cosmos handler surface.
+ */
+export function profileMatchesQuery(profile: DirectoryProfile, q: string): boolean {
+	const needle = q.trim().toLowerCase();
+	if (!needle) return true;
+	const haystacks: string[] = [profile.displayName.toLowerCase()];
+	if (profile.bio) haystacks.push(profile.bio.toLowerCase());
+	if (profile.lookingFor) haystacks.push(profile.lookingFor.toLowerCase());
+	if (profile.skills) {
+		for (const s of profile.skills) haystacks.push(s.toLowerCase());
+	}
+	return haystacks.some((h) => h.includes(needle));
 }
 
 /**
@@ -108,6 +133,15 @@ export async function profilesHandler(
 	);
 	if (suspended) return suspended;
 
+	// Optional search query (?q=...). The DB fetches a bounded page of
+	// public rows regardless; filtering happens in-memory after per-field
+	// visibility so a profile that hid its bio can't match a bio query.
+	// Capped at LIMITS.searchQuery so a pathological very-long needle
+	// can't balloon memory/CPU; longer queries are truncated silently.
+	// Defensive against test harnesses that mock an empty request.
+	const rawQ = request.query?.get?.('q') ?? '';
+	const q = rawQ.slice(0, LIMITS.searchQuery);
+
 	try {
 		const container = getContainer(cfg.connectionString, cfg.database, 'profiles');
 		const { resources } = await container.items
@@ -119,13 +153,15 @@ export async function profilesHandler(
 		// preview. For everyone else's rows, fields marked `private` are
 		// removed and `authenticated` fields pass through (every directory
 		// viewer is by definition authenticated).
-		const projected = resources.map((row) => {
-			const filtered = applyFieldVisibility(row, {
-				isOwner: row.userId === principal.userId,
-				isAuthenticated: true,
-			});
-			return toDirectoryProfile(filtered);
-		});
+		const projected = resources
+			.map((row) => {
+				const filtered = applyFieldVisibility(row, {
+					isOwner: row.userId === principal.userId,
+					isAuthenticated: true,
+				});
+				return toDirectoryProfile(filtered);
+			})
+			.filter((p) => profileMatchesQuery(p, q));
 
 		return { status: 200, jsonBody: { profiles: projected } };
 	} catch (error) {

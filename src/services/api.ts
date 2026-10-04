@@ -121,6 +121,7 @@ export const HIDEABLE_FIELDS = [
 	'websiteUrl',
 	'preferredLanguages',
 	'yearsOfExperience',
+	'lookingFor',
 ] as const;
 export type HideableField = (typeof HIDEABLE_FIELDS)[number];
 
@@ -152,6 +153,14 @@ export interface Profile {
 	websiteUrl?: string;
 	preferredLanguages?: string[];
 	yearsOfExperience?: number;
+	/**
+	 * Free-text answer to "What are you working on, or what do you need
+	 * help with?". Mirrors the server-side field in api/src/lib/types.ts.
+	 * Capped at 500 chars server-side; surfaced on the directory card
+	 * and the detail page; searchable via the `q` query parameter on
+	 * `/api/profiles`.
+	 */
+	lookingFor?: string;
 	/**
 	 * Moderator action marker (spec 003 US3): when set, this profile was
 	 * removed from public discovery by a named admin, not by the owner.
@@ -185,6 +194,9 @@ export interface ProfileInput {
 	preferredLanguages?: string[];
 	/** Integer years of professional experience. Server enforces 0–60 bounds. */
 	yearsOfExperience?: number;
+	/** "What are you working on or need help with?" — free-text, server
+	 *  cap at 500 chars. */
+	lookingFor?: string;
 }
 
 let principalPromise: Promise<ClientPrincipal | null> | null = null;
@@ -324,14 +336,19 @@ export type DirectoryProfile = Pick<
 	Profile,
 	'id' | 'githubUsername' | 'displayName' | 'availability' | 'location' | 'timezone' | 'updatedAt'
 > &
-	Partial<Pick<Profile, 'bio' | 'skills' | 'preferredLanguages' | 'githubUrl'>>;
+	Partial<Pick<Profile, 'bio' | 'skills' | 'preferredLanguages' | 'githubUrl' | 'lookingFor'>>;
 
 /**
- * GET /api/profiles → returns the public profiles directory (excludes the
- * current user). Throws on non-OK status.
+ * GET /api/profiles → returns the public profiles directory.
+ *
+ * `q` is an optional case-insensitive substring query that the server
+ * matches across displayName, bio, skills[] and lookingFor. Empty / absent
+ * means "no filter — return every public profile" (page-sized). Throws on
+ * non-OK status; the suspension-redirect gate fires first on 403.
  */
-export async function getPublicProfiles(): Promise<DirectoryProfile[]> {
-	const res = await fetch('/api/profiles');
+export async function getPublicProfiles(q?: string): Promise<DirectoryProfile[]> {
+	const url = q && q.trim() ? `/api/profiles?q=${encodeURIComponent(q.trim())}` : '/api/profiles';
+	const res = await fetch(url);
 	if (!res.ok) {
 		await gateSuspendedResponse(res);
 		throw new ApiError(res.status, 'profiles', await safeJson(res));
@@ -362,7 +379,7 @@ export type PublicProfile = Pick<
 	| 'yearsOfExperience'
 	| 'updatedAt'
 > &
-	Partial<Pick<Profile, 'bio' | 'skills' | 'interests'>>;
+	Partial<Pick<Profile, 'bio' | 'skills' | 'interests' | 'lookingFor'>>;
 
 /**
  * GET /api/profile-by-username?username=<login> → the public profile.
