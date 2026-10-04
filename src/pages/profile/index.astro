@@ -360,29 +360,47 @@ import SEO from '../../components/SEO.astro';
 						<div class="space-y-3">
 							<div>
 								<label for="githubUrl" class="block text-xs font-medium text-slate-700 mb-1"
-									>GitHub profile URL</label
+									>GitHub profile</label
 								>
-								<input
-									type="url"
-									id="githubUrl"
-									name="githubUrl"
-									placeholder="https://github.com/yourhandle"
-									pattern="https://.*"
-									class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-								/>
+								<div
+									class="flex rounded-lg border border-slate-300 focus-within:ring-2 focus-within:ring-primary-500 focus-within:border-primary-500 overflow-hidden"
+								>
+									<span
+										class="px-3 py-3 bg-slate-50 text-slate-500 text-sm border-r border-slate-300 whitespace-nowrap select-none"
+										aria-hidden="true">https://github.com/</span
+									>
+									<input
+										type="text"
+										id="githubUrl"
+										name="githubUrl"
+										placeholder="yourhandle"
+										autocomplete="off"
+										spellcheck="false"
+										class="flex-1 min-w-0 px-3 py-3 outline-none"
+									/>
+								</div>
 							</div>
 							<div>
 								<label for="linkedinUrl" class="block text-xs font-medium text-slate-700 mb-1"
-									>LinkedIn profile URL</label
+									>LinkedIn profile</label
 								>
-								<input
-									type="url"
-									id="linkedinUrl"
-									name="linkedinUrl"
-									placeholder="https://linkedin.com/in/yourhandle"
-									pattern="https://.*"
-									class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-								/>
+								<div
+									class="flex rounded-lg border border-slate-300 focus-within:ring-2 focus-within:ring-primary-500 focus-within:border-primary-500 overflow-hidden"
+								>
+									<span
+										class="px-3 py-3 bg-slate-50 text-slate-500 text-sm border-r border-slate-300 whitespace-nowrap select-none"
+										aria-hidden="true">https://linkedin.com/in/</span
+									>
+									<input
+										type="text"
+										id="linkedinUrl"
+										name="linkedinUrl"
+										placeholder="yourhandle"
+										autocomplete="off"
+										spellcheck="false"
+										class="flex-1 min-w-0 px-3 py-3 outline-none"
+									/>
+								</div>
 							</div>
 							<div>
 								<label for="websiteUrl" class="block text-xs font-medium text-slate-700 mb-1"
@@ -938,12 +956,61 @@ import SEO from '../../components/SEO.astro';
 				// Optional scalar fields — empty / absent reads as empty input.
 				const yearsEl = document.getElementById('years-of-experience') as HTMLInputElement | null;
 				if (yearsEl) yearsEl.value = profile?.yearsOfExperience?.toString() ?? '';
+				// GitHub + LinkedIn inputs display ONLY the handle; the
+				// prefix is a readonly visual element next to the input.
+				// Strip any stored prefix on load so a legacy githubUrl of
+				// 'https://github.com/rmjoia' renders as 'rmjoia' in the
+				// field. The handle extraction tolerates http/https, with
+				// or without 'www.', with or without a trailing slash.
 				const githubUrlEl = document.getElementById('githubUrl') as HTMLInputElement | null;
-				if (githubUrlEl) githubUrlEl.value = profile?.githubUrl ?? '';
+				if (githubUrlEl) githubUrlEl.value = githubHandleFromUrl(profile?.githubUrl);
 				const linkedinUrlEl = document.getElementById('linkedinUrl') as HTMLInputElement | null;
-				if (linkedinUrlEl) linkedinUrlEl.value = profile?.linkedinUrl ?? '';
+				if (linkedinUrlEl) linkedinUrlEl.value = linkedinHandleFromUrl(profile?.linkedinUrl);
 				const websiteUrlEl = document.getElementById('websiteUrl') as HTMLInputElement | null;
 				if (websiteUrlEl) websiteUrlEl.value = profile?.websiteUrl ?? '';
+			}
+
+			/**
+			 * Extract the handle portion from a stored GitHub URL. Tolerates
+			 * the shapes legacy data (and users pasting URLs into the handle
+			 * field) might produce:
+			 *   https://github.com/rmjoia      → 'rmjoia'
+			 *   http://www.github.com/rmjoia/  → 'rmjoia'
+			 *   rmjoia                         → 'rmjoia'
+			 *   ''                             → ''
+			 * Empty / nullish input → ''.
+			 */
+			function githubHandleFromUrl(url: string | undefined): string {
+				if (!url) return '';
+				return url
+					.trim()
+					.replace(/^https?:\/\/(?:www\.)?github\.com\//i, '')
+					.replace(/\/+$/, '');
+			}
+
+			/** LinkedIn equivalent of {@link githubHandleFromUrl}. Preserves
+			 *  the /in/ segment-aware match so a legacy
+			 *  https://www.linkedin.com/in/ricardo → 'ricardo'. */
+			function linkedinHandleFromUrl(url: string | undefined): string {
+				if (!url) return '';
+				return url
+					.trim()
+					.replace(/^https?:\/\/(?:www\.)?linkedin\.com\/in\//i, '')
+					.replace(/\/+$/, '');
+			}
+
+			/** Build the full URL from an entered handle, dropping any
+			 *  prefix the user accidentally pasted. Returns undefined if the
+			 *  handle is empty after cleanup so the save payload stays
+			 *  empty-field-aware. */
+			function githubUrlFromHandle(handle: string | undefined): string | undefined {
+				const h = githubHandleFromUrl(handle);
+				return h ? `https://github.com/${h}` : undefined;
+			}
+
+			function linkedinUrlFromHandle(handle: string | undefined): string | undefined {
+				const h = linkedinHandleFromUrl(handle);
+				return h ? `https://linkedin.com/in/${h}` : undefined;
 			}
 
 			function renderTags(containerId: string, set: Set<string>) {
@@ -1198,8 +1265,13 @@ import SEO from '../../components/SEO.astro';
 						profileVisibility: selectedVisibility,
 						fieldVisibility,
 						yearsOfExperience,
-						githubUrl: trimmedUrl(githubUrlEl?.value),
-						linkedinUrl: trimmedUrl(linkedinUrlEl?.value),
+						// GitHub + LinkedIn inputs collect only the handle;
+						// build the full URL on the way out. If the user
+						// accidentally pasted a full URL, the helper
+						// strips the prefix first so we don't produce
+						// 'https://github.com/https://github.com/foo'.
+						githubUrl: githubUrlFromHandle(githubUrlEl?.value),
+						linkedinUrl: linkedinUrlFromHandle(linkedinUrlEl?.value),
 						websiteUrl: trimmedUrl(websiteUrlEl?.value),
 						preferredLanguages: languagesArray.length > 0 ? languagesArray : undefined,
 					});
