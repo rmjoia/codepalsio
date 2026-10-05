@@ -390,9 +390,7 @@ export type PublicProfile = Pick<
  * Genuine errors (500, 400, network) still throw via ApiError.
  */
 export type PublicProfileResult =
-	| { kind: 'found'; profile: PublicProfile }
-	| { kind: 'not-found' }
-	| { kind: 'private' };
+	{ kind: 'found'; profile: PublicProfile } | { kind: 'not-found' } | { kind: 'private' };
 
 export async function getPublicProfileByUsername(username: string): Promise<PublicProfileResult> {
 	const res = await fetch(`/api/profile-by-username?username=${encodeURIComponent(username)}`);
