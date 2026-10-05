@@ -10,8 +10,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@azure/cosmos": "^4.8.0",
-    "@azure/functions": "^4.5.0"
+    "@azure/cosmos": "^4.10.1",
+    "@azure/functions": "^4.16.5"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
