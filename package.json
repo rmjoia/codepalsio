@@ -48,7 +48,7 @@
     "astro-eslint-parser": "^1.2.2",
     "autoprefixer": "^10.6.1",
     "eslint": "^9.39.1",
-    "eslint-plugin-astro": "^1.5.0",
+    "eslint-plugin-astro": "^3.2.1",
     "happy-dom": "^20.14.5",
     "jsdom": "^30.1.1",
     "postcss": "^8.4.0",
