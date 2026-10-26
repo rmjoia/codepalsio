@@ -11,11 +11,11 @@
   },
   "dependencies": {
     "@azure/cosmos": "^4.10.1",
-    "@azure/functions": "^4.16.5"
+    "@azure/functions": "^4.17.0"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   }
 }
