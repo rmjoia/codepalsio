@@ -10,12 +10,12 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@azure/cosmos": "^4.10.1",
-    "@azure/functions": "^4.16.5"
+    "@azure/cosmos": "^4.10.2",
+    "@azure/functions": "^4.17.1"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.6",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
+    "vitest": "^5.1.0"
   }
 }
